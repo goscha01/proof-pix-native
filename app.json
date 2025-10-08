@@ -1,0 +1,58 @@
+{
+  "expo": {
+    "name": "ProofPix",
+    "slug": "proof-pix-native",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#F2C31B"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.proofpix.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "ProofPix needs access to your camera to take before and after photos.",
+        "NSPhotoLibraryUsageDescription": "ProofPix needs access to your photo library to save before and after photos.",
+        "NSPhotoLibraryAddUsageDescription": "ProofPix needs permission to save photos to your library."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#F2C31B"
+      },
+      "package": "com.proofpix.app",
+      "permissions": [
+        "CAMERA",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES"
+      ],
+      "edgeToEdgeEnabled": true
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow ProofPix to access your camera to take before and after photos."
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow ProofPix to access your photos.",
+          "savePhotosPermission": "Allow ProofPix to save photos.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ]
+    ]
+  }
+}
