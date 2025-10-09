@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,8 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  Dimensions
+  Dimensions,
+  PanResponder
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
@@ -27,35 +28,89 @@ export default function HomeScreen({ navigation }) {
 
   const beforePhotos = getBeforePhotos(currentRoom);
   const afterPhotos = getAfterPhotos(currentRoom);
+  const currentRoomRef = useRef(currentRoom);
+
+  // Get circular room order with current room in center
+  const getCircularRooms = () => {
+    const currentIndex = ROOMS.findIndex(r => r.id === currentRoom);
+    const result = [];
+    
+    // Show 3 items before, current, and 3 items after (total 7 visible)
+    for (let i = -3; i <= 3; i++) {
+      let index = (currentIndex + i + ROOMS.length) % ROOMS.length;
+      result.push({ ...ROOMS[index], offset: i });
+    }
+    
+    return result;
+  };
+
+  const circularRooms = getCircularRooms();
+
+  // Update ref when currentRoom changes
+  useEffect(() => {
+    currentRoomRef.current = currentRoom;
+  }, [currentRoom]);
+
+  // PanResponder for room switching
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Activate for horizontal swipes
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 30;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const swipeThreshold = 50;
+        const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
+        
+        if (gestureState.dx > swipeThreshold) {
+          // Swipe right - go to previous room (circular)
+          const newIndex = currentIndex > 0 ? currentIndex - 1 : ROOMS.length - 1;
+          setCurrentRoom(ROOMS[newIndex].id);
+        } else if (gestureState.dx < -swipeThreshold) {
+          // Swipe left - go to next room (circular)
+          const newIndex = currentIndex < ROOMS.length - 1 ? currentIndex + 1 : 0;
+          setCurrentRoom(ROOMS[newIndex].id);
+        }
+      }
+    })
+  ).current;
 
   const renderRoomTabs = () => (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      style={styles.roomTabs}
-      contentContainerStyle={styles.roomTabsContent}
-    >
-      {ROOMS.map((room) => (
-        <TouchableOpacity
-          key={room.id}
-          style={[
-            styles.roomTab,
-            currentRoom === room.id && styles.roomTabActive
-          ]}
-          onPress={() => setCurrentRoom(room.id)}
-        >
-          <Text style={styles.roomIcon}>{room.icon}</Text>
-          <Text
+    <View style={styles.roomTabsContainer}>
+      {circularRooms.map((room, index) => {
+        const isActive = room.offset === 0; // Center item is active
+        const distance = Math.abs(room.offset);
+        const scale = isActive ? 1 : Math.max(0.65, 1 - (distance * 0.15));
+        const opacity = isActive ? 1 : Math.max(0.4, 1 - (distance * 0.2));
+        
+        return (
+          <TouchableOpacity
+            key={`${room.id}-${index}`}
             style={[
-              styles.roomTabText,
-              currentRoom === room.id && styles.roomTabTextActive
+              styles.roomTab,
+              isActive && styles.roomTabActive,
+              {
+                transform: [{ scale }],
+                opacity
+              }
             ]}
+            onPress={() => setCurrentRoom(room.id)}
           >
-            {room.name}
-          </Text>
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+            <Text style={[styles.roomIcon, { fontSize: isActive ? 28 : 22 }]}>{room.icon}</Text>
+            {isActive && (
+              <Text
+                style={[
+                  styles.roomTabText,
+                  styles.roomTabTextActive
+                ]}
+              >
+                {room.name}
+              </Text>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
 
   const renderPhotoGrid = () => {
@@ -75,18 +130,25 @@ export default function HomeScreen({ navigation }) {
         );
 
         if (combinedPhoto) {
-          // Show the combined image (1:1 aspect ratio)
+          // Show the combined image - tap to retake after photo
           gridItems.push(
             <TouchableOpacity
               key={combinedPhoto.id}
               style={styles.photoItem}
               onPress={() =>
-                navigation.navigate('PhotoDetail', { photo: combinedPhoto })
+                navigation.navigate('Camera', {
+                  mode: 'after',
+                  beforePhoto,
+                  afterPhoto,
+                  combinedPhoto,
+                  room: currentRoom
+                })
               }
             >
               <CroppedThumbnail
                 imageUri={combinedPhoto.uri}
                 aspectRatio={beforePhoto.aspectRatio || '4:3'}
+                orientation={beforePhoto.orientation || 'portrait'}
                 size={PHOTO_SIZE}
               />
               <View style={styles.photoOverlay}>
@@ -95,24 +157,32 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
           );
         } else {
-          // Has after photo but no combined yet - show split preview
-          // 4:3 (horizontal) = stacked (top/bottom), 2:3 (vertical) = side-by-side (left/right)
-          const aspectRatio = beforePhoto.aspectRatio || '4:3';
-          const isHorizontal = aspectRatio === '4:3';
+          // Has after photo but no combined yet - show split preview, tap to retake after
+          // Landscape (horizontal) = stacked (top/bottom), Portrait (vertical) = side-by-side (left/right)
+          const photoOrientation = beforePhoto.orientation || 'portrait';
+          const isLandscape = photoOrientation === 'landscape';
 
           gridItems.push(
-            <View
+            <TouchableOpacity
               key={beforePhoto.id}
               style={styles.photoItem}
+              onPress={() =>
+                navigation.navigate('Camera', {
+                  mode: 'after',
+                  beforePhoto,
+                  afterPhoto,
+                  room: currentRoom
+                })
+              }
             >
-              <View style={[styles.splitPreview, isHorizontal ? styles.stackedPreview : styles.sideBySidePreview]}>
+              <View style={[styles.splitPreview, isLandscape ? styles.stackedPreview : styles.sideBySidePreview]}>
                 <Image source={{ uri: beforePhoto.uri }} style={styles.halfPreviewImage} resizeMode="cover" />
                 <Image source={{ uri: afterPhoto.uri }} style={styles.halfPreviewImage} resizeMode="cover" />
               </View>
               <View style={styles.photoOverlay}>
                 <Text style={styles.photoName}>{beforePhoto.name}</Text>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         }
       } else {
@@ -132,6 +202,7 @@ export default function HomeScreen({ navigation }) {
             <CroppedThumbnail
               imageUri={beforePhoto.uri}
               aspectRatio={beforePhoto.aspectRatio || '4:3'}
+              orientation={beforePhoto.orientation || 'portrait'}
               size={PHOTO_SIZE}
             />
             <View style={styles.photoOverlay}>
@@ -186,9 +257,11 @@ export default function HomeScreen({ navigation }) {
 
       {renderRoomTabs()}
 
-      <ScrollView style={styles.content}>
-        {renderPhotoGrid()}
-      </ScrollView>
+      <View style={styles.content} {...panResponder.panHandlers}>
+        <ScrollView>
+          {renderPhotoGrid()}
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
@@ -239,20 +312,23 @@ const styles = StyleSheet.create({
   settingsButtonText: {
     fontSize: 20
   },
-  roomTabs: {
+  roomTabsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
     maxHeight: 80
-  },
-  roomTabsContent: {
-    paddingHorizontal: 16
   },
   roomTab: {
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    marginRight: 8,
+    marginHorizontal: 4,
     borderRadius: 12,
     backgroundColor: 'white',
-    minWidth: 80
+    minWidth: 60,
+    minHeight: 60
   },
   roomTabActive: {
     backgroundColor: COLORS.PRIMARY
@@ -299,16 +375,17 @@ const styles = StyleSheet.create({
   },
   photoOverlay: {
     position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    padding: 8
+    bottom: 8,
+    left: 8,
+    right: 8
   },
   photoName: {
     color: 'white',
     fontSize: 12,
-    fontWeight: 'bold'
+    fontWeight: 'bold',
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4
   },
   pendingText: {
     color: COLORS.PRIMARY,

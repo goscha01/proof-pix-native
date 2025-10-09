@@ -23,16 +23,56 @@ export default function App() {
           <NavigationContainer>
             <Stack.Navigator
               screenOptions={{
-                headerShown: false,
-                animation: 'slide_from_right'
+                headerShown: false
               }}
             >
-              <Stack.Screen name="Home" component={HomeScreen} />
-              <Stack.Screen name="Camera" component={CameraScreen} />
-              <Stack.Screen name="PhotoEditor" component={PhotoEditorScreen} />
-              <Stack.Screen name="AllPhotos" component={AllPhotosScreen} />
-              <Stack.Screen name="PhotoDetail" component={PhotoDetailScreen} />
-              <Stack.Screen name="Settings" component={SettingsScreen} />
+              <Stack.Screen 
+                name="Home" 
+                component={HomeScreen}
+                options={{
+                  animation: 'none'
+                }}
+              />
+              <Stack.Screen 
+                name="Camera" 
+                component={CameraScreen}
+                options={{
+                  presentation: 'card',
+                  animation: 'slide_from_bottom',
+                  animationDuration: 300,
+                  contentStyle: { backgroundColor: '#000' }
+                }}
+              />
+              <Stack.Screen 
+                name="PhotoEditor" 
+                component={PhotoEditorScreen}
+                options={{
+                  presentation: 'fullScreenModal',
+                  animation: 'slide_from_bottom'
+                }}
+              />
+              <Stack.Screen 
+                name="AllPhotos" 
+                component={AllPhotosScreen}
+                options={{
+                  animation: 'slide_from_right'
+                }}
+              />
+              <Stack.Screen 
+                name="PhotoDetail" 
+                component={PhotoDetailScreen}
+                options={{
+                  presentation: 'modal',
+                  animation: 'fade'
+                }}
+              />
+              <Stack.Screen 
+                name="Settings" 
+                component={SettingsScreen}
+                options={{
+                  animation: 'slide_from_right'
+                }}
+              />
             </Stack.Navigator>
           </NavigationContainer>
         </PhotoProvider>

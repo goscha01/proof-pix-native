@@ -80,21 +80,23 @@ export default function AllPhotosScreen({ navigation }) {
   );
 
   const renderPhotoCard = (photo, borderColor, photoType, photoSet, isLast = false) => {
-    // For combined thumbnail, show split preview based on aspect ratio
+    // For combined thumbnail, show split preview based on orientation - tap to retake after
     if (photoType === 'combined' && !photo && photoSet.before && photoSet.after) {
-      const aspectRatio = photoSet.before.aspectRatio || '4:3';
-      const isHorizontal = aspectRatio === '4:3';
+      const photoOrientation = photoSet.before.orientation || 'portrait';
+      const isLandscape = photoOrientation === 'landscape';
 
       return (
         <TouchableOpacity
           key={photoType}
           style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast]}
-          onPress={() => navigation.navigate('PhotoEditor', {
+          onPress={() => navigation.navigate('Camera', {
+            mode: 'after',
             beforePhoto: photoSet.before,
-            afterPhoto: photoSet.after
+            afterPhoto: photoSet.after,
+            room: photoSet.before.room
           })}
         >
-          <View style={[styles.combinedThumbnail, isHorizontal ? styles.stackedThumbnail : styles.sideBySideThumbnail]}>
+          <View style={[styles.combinedThumbnail, isLandscape ? styles.stackedThumbnail : styles.sideBySideThumbnail]}>
             <Image source={{ uri: photoSet.before.uri }} style={styles.halfImage} resizeMode="cover" />
             <Image source={{ uri: photoSet.after.uri }} style={styles.halfImage} resizeMode="cover" />
           </View>
@@ -106,10 +108,13 @@ export default function AllPhotosScreen({ navigation }) {
 
     const handlePress = () => {
       if (photoType === 'combined') {
-        // Combined column - navigate to editor to see combined preview
-        navigation.navigate('PhotoEditor', {
+        // Combined column - navigate to camera to retake after photo
+        navigation.navigate('Camera', {
+          mode: 'after',
           beforePhoto: photoSet.before,
-          afterPhoto: photoSet.after
+          afterPhoto: photoSet.after,
+          combinedPhoto: photo,
+          room: photoSet.before.room
         });
       } else {
         // Before or After column - show individual photo detail
@@ -126,6 +131,7 @@ export default function AllPhotosScreen({ navigation }) {
         <CroppedThumbnail
           imageUri={photo.uri}
           aspectRatio={photo.aspectRatio || photoSet.before?.aspectRatio || '4:3'}
+          orientation={photo.orientation || photoSet.before?.orientation || 'portrait'}
           size={COLUMN_WIDTH}
         />
       </TouchableOpacity>

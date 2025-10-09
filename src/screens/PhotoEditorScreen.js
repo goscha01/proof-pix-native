@@ -18,15 +18,15 @@ import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, TEMPLATE_CONFIGS } from '../consta
 export default function PhotoEditorScreen({ route, navigation }) {
   const { beforePhoto, afterPhoto } = route.params;
 
-  // Set default template based on aspect ratio
-  // 4:3 (horizontal) → stacked (top/bottom), 2:3 (vertical) → side-by-side (left/right)
+  // Set default template based on orientation
+  // Portrait (vertical) → side-by-side (vertical split), Landscape (horizontal) → stacked (horizontal split)
   const getDefaultTemplate = () => {
-    const aspectRatio = beforePhoto.aspectRatio || '4:3';
-    if (aspectRatio === '4:3') {
-      // Horizontal photos (4:3) create STACKED combined photos (vertical split)
+    const orientation = beforePhoto.orientation || 'portrait';
+    if (orientation === 'landscape') {
+      // Horizontal photos create STACKED combined photos (horizontal split)
       return TEMPLATE_TYPES.STACK_PORTRAIT;
     } else {
-      // Vertical photos (2:3) create SIDE-BY-SIDE combined photos (horizontal split)
+      // Vertical photos create SIDE-BY-SIDE combined photos (vertical split)
       return TEMPLATE_TYPES.SIDE_BY_SIDE_LANDSCAPE;
     }
   };
@@ -37,23 +37,23 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const { addPhoto, getUnpairedBeforePhotos } = usePhotos();
   const { showLabels } = useSettings();
 
-  // Filter templates based on aspect ratio
-  // 4:3 (horizontal) → only stacked templates, 2:3 (vertical) → only side-by-side templates
+  // Filter templates based on orientation
+  // Landscape (horizontal) → only stacked templates, Portrait (vertical) → only side-by-side templates
   const getAvailableTemplates = () => {
-    const aspectRatio = beforePhoto.aspectRatio || '4:3';
+    const orientation = beforePhoto.orientation || 'portrait';
     const allTemplates = Object.entries(TEMPLATE_CONFIGS);
 
-    console.log('Filtering templates for aspect ratio:', aspectRatio);
+    console.log('Filtering templates for orientation:', orientation);
 
-    if (aspectRatio === '4:3') {
-      // Horizontal photos (4:3): only STACKED layouts (top/bottom split)
+    if (orientation === 'landscape') {
+      // Horizontal photos: only STACKED layouts (horizontal split, top/bottom)
       const filtered = allTemplates.filter(([key, config]) => config.layout === 'stack');
-      console.log('4:3 (horizontal) filtered templates (stack only):', filtered.map(([k, c]) => c.name));
+      console.log('Landscape (horizontal) filtered templates (stack only):', filtered.map(([k, c]) => c.name));
       return filtered;
     } else {
-      // Vertical photos (2:3): only SIDE-BY-SIDE layouts (left/right split)
+      // Vertical photos: only SIDE-BY-SIDE layouts (vertical split, left/right)
       const filtered = allTemplates.filter(([key, config]) => config.layout === 'sidebyside');
-      console.log('2:3 (vertical) filtered templates (side-by-side only):', filtered.map(([k, c]) => c.name));
+      console.log('Portrait (vertical) filtered templates (side-by-side only):', filtered.map(([k, c]) => c.name));
       return filtered;
     }
   };
@@ -82,7 +82,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
         mode: PHOTO_MODES.COMBINED,
         name: beforePhoto.name,
         timestamp: Date.now(),
-        templateType
+        templateType,
+        orientation: beforePhoto.orientation || 'portrait'
       };
 
       console.log('Saving combined photo:', combinedPhoto);
@@ -115,10 +116,15 @@ export default function PhotoEditorScreen({ route, navigation }) {
     // Calculate preview dimensions to fit on screen
     const maxWidth = 350;
     const maxHeight = 500;
+    const maxSquareSize = 320; // Smaller size for square formats
     const aspectRatio = config.width / config.height;
 
     let previewWidth, previewHeight;
-    if (aspectRatio > 1) {
+    if (aspectRatio === 1) {
+      // Square format - make it smaller
+      previewWidth = maxSquareSize;
+      previewHeight = maxSquareSize;
+    } else if (aspectRatio > 1) {
       // Landscape
       previewWidth = maxWidth;
       previewHeight = maxWidth / aspectRatio;

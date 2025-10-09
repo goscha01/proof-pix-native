@@ -36,68 +36,11 @@ export default function PhotoDetailScreen({ route, navigation }) {
     );
   };
 
-  const renderCroppedPhoto = () => {
-    // Only crop before and after photos, not combined
-    if (photo.mode === PHOTO_MODES.COMBINED) {
-      return <Image source={{ uri: photo.uri }} style={styles.image} resizeMode="contain" />;
-    }
-
-    const aspectRatio = photo.aspectRatio || '4:3';
-    const containerWidth = width;
-    const containerHeight = height - 200; // Account for header and info
-
-    // Calculate frame dimensions based on aspect ratio
-    const MARGIN = 20;
-    const maxWidth = containerWidth - (MARGIN * 2);
-    const maxHeight = containerHeight - (MARGIN * 2);
-
-    let frameWidth, frameHeight;
-
-    if (aspectRatio === '4:3') {
-      const widthBasedHeight = (maxWidth / 4) * 3;
-      const heightBasedWidth = (maxHeight / 3) * 4;
-
-      if (widthBasedHeight <= maxHeight) {
-        frameWidth = maxWidth;
-        frameHeight = widthBasedHeight;
-      } else {
-        frameHeight = maxHeight;
-        frameWidth = heightBasedWidth;
-      }
-    } else {
-      const widthBasedHeight = (maxWidth / 2) * 3;
-      const heightBasedWidth = (maxHeight / 3) * 2;
-
-      if (widthBasedHeight <= maxHeight) {
-        frameWidth = maxWidth;
-        frameHeight = widthBasedHeight;
-      } else {
-        frameHeight = maxHeight;
-        frameWidth = heightBasedWidth;
-      }
-    }
-
-    // Position frame higher to avoid overlap with info section
-    const verticalOffset = Math.max(MARGIN, (containerHeight - frameHeight) / 2 - 40);
-    const horizontalOffset = (containerWidth - frameWidth) / 2;
-
+  const renderPhoto = () => {
+    // Show all photos as they are - no dimming, no frame
     return (
       <View style={styles.imageContainer}>
-        {/* Background image (dimmed) */}
-        <Image source={{ uri: photo.uri }} style={styles.backgroundImage} resizeMode="cover" />
-
-        {/* Dark overlay */}
-        <View style={styles.backgroundDim} />
-
-        {/* Cropped viewport */}
-        <View style={[styles.croppedViewport, {
-          width: frameWidth,
-          height: frameHeight,
-          top: verticalOffset,
-          left: horizontalOffset
-        }]}>
-          <Image source={{ uri: photo.uri }} style={styles.croppedImage} resizeMode="cover" />
-        </View>
+        <Image source={{ uri: photo.uri }} style={styles.image} resizeMode="contain" />
       </View>
     );
   };
@@ -117,7 +60,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
-      {renderCroppedPhoto()}
+      {renderPhoto()}
 
       <View style={styles.info}>
         <Text style={styles.name}>{photo.name}</Text>
@@ -159,37 +102,15 @@ const styles = StyleSheet.create({
     fontSize: 24
   },
   image: {
-    flex: 1,
-    width: '100%'
+    width: '100%',
+    height: '100%'
   },
   imageContainer: {
     flex: 1,
     width: '100%',
-    position: 'relative',
-    backgroundColor: 'black'
-  },
-  backgroundImage: {
-    width: '100%',
-    height: '100%',
-    position: 'absolute'
-  },
-  backgroundDim: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)'
-  },
-  croppedViewport: {
-    position: 'absolute',
-    overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: COLORS.PRIMARY
-  },
-  croppedImage: {
-    width: '100%',
-    height: '100%'
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000'
   },
   info: {
     padding: 20,

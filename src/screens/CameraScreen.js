@@ -8,55 +8,343 @@ import {
   Alert,
   Dimensions,
   ScrollView,
-  Platform
+  Platform,
+  PanResponder,
+  Animated
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { captureRef } from 'react-native-view-shot';
+import * as ScreenOrientation from 'expo-screen-orientation';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
-import { COLORS, PHOTO_MODES, TEMPLATE_TYPES } from '../constants/rooms';
+import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS } from '../constants/rooms';
 import { CroppedThumbnail } from '../components/CroppedThumbnail';
 
-const { width, height } = Dimensions.get('window');
-
-// iPhone zoom system using native camera zoom ratios
-// Note: expo-camera zoom prop accepts 0-1, where actual zoom depends on device hardware
-const ZOOM_PRESETS = {
-  ultraWide: { label: '0.5x', zoom: 0, focalLength: 13, fov: 120 },     // Wide angle (zoom = 0)
-  wide: { label: '1x', zoom: 0.2, focalLength: 26, fov: 80 },           // Standard view (zoom = 0.2)
-  tele: { label: '2x', zoom: 0.4, focalLength: 52, fov: 48 }            // 2x zoom (zoom = 0.4)
-};
+const initialDimensions = Dimensions.get('window');
+const initialWidth = initialDimensions.width;
+const initialHeight = initialDimensions.height;
 
 export default function CameraScreen({ route, navigation }) {
-  const { mode, beforePhoto, room } = route.params || {};
+  const { mode, beforePhoto, afterPhoto: existingAfterPhoto, combinedPhoto: existingCombinedPhoto, room: initialRoom } = route.params || {};
+  const [room, setRoom] = useState(initialRoom);
   const [facing, setFacing] = useState('back');
   const [permission, requestPermission] = useCameraPermissions();
-  const [zoomLevel, setZoomLevel] = useState('wide'); // 'ultraWide', 'wide', or 'tele'
-  const [zoom, setZoom] = useState(ZOOM_PRESETS.wide.zoom); // Camera zoom value (0-1)
   const [aspectRatio, setAspectRatio] = useState('4:3'); // '4:3' or '2:3'
   const [selectedBeforePhoto, setSelectedBeforePhoto] = useState(beforePhoto);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isFullScreen, setIsFullScreen] = useState(false);
+  const [showCarousel, setShowCarousel] = useState(false);
+  const [carouselIndex, setCarouselIndex] = useState(0);
+  const [fullScreenIndex, setFullScreenIndex] = useState(0);
+  const [deviceOrientation, setDeviceOrientation] = useState('portrait');
+  const [dimensions, setDimensions] = useState({ width: initialWidth, height: initialHeight });
+  const lastTap = useRef(null);
+  const longPressTimer = useRef(null);
   const cameraRef = useRef(null);
-  const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos } = usePhotos();
+  const carouselScrollRef = useRef(null);
+  const fullScreenScrollRef = useRef(null);
+  const carouselTranslateY = useRef(new Animated.Value(0)).current;
+  const currentRoomRef = useRef(room);
+  const dimensionsRef = useRef(dimensions);
+  const showCarouselRef = useRef(showCarousel);
+  const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto } = usePhotos();
   const { cameraMode } = useSettings();
 
-  // Handle zoom change with haptic feedback
-  const handleZoomChange = (level) => {
-    // Haptic feedback on iOS/Android
-    if (Platform.OS === 'ios' || Platform.OS === 'android') {
-      try {
-        // Gentle haptic feedback
-        const { impactAsync, ImpactFeedbackStyle } = require('expo-haptics');
-        impactAsync(ImpactFeedbackStyle.Light);
-      } catch (e) {
-        // Haptics not available, silently continue
-      }
+  // Helper function to get the active before photo based on current room and mode
+  const getActiveBeforePhoto = () => {
+    if (mode === 'after') {
+      // After mode: show selectedBeforePhoto if set, otherwise beforePhoto if it matches current room
+      return selectedBeforePhoto || (beforePhoto?.room === room ? beforePhoto : null);
+    } else {
+      // Before mode: show selectedBeforePhoto only if it matches current room
+      return selectedBeforePhoto?.room === room ? selectedBeforePhoto : null;
     }
-
-    setZoomLevel(level);
-    setZoom(ZOOM_PRESETS[level].zoom);
   };
+
+  // Update ref when room changes
+  useEffect(() => {
+    currentRoomRef.current = room;
+  }, [room]);
+
+  // Update dimensions ref when dimensions change
+  useEffect(() => {
+    dimensionsRef.current = dimensions;
+  }, [dimensions]);
+
+  // Update showCarousel ref when showCarousel changes
+  useEffect(() => {
+    showCarouselRef.current = showCarousel;
+  }, [showCarousel]);
+
+
+  // Handle double tap
+  const handleDoubleTap = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+    
+    if (lastTap.current && (now - lastTap.current) < DOUBLE_TAP_DELAY) {
+      // Double tap detected
+      const photos = mode === 'after' ? getUnpairedBeforePhotos(room) : getBeforePhotos(room);
+      const currentPhoto = mode === 'after' ? getActiveBeforePhoto() : getBeforePhotos(room)[getBeforePhotos(room).length - 1];
+      const index = photos.findIndex(p => p.id === currentPhoto?.id);
+      
+      // Set index first, then show carousel
+      setCarouselIndex(index >= 0 ? index : 0);
+      
+      // Use setTimeout to ensure index is set before carousel opens
+      setTimeout(() => {
+        carouselTranslateY.setValue(0);
+      setShowCarousel(true);
+      }, 10);
+      
+      lastTap.current = null;
+    } else {
+      lastTap.current = now;
+    }
+  };
+
+  // Handle long press with delay
+  const handleThumbnailPressIn = () => {
+    // Clear any existing timer
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+    }
+    // Set a timer for long press (500ms delay)
+    longPressTimer.current = setTimeout(() => {
+      // Set the index to current photo
+      const photos = mode === 'after' ? getUnpairedBeforePhotos(room) : getBeforePhotos(room);
+      const currentPhoto = mode === 'after' ? getActiveBeforePhoto() : getBeforePhotos(room)[getBeforePhotos(room).length - 1];
+      const index = photos.findIndex(p => p.id === currentPhoto?.id);
+      setFullScreenIndex(index >= 0 ? index : 0);
+      setIsFullScreen(true);
+    }, 500);
+  };
+
+  const handleThumbnailPressOut = () => {
+    // Clear the timer if user releases before long press is triggered
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    // Hide full screen
+    setIsFullScreen(false);
+  };
+
+  // PanResponder for swipe-to-dismiss carousel (swipe DOWN)
+  const carouselPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Only activate for vertical swipes (more vertical than horizontal)
+        const { dx, dy } = gestureState;
+        const isVertical = Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 20;
+        if (isVertical) {
+          console.log('Carousel: Vertical swipe detected', dy);
+        }
+        return isVertical;
+      },
+      onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+        // Capture vertical gestures, let horizontal pass through to ScrollView
+        const { dx, dy } = gestureState;
+        return Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 20;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        // Only allow downward swipes (positive dy)
+        if (gestureState.dy > 0) {
+          console.log('Carousel moving down:', gestureState.dy);
+          carouselTranslateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const threshold = 100; // Swipe down at least 100px to dismiss
+        console.log('Carousel release, dy:', gestureState.dy);
+        if (gestureState.dy > threshold) {
+          // Dismiss carousel with animation - slide down
+          console.log('Carousel swipe-down detected - closing carousel, staying on camera');
+          Animated.timing(carouselTranslateY, {
+            toValue: dimensionsRef.current.height,
+            duration: 300,
+            useNativeDriver: true
+          }).start(() => {
+            console.log('Carousel closed - back to camera view');
+            setShowCarousel(false);
+            carouselTranslateY.setValue(0);
+          });
+        } else {
+          // Spring back to original position
+          console.log('Carousel swipe not enough - springing back');
+          Animated.spring(carouselTranslateY, {
+            toValue: 0,
+            useNativeDriver: true
+          }).start();
+        }
+      },
+      onPanResponderTerminationRequest: () => false
+    })
+  ).current;
+
+  // PanResponder for closing camera (vertical swipe down)
+  const cameraClosePanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Only activate for vertical downward swipes (more vertical than horizontal)
+        const { dx, dy } = gestureState;
+        return Math.abs(dy) > Math.abs(dx) && dy > 10;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        // Don't show movement - just detect threshold
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const threshold = 100; // Swipe down at least 100px to close
+        if (gestureState.dy > threshold) {
+          // Close camera immediately - native animation handles it
+          console.log('Camera swipe-down detected - closing');
+          navigation.goBack();
+        }
+      }
+    })
+  ).current;
+
+  // PanResponder for room switching (horizontal swipes)
+  const roomSwitchPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Only activate for horizontal swipes
+        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 30;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const swipeThreshold = 50;
+        const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
+        let newRoomIndex;
+        
+        if (gestureState.dx > swipeThreshold) {
+          // Swipe right - go to previous room (circular)
+          newRoomIndex = currentIndex > 0 ? currentIndex - 1 : ROOMS.length - 1;
+        } else if (gestureState.dx < -swipeThreshold) {
+          // Swipe left - go to next room (circular)
+          newRoomIndex = currentIndex < ROOMS.length - 1 ? currentIndex + 1 : 0;
+        } else {
+          return; // Not enough swipe distance
+        }
+
+        const newRoom = ROOMS[newRoomIndex].id;
+        console.log('Switching to room:', newRoom);
+        setRoom(newRoom);
+        
+        // Update thumbnail based on mode
+        if (mode === 'after') {
+          // For after mode, try to get first unpaired before photo
+          const allBeforePhotos = getBeforePhotos(newRoom);
+          if (allBeforePhotos.length > 0) {
+            // Set to first before photo in the room
+            setSelectedBeforePhoto(allBeforePhotos[0]);
+          } else {
+            // No before photos in this room
+            setSelectedBeforePhoto(null);
+            Alert.alert(
+              'No Before Photos',
+              `There are no before photos in ${ROOMS[newRoomIndex].name}. Please take a before photo first.`,
+              [{ text: 'OK' }]
+            );
+          }
+        } else {
+          // For before mode, clear the selected photo (will show empty thumbnail)
+          setSelectedBeforePhoto(null);
+        }
+      }
+    })
+  ).current;
+
+  // Combined PanResponder that handles both swipe directions
+  const combinedPanResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Don't capture gestures if carousel is open
+        if (showCarouselRef.current) {
+          console.log('Combined: Carousel is open - ignoring gesture');
+          return false;
+        }
+        
+        const { dx, dy } = gestureState;
+        // Vertical swipe down for closing
+        if (Math.abs(dy) > Math.abs(dx) && dy > 10) {
+          console.log('Combined: Vertical swipe DOWN detected');
+          return true;
+        }
+        // Horizontal swipe for room switching
+        if (Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 30) {
+          console.log('Combined: Horizontal swipe detected');
+          return true;
+        }
+        return false;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        // Don't show movement - just detect threshold
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const { dx, dy } = gestureState;
+        
+        // Check if it's a vertical swipe down (closing gesture)
+        if (Math.abs(dy) > Math.abs(dx)) {
+          const threshold = 100;
+          if (dy > threshold) {
+            // Close camera immediately - native animation handles it
+            console.log('Combined: Camera swipe-down detected - closing');
+            navigation.goBack();
+          }
+        } 
+        // Check if it's a horizontal swipe (room switching)
+        else if (Math.abs(dx) > Math.abs(dy)) {
+          console.log('Combined: Horizontal swipe - switching room');
+          const swipeThreshold = 50;
+          const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
+          
+          if (dx > swipeThreshold) {
+            // Swipe right - go to previous room (circular)
+            const newIndex = currentIndex > 0 ? currentIndex - 1 : ROOMS.length - 1;
+            const newRoom = ROOMS[newIndex].id;
+            setRoom(newRoom);
+            if (mode === 'after') {
+              const unpairedPhotos = getUnpairedBeforePhotos(newRoom);
+              if (unpairedPhotos.length > 0) {
+                setSelectedBeforePhoto(unpairedPhotos[0]);
+              } else {
+                setSelectedBeforePhoto(null);
+              }
+            }
+          } else if (dx < -swipeThreshold) {
+            // Swipe left - go to next room (circular)
+            const newIndex = currentIndex < ROOMS.length - 1 ? currentIndex + 1 : 0;
+            const newRoom = ROOMS[newIndex].id;
+            setRoom(newRoom);
+            if (mode === 'after') {
+              const unpairedPhotos = getUnpairedBeforePhotos(newRoom);
+              if (unpairedPhotos.length > 0) {
+                setSelectedBeforePhoto(unpairedPhotos[0]);
+              } else {
+                setSelectedBeforePhoto(null);
+              }
+            }
+          }
+        }
+      }
+    })
+  ).current;
+
+  // Detect screen rotation and update dimensions
+  useEffect(() => {
+    const subscription = Dimensions.addEventListener('change', ({ window }) => {
+      const newOrientation = window.width > window.height ? 'landscape' : 'portrait';
+      console.log('Screen rotated - Width:', window.width, 'Height:', window.height, 'Orientation:', newOrientation);
+      setDimensions({ width: window.width, height: window.height });
+      setDeviceOrientation(newOrientation);
+    });
+
+    return () => {
+      subscription?.remove();
+    };
+  }, []);
 
   useEffect(() => {
     if (permission && !permission.granted) {
@@ -64,15 +352,51 @@ export default function CameraScreen({ route, navigation }) {
     }
   }, [permission]);
 
-  // Set aspect ratio to match before photo in after mode
+  // Initialize selectedBeforePhoto from beforePhoto if not set
   useEffect(() => {
-    if (mode === 'after') {
-      const activeBeforePhoto = selectedBeforePhoto || beforePhoto;
-      if (activeBeforePhoto && activeBeforePhoto.aspectRatio) {
-        setAspectRatio(activeBeforePhoto.aspectRatio);
+    if (mode === 'after' && beforePhoto && !selectedBeforePhoto) {
+      setSelectedBeforePhoto(beforePhoto);
+    }
+  }, [mode, beforePhoto]);
+
+  // Check if there are before photos when entering after mode
+  useEffect(() => {
+    if (mode === 'after' && !beforePhoto && !selectedBeforePhoto) {
+      const allBeforePhotos = getBeforePhotos(room);
+      if (allBeforePhotos.length > 0) {
+        // Set to first before photo in the room
+        setSelectedBeforePhoto(allBeforePhotos[0]);
       }
     }
-  }, [mode, selectedBeforePhoto, beforePhoto]);
+  }, [mode, room]);
+
+  // Set aspect ratio to match before photo in after mode (for both overlay and split modes)
+  useEffect(() => {
+    if (mode === 'after') {
+      const activeBeforePhoto = getActiveBeforePhoto();
+      if (activeBeforePhoto) {
+        if (activeBeforePhoto.aspectRatio) {
+        setAspectRatio(activeBeforePhoto.aspectRatio);
+      }
+        // Note: We don't force device orientation, but we use the saved orientation for thumbnails
+        // The user can physically rotate their device as needed
+      }
+    }
+  }, [selectedBeforePhoto, mode, beforePhoto]);
+
+  // Ensure carousel starts at correct position
+  useEffect(() => {
+    if (showCarousel && carouselScrollRef.current) {
+      // Small delay to ensure ScrollView is rendered, then force scroll to position
+      requestAnimationFrame(() => {
+        carouselScrollRef.current?.scrollTo({
+          x: carouselIndex * dimensions.width,
+          y: 0,
+          animated: false
+        });
+      });
+    }
+  }, [showCarousel]);
 
   if (!permission) {
     return <View style={styles.container} />;
@@ -91,6 +415,17 @@ export default function CameraScreen({ route, navigation }) {
 
   const takePicture = async () => {
     if (!cameraRef.current || isCapturing) return;
+
+    // Check orientation mismatch for after mode
+    if (isOrientationMismatch()) {
+      const beforeOrientation = getActiveBeforePhoto()?.orientation || 'portrait';
+      Alert.alert(
+        'Wrong Orientation',
+        `Please rotate your phone to ${beforeOrientation} mode to match the before photo.`,
+        [{ text: 'OK' }]
+      );
+      return;
+    }
 
     try {
       setIsCapturing(true);
@@ -122,7 +457,11 @@ export default function CameraScreen({ route, navigation }) {
       // Save to device
       const savedUri = await savePhotoToDevice(uri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`);
 
-      // Add to photos
+      // Capture current orientation at the moment of taking the photo
+      const currentOrientation = deviceOrientation;
+      console.log('Saving before photo with orientation:', currentOrientation);
+
+      // Add to photos with device orientation
       const newPhoto = {
         id: Date.now(),
         uri: savedUri,
@@ -130,10 +469,14 @@ export default function CameraScreen({ route, navigation }) {
         mode: PHOTO_MODES.BEFORE,
         name: photoName,
         timestamp: Date.now(),
-        aspectRatio
+        aspectRatio,
+        orientation: currentOrientation
       };
 
       await addPhoto(newPhoto);
+
+      // Update selectedBeforePhoto so thumbnail shows immediately
+      setSelectedBeforePhoto(newPhoto);
 
       // Stay in before mode to allow taking more photos
       // User can close camera to see photos in home grid
@@ -146,7 +489,7 @@ export default function CameraScreen({ route, navigation }) {
   const handleAfterPhoto = async (uri) => {
     try {
       // Use selectedBeforePhoto for split mode, or beforePhoto for overlay mode
-      const activeBeforePhoto = selectedBeforePhoto || beforePhoto;
+      const activeBeforePhoto = getActiveBeforePhoto();
 
       if (!activeBeforePhoto) {
         Alert.alert('Error', 'Please select a before photo first');
@@ -156,14 +499,24 @@ export default function CameraScreen({ route, navigation }) {
       const beforePhotoId = activeBeforePhoto.id;
       console.log('Taking after photo for:', activeBeforePhoto.name, 'ID:', beforePhotoId);
 
+      // If replacing existing photos, delete them first
+      if (existingAfterPhoto) {
+        console.log('Deleting old after photo:', existingAfterPhoto.id);
+        await deletePhoto(existingAfterPhoto.id);
+      }
+      if (existingCombinedPhoto) {
+        console.log('Deleting old combined photo:', existingCombinedPhoto.id);
+        await deletePhoto(existingCombinedPhoto.id);
+      }
+
       // Save to device
       const savedUri = await savePhotoToDevice(
         uri,
         `${activeBeforePhoto.room}_${activeBeforePhoto.name}_AFTER_${Date.now()}.jpg`
       );
 
-      // Add after photo (use same aspect ratio as before photo)
-      const afterPhoto = {
+      // Add after photo (use same aspect ratio and orientation as before photo)
+      const newAfterPhoto = {
         id: Date.now(),
         uri: savedUri,
         room: activeBeforePhoto.room,
@@ -171,11 +524,22 @@ export default function CameraScreen({ route, navigation }) {
         name: activeBeforePhoto.name,
         timestamp: Date.now(),
         beforePhotoId: beforePhotoId,
-        aspectRatio: activeBeforePhoto.aspectRatio || '4:3'
+        aspectRatio: activeBeforePhoto.aspectRatio || '4:3',
+        orientation: activeBeforePhoto.orientation || deviceOrientation
       };
 
       console.log('Adding after photo with beforePhotoId:', beforePhotoId);
-      await addPhoto(afterPhoto);
+      await addPhoto(newAfterPhoto);
+
+      // If we're replacing an existing combined photo, navigate to PhotoEditor to recreate it
+      if (existingCombinedPhoto) {
+        console.log('Navigating to PhotoEditor to recreate combined photo');
+        navigation.navigate('PhotoEditor', {
+          beforePhoto: activeBeforePhoto,
+          afterPhoto: newAfterPhoto
+        });
+        return;
+      }
 
       // Wait a moment for state to update
       setTimeout(() => {
@@ -199,7 +563,7 @@ export default function CameraScreen({ route, navigation }) {
             [
               {
                 text: 'OK',
-                onPress: () => navigation.navigate('Home')
+                onPress: () => navigation.goBack()
               }
             ]
           );
@@ -214,7 +578,6 @@ export default function CameraScreen({ route, navigation }) {
   const toggleCameraFacing = () => {
     setFacing(current => (current === 'back' ? 'front' : 'back'));
   };
-
 
   // Render cropped image preview (shows only the area within aspect ratio bounds)
   const renderCroppedImage = (imageUri, showLabel = false, labelText = '') => {
@@ -406,7 +769,7 @@ export default function CameraScreen({ route, navigation }) {
                 key={photo.id}
                 style={styles.galleryItem}
               >
-                <CroppedThumbnail imageUri={photo.uri} aspectRatio={photo.aspectRatio || '4:3'} size={120} />
+                <CroppedThumbnail imageUri={photo.uri} aspectRatio={photo.aspectRatio || '4:3'} orientation={photo.orientation || 'portrait'} size={120} />
                 <Text style={styles.galleryItemName}>{photo.name}</Text>
               </View>
             ))}
@@ -439,7 +802,7 @@ export default function CameraScreen({ route, navigation }) {
                 ]}
                 onPress={() => setSelectedBeforePhoto(photo)}
               >
-                <CroppedThumbnail imageUri={photo.uri} aspectRatio={photo.aspectRatio || '4:3'} size={120} />
+                <CroppedThumbnail imageUri={photo.uri} aspectRatio={photo.aspectRatio || '4:3'} orientation={photo.orientation || 'portrait'} size={120} />
                 <Text style={styles.galleryItemName}>{photo.name}</Text>
               </TouchableOpacity>
             ))}
@@ -449,131 +812,136 @@ export default function CameraScreen({ route, navigation }) {
     }
   };
 
+  // Get current room info
+  const getCurrentRoomInfo = () => {
+    return ROOMS.find(r => r.id === room) || ROOMS[0];
+  };
+
+  // Check if orientation matches for after mode
+  const isOrientationMismatch = () => {
+    if (mode !== 'after') return false;
+    
+    const activeBeforePhoto = getActiveBeforePhoto();
+    if (!activeBeforePhoto) return false;
+    
+    const beforeOrientation = activeBeforePhoto.orientation || 'portrait';
+    const mismatch = beforeOrientation !== deviceOrientation;
+    
+    if (mismatch) {
+      console.log('⚠️ Orientation mismatch! Before:', beforeOrientation, 'Current:', deviceOrientation);
+    }
+    
+    return mismatch;
+  };
+
   // Render overlay mode (current implementation)
   const renderOverlayMode = () => (
-    <View style={styles.container}>
+    <View 
+      style={styles.container}
+      {...combinedPanResponder.panHandlers}
+    >
+      {/* Swipe indicator */}
+      <View style={styles.swipeIndicator}>
+        <View style={styles.swipeHandle} />
+      </View>
+
+      {/* Room name indicator with mode */}
+      <View style={styles.roomIndicator}>
+        <Text style={styles.roomIndicatorIcon}>{getCurrentRoomInfo().icon}</Text>
+        <View style={styles.roomIndicatorTextContainer}>
+          <Text style={styles.roomIndicatorText}>{getCurrentRoomInfo().name}</Text>
+          <Text style={styles.roomIndicatorMode}>{mode.toUpperCase()}</Text>
+        </View>
+      </View>
+
+      {/* Orientation mismatch warning */}
+      {isOrientationMismatch() && (
+        <View style={styles.orientationWarning}>
+          <Text style={styles.rotatePhoneIcon}>🔄</Text>
+          <Text style={styles.orientationWarningText}>Rotate Phone!</Text>
+          <Text style={styles.orientationWarningHint}>
+            Before photo was taken in {getActiveBeforePhoto()?.orientation || 'portrait'} mode
+          </Text>
+        </View>
+      )}
+
       {/* Camera preview with before photo overlay (for after mode) */}
       <View style={styles.cameraContainer}>
         <CameraView
           ref={cameraRef}
           style={styles.camera}
           facing={facing}
-          zoom={zoom}
-          enableZoomGesture={true}
         />
         {/* Before photo overlay (for after mode) */}
-        {mode === 'after' && beforePhoto && (
+        {mode === 'after' && getActiveBeforePhoto() && (
           <View style={styles.beforePhotoOverlay}>
             <Image
-              source={{ uri: beforePhoto.uri }}
+              source={{ uri: getActiveBeforePhoto().uri }}
               style={styles.beforePhotoImage}
               resizeMode="cover"
             />
           </View>
         )}
-
-        {/* Aspect ratio cropping overlay */}
-        {renderCropOverlay()}
       </View>
 
       {/* Controls */}
       <View style={styles.controls}>
-        {/* Close button - top right */}
-        <TouchableOpacity
-          style={styles.closeButtonTopRight}
-          onPress={() => navigation.navigate('Home')}
-        >
-          <Text style={styles.closeButtonText}>✕</Text>
-        </TouchableOpacity>
-
         <View style={styles.bottomControls}>
-          {/* Zoom presets - above capture button */}
-          <View style={styles.zoomContainer}>
-            <View style={styles.zoomButtons}>
-              <TouchableOpacity
-                style={[styles.zoomPresetButton, zoomLevel === 'ultraWide' && styles.zoomPresetButtonActive]}
-                onPress={() => handleZoomChange('ultraWide')}
-              >
-                <Text style={[styles.zoomPresetText, zoomLevel === 'ultraWide' && styles.zoomPresetTextActive]}>
-                  {ZOOM_PRESETS.ultraWide.label}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.zoomPresetButton, zoomLevel === 'wide' && styles.zoomPresetButtonActive]}
-                onPress={() => handleZoomChange('wide')}
-              >
-                <Text style={[styles.zoomPresetText, zoomLevel === 'wide' && styles.zoomPresetTextActive]}>
-                  {ZOOM_PRESETS.wide.label}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.zoomPresetButton, zoomLevel === 'tele' && styles.zoomPresetButtonActive]}
-                onPress={() => handleZoomChange('tele')}
-              >
-                <Text style={[styles.zoomPresetText, zoomLevel === 'tele' && styles.zoomPresetTextActive]}>
-                  {ZOOM_PRESETS.tele.label}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
           {/* Main control row */}
           <View style={styles.mainControlRow}>
-            {/* Aspect ratio selector - left side (absolute positioned) */}
-            {mode === 'before' ? (
-              <View style={styles.aspectRatioContainer}>
-                <TouchableOpacity
-                  style={[
-                    styles.aspectRatioButton,
-                    aspectRatio === '4:3' && styles.aspectRatioButtonActive
-                  ]}
-                  onPress={() => setAspectRatio('4:3')}
-                >
-                  <Text
-                    style={[
-                      styles.aspectRatioText,
-                      aspectRatio === '4:3' && styles.aspectRatioTextActive
-                    ]}
-                  >
-                    4:3
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.aspectRatioButton,
-                    aspectRatio === '2:3' && styles.aspectRatioButtonActive
-                  ]}
-                  onPress={() => setAspectRatio('2:3')}
-                >
-                  <Text
-                    style={[
-                      styles.aspectRatioText,
-                      aspectRatio === '2:3' && styles.aspectRatioTextActive
-                    ]}
-                  >
-                    2:3
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.aspectRatioContainer}>
-                <View style={[styles.aspectRatioButton, styles.aspectRatioButtonLocked]}>
-                  <Text style={[styles.aspectRatioText, styles.aspectRatioTextActive]}>
-                    {aspectRatio}
-                  </Text>
-                </View>
-              </View>
-            )}
+            {/* Thumbnail viewer - left side */}
+            {(() => {
+                const activePhoto = getActiveBeforePhoto();
+
+                if (activePhoto) {
+                  const photoOrientation = activePhoto.orientation || 'portrait';
+                  console.log('Thumbnail - Photo orientation:', photoOrientation, 'Photo:', activePhoto.name, 'Room:', room);
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.thumbnailViewerContainer,
+                        photoOrientation === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
+                      ]}
+                      activeOpacity={1}
+                      onPress={handleDoubleTap}
+                      onPressIn={handleThumbnailPressIn}
+                      onPressOut={handleThumbnailPressOut}
+                    >
+                      <Image
+                        source={{ uri: activePhoto.uri }}
+                        style={styles.thumbnailViewerImage}
+                        resizeMode="cover"
+                      />
+                      <Text style={styles.thumbnailViewerLabel}>👁</Text>
+                    </TouchableOpacity>
+                  );
+                } else {
+                  // Show empty placeholder
+                  return (
+                    <View style={[styles.thumbnailViewerContainer, deviceOrientation === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait]} />
+                  );
+                }
+              })()}
 
             {/* Capture button - center (no absolute positioning needed, centered by parent) */}
-            <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
-              <View style={styles.captureButtonInner} />
+            <TouchableOpacity 
+              style={[styles.captureButton, isOrientationMismatch() && styles.captureButtonDisabled]} 
+              onPress={takePicture}
+              disabled={isOrientationMismatch()}
+            >
+              <View style={[styles.captureButtonInner, isOrientationMismatch() && styles.captureButtonInnerDisabled]} />
+              {isOrientationMismatch() && (
+                <Text style={styles.captureButtonWarning}>🔄</Text>
+              )}
             </TouchableOpacity>
 
             {/* Save button - right side (absolute positioned) */}
             <TouchableOpacity
               style={styles.saveButton}
-              onPress={() => navigation.navigate('Home')}
+              onPress={() => {
+                console.log('Save button pressed - going back');
+                navigation.goBack();
+              }}
             >
               <Text style={styles.saveButtonText}>💾</Text>
               <Text style={styles.saveButtonLabel}>Save</Text>
@@ -581,6 +949,139 @@ export default function CameraScreen({ route, navigation }) {
           </View>
         </View>
       </View>
+
+      {/* Close button - rendered outside controls for proper layering */}
+      <TouchableOpacity
+        style={styles.closeButtonTopRight}
+        onPress={() => {
+          console.log('Close button pressed - going back');
+          navigation.goBack();
+        }}
+        activeOpacity={0.7}
+      >
+        <Text style={styles.closeButtonText}>✕</Text>
+      </TouchableOpacity>
+
+      {/* Full screen view - activated by holding thumbnail */}
+      {isFullScreen && !showCarousel && (() => {
+        const photos = mode === 'after' ? getUnpairedBeforePhotos(room) : getBeforePhotos(room);
+        
+        if (photos.length === 0) return null;
+        
+        return (
+          <View style={styles.fullScreenContainer} pointerEvents="box-none">
+            <View style={styles.fullScreenBackground} />
+            <ScrollView
+              ref={fullScreenScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              snapToInterval={dimensions.width}
+              decelerationRate="fast"
+              contentOffset={{ x: fullScreenIndex * dimensions.width, y: 0 }}
+              onMomentumScrollEnd={(event) => {
+                const offsetX = event.nativeEvent.contentOffset.x;
+                const index = Math.round(offsetX / dimensions.width);
+                setFullScreenIndex(index);
+                // Update selected photo in after mode
+                if (mode === 'after' && photos[index]) {
+                  setSelectedBeforePhoto(photos[index]);
+                }
+              }}
+              scrollEventThrottle={16}
+              style={styles.fullScreenScroll}
+            >
+              {photos.map((photo) => (
+                <View key={photo.id} style={[styles.fullScreenSlide, { width: dimensions.width, height: dimensions.height }]}>
+            <Image
+                    source={{ uri: photo.uri }}
+              style={styles.fullScreenImage}
+              resizeMode="contain"
+            />
+                </View>
+              ))}
+            </ScrollView>
+            <View style={styles.fullScreenInfo} pointerEvents="none">
+              <Text style={styles.fullScreenName}>{photos[fullScreenIndex]?.name}</Text>
+              <Text style={styles.fullScreenHint}>Release to return • Swipe to navigate</Text>
+            </View>
+          </View>
+        );
+      })()}
+
+      {/* Carousel view - activated by double-tap */}
+      {showCarousel && (() => {
+        const photos = mode === 'after' ? getUnpairedBeforePhotos(room) : getBeforePhotos(room);
+        
+        return (
+          <View style={styles.carouselOverlay}>
+            <TouchableOpacity 
+              style={styles.carouselBackground}
+              activeOpacity={1}
+              onPress={() => {
+                console.log('Carousel background tapped - closing');
+                setShowCarousel(false);
+              }}
+            />
+            
+            <Animated.View 
+              style={[
+                styles.carouselContainer,
+                {
+                  transform: [{ translateY: carouselTranslateY }]
+                }
+              ]}
+              {...carouselPanResponder.panHandlers}
+            >
+              <ScrollView
+                ref={carouselScrollRef}
+                horizontal
+                pagingEnabled
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={dimensions.width}
+                decelerationRate="fast"
+                snapToAlignment="center"
+                contentOffset={{ x: carouselIndex * dimensions.width, y: 0 }}
+                onMomentumScrollEnd={(event) => {
+                  const offsetX = event.nativeEvent.contentOffset.x;
+                  const index = Math.round(offsetX / dimensions.width);
+                  setCarouselIndex(index);
+                  // Update selected photo in after mode
+                  if (mode === 'after' && photos[index]) {
+                    setSelectedBeforePhoto(photos[index]);
+                  }
+                }}
+                scrollEventThrottle={16}
+              >
+                {photos.map((photo) => (
+                  <View key={photo.id} style={[styles.carouselSlide, { width: dimensions.width, height: dimensions.height }]}>
+                    <Image
+                      source={{ uri: photo.uri }}
+                      style={styles.carouselImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                ))}
+              </ScrollView>
+
+              <View style={styles.carouselInfo}>
+                <Text style={styles.carouselPhotoName}>{photos[carouselIndex]?.name}</Text>
+                <Text style={styles.carouselCounter}>{carouselIndex + 1} / {photos.length}</Text>
+              </View>
+
+              <TouchableOpacity
+                style={styles.carouselCloseButton}
+                onPress={() => {
+                  console.log('Carousel close button pressed - closing carousel');
+                  setShowCarousel(false);
+                }}
+              >
+                <Text style={styles.carouselCloseButtonText}>✕</Text>
+              </TouchableOpacity>
+            </Animated.View>
+          </View>
+        );
+      })()}
     </View>
   );
 
@@ -589,48 +1090,69 @@ export default function CameraScreen({ route, navigation }) {
     if (mode === 'before') {
       // Before mode: Camera on top, Gallery on bottom (50/50 split)
       return (
-        <View style={styles.container}>
-          {/* Close button - top right */}
-          <TouchableOpacity
-            style={styles.closeButtonTopRight}
-            onPress={() => navigation.navigate('Home')}
-          >
-            <Text style={styles.closeButtonText}>✕</Text>
-          </TouchableOpacity>
-
-          <View style={styles.splitHalfContainer}>
-            <CameraView
-              ref={cameraRef}
-              style={styles.camera}
-              facing={facing}
-              zoom={zoom}
-              enableZoomGesture={true}
-            />
-            {/* Aspect ratio cropping overlay */}
-            {renderCropOverlay()}
+        <View 
+          style={styles.container}
+          {...combinedPanResponder.panHandlers}
+        >
+          {/* Swipe down indicator */}
+          <View style={styles.swipeIndicator}>
+            <View style={styles.swipeHandle} />
           </View>
 
-          <View style={styles.splitHalfContainer}>
-            {renderBeforeGallery()}
+          {/* Room name indicator with mode */}
+          <View style={styles.roomIndicator}>
+            <Text style={styles.roomIndicatorIcon}>{getCurrentRoomInfo().icon}</Text>
+            <View style={styles.roomIndicatorTextContainer}>
+              <Text style={styles.roomIndicatorText}>{getCurrentRoomInfo().name}</Text>
+              <Text style={styles.roomIndicatorMode}>{mode.toUpperCase()}</Text>
+            </View>
+          </View>
+
+          {/* Orientation mismatch warning */}
+          {isOrientationMismatch() && (
+            <View style={styles.orientationWarning}>
+              <Text style={styles.rotatePhoneIcon}>🔄</Text>
+              <Text style={styles.orientationWarningText}>Rotate Phone!</Text>
+              <Text style={styles.orientationWarningHint}>
+                Before photo was taken in {(selectedBeforePhoto || beforePhoto)?.orientation || 'portrait'} mode
+              </Text>
+            </View>
+          )}
+
+          <View style={styles.splitContentWrapper}>
+            <View style={styles.splitHalfContainer}>
+              <CameraView
+                ref={cameraRef}
+                style={styles.camera}
+                facing={facing}
+                zoom={zoom}
+                enableZoomGesture={true}
+              />
+              {/* Aspect ratio cropping overlay */}
+              {renderCropOverlay()}
+            </View>
+
+            <View style={styles.splitHalfContainer}>
+              {renderBeforeGallery()}
+            </View>
+          </View>
+
+          {/* Close button layer - separate from content */}
+          <View style={styles.closeButtonLayer} pointerEvents="box-none">
+            <TouchableOpacity
+              style={styles.closeButtonTopRight}
+              onPress={() => {
+                console.log('Close button pressed (split before) - going back');
+                navigation.goBack();
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
           </View>
 
           {/* Controls at bottom */}
           <View style={styles.splitBottomControls}>
-            {/* Zoom presets - above other controls */}
-            <View style={styles.zoomContainer}>
-              <View style={styles.zoomButtons}>
-                <TouchableOpacity style={[styles.zoomPresetButton, zoomLevel === 'ultraWide' && styles.zoomPresetButtonActive]} onPress={() => handleZoomChange('ultraWide')}>
-                  <Text style={[styles.zoomPresetText, zoomLevel === 'ultraWide' && styles.zoomPresetTextActive]}>{ZOOM_PRESETS.ultraWide.label}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.zoomPresetButton, zoomLevel === 'wide' && styles.zoomPresetButtonActive]} onPress={() => handleZoomChange('wide')}>
-                  <Text style={[styles.zoomPresetText, zoomLevel === 'wide' && styles.zoomPresetTextActive]}>{ZOOM_PRESETS.wide.label}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.zoomPresetButton, zoomLevel === 'tele' && styles.zoomPresetButtonActive]} onPress={() => handleZoomChange('tele')}>
-                  <Text style={[styles.zoomPresetText, zoomLevel === 'tele' && styles.zoomPresetTextActive]}>{ZOOM_PRESETS.tele.label}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
             {/* Main control row */}
             <View style={styles.mainControlRow}>
               {/* Aspect ratio on left */}
@@ -640,24 +1162,36 @@ export default function CameraScreen({ route, navigation }) {
                   onPress={() => setAspectRatio('4:3')}
                 >
                   <Text style={[styles.aspectRatioText, aspectRatio === '4:3' && styles.aspectRatioTextActive]}>4:3</Text>
+                  <Text style={styles.aspectRatioHint}>📐</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.aspectRatioButton, aspectRatio === '2:3' && styles.aspectRatioButtonActive]}
                   onPress={() => setAspectRatio('2:3')}
                 >
                   <Text style={[styles.aspectRatioText, aspectRatio === '2:3' && styles.aspectRatioTextActive]}>2:3</Text>
+                  <Text style={styles.aspectRatioHint}>📱</Text>
                 </TouchableOpacity>
               </View>
 
               {/* Capture button in center */}
-              <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
-                <View style={styles.captureButtonInner} />
+              <TouchableOpacity 
+                style={[styles.captureButton, isOrientationMismatch() && styles.captureButtonDisabled]} 
+                onPress={takePicture}
+                disabled={isOrientationMismatch()}
+              >
+                <View style={[styles.captureButtonInner, isOrientationMismatch() && styles.captureButtonInnerDisabled]} />
+                {isOrientationMismatch() && (
+                  <Text style={styles.captureButtonWarning}>🔄</Text>
+                )}
               </TouchableOpacity>
 
               {/* Save button on right */}
               <TouchableOpacity
                 style={styles.saveButton}
-                onPress={() => navigation.navigate('Home')}
+                onPress={() => {
+                  console.log('Save button pressed (split before) - going back');
+                  navigation.goBack();
+                }}
               >
                 <Text style={styles.saveButtonText}>💾</Text>
                 <Text style={styles.saveButtonLabel}>Save</Text>
@@ -669,68 +1203,101 @@ export default function CameraScreen({ route, navigation }) {
     } else {
       // After mode: Camera on top, Selected before photo on bottom (50/50 split)
       return (
-        <View style={styles.container}>
-          {/* Close button - top right */}
-          <TouchableOpacity
-            style={styles.closeButtonTopRight}
-            onPress={() => navigation.navigate('Home')}
-          >
-            <Text style={styles.closeButtonText}>✕</Text>
-          </TouchableOpacity>
-
-          <View style={styles.splitHalfContainer}>
-            <CameraView
-              ref={cameraRef}
-              style={styles.camera}
-              facing={facing}
-              zoom={zoom}
-              enableZoomGesture={true}
-            />
-            {/* Aspect ratio cropping overlay */}
-            {renderCropOverlay()}
+        <View 
+          style={styles.container}
+          {...combinedPanResponder.panHandlers}
+        >
+          {/* Swipe down indicator */}
+          <View style={styles.swipeIndicator}>
+            <View style={styles.swipeHandle} />
           </View>
 
-          {selectedBeforePhoto && (
-            <View style={styles.splitHalfContainer}>
-              {renderCroppedImage(selectedBeforePhoto.uri, true, selectedBeforePhoto.name)}
+          {/* Room name indicator with mode */}
+          <View style={styles.roomIndicator}>
+            <Text style={styles.roomIndicatorIcon}>{getCurrentRoomInfo().icon}</Text>
+            <View style={styles.roomIndicatorTextContainer}>
+              <Text style={styles.roomIndicatorText}>{getCurrentRoomInfo().name}</Text>
+              <Text style={styles.roomIndicatorMode}>{mode.toUpperCase()}</Text>
+            </View>
+          </View>
+
+          {/* Orientation mismatch warning */}
+          {isOrientationMismatch() && (
+            <View style={styles.orientationWarning}>
+              <Text style={styles.rotatePhoneIcon}>🔄</Text>
+              <Text style={styles.orientationWarningText}>Rotate Phone!</Text>
+              <Text style={styles.orientationWarningHint}>
+                Before photo was taken in {(selectedBeforePhoto || beforePhoto)?.orientation || 'portrait'} mode
+              </Text>
             </View>
           )}
 
-          {/* Controls at bottom */}
-          <View style={styles.splitBottomControls}>
-            {/* Zoom presets - above other controls */}
-            <View style={styles.zoomContainer}>
-              <View style={styles.zoomButtons}>
-                <TouchableOpacity style={[styles.zoomPresetButton, zoomLevel === 'ultraWide' && styles.zoomPresetButtonActive]} onPress={() => handleZoomChange('ultraWide')}>
-                  <Text style={[styles.zoomPresetText, zoomLevel === 'ultraWide' && styles.zoomPresetTextActive]}>{ZOOM_PRESETS.ultraWide.label}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.zoomPresetButton, zoomLevel === 'wide' && styles.zoomPresetButtonActive]} onPress={() => handleZoomChange('wide')}>
-                  <Text style={[styles.zoomPresetText, zoomLevel === 'wide' && styles.zoomPresetTextActive]}>{ZOOM_PRESETS.wide.label}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.zoomPresetButton, zoomLevel === 'tele' && styles.zoomPresetButtonActive]} onPress={() => handleZoomChange('tele')}>
-                  <Text style={[styles.zoomPresetText, zoomLevel === 'tele' && styles.zoomPresetTextActive]}>{ZOOM_PRESETS.tele.label}</Text>
-                </TouchableOpacity>
-              </View>
+          <View style={styles.splitContentWrapper}>
+            <View style={styles.splitHalfContainer}>
+              <CameraView
+                ref={cameraRef}
+                style={styles.camera}
+                facing={facing}
+                zoom={zoom}
+                enableZoomGesture={true}
+              />
+              {/* Aspect ratio cropping overlay */}
+              {renderCropOverlay()}
             </View>
 
+            {selectedBeforePhoto && (
+              <View style={styles.splitHalfContainer}>
+                {renderCroppedImage(selectedBeforePhoto.uri, true, selectedBeforePhoto.name)}
+              </View>
+            )}
+          </View>
+
+          {/* Close button layer - separate from content */}
+          <View style={styles.closeButtonLayer} pointerEvents="box-none">
+            <TouchableOpacity
+              style={styles.closeButtonTopRight}
+              onPress={() => {
+                console.log('Close button pressed (split after) - going back');
+                navigation.goBack();
+              }}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.closeButtonText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Controls at bottom */}
+          <View style={styles.splitBottomControls}>
             {/* Main control row */}
             <View style={styles.mainControlRow}>
               {/* Show locked aspect ratio (matching before photo) */}
               <View style={styles.aspectRatioContainer}>
                 <View style={[styles.aspectRatioButton, styles.aspectRatioButtonLocked]}>
                   <Text style={[styles.aspectRatioText, styles.aspectRatioTextActive]}>{aspectRatio}</Text>
+                  <Text style={styles.aspectRatioHint}>{aspectRatio === '4:3' ? '📐' : '📱'}</Text>
+                  <Text style={styles.aspectRatioLockIcon}>🔒</Text>
                 </View>
               </View>
 
               {/* Capture button in center */}
-              <TouchableOpacity style={styles.captureButton} onPress={takePicture}>
-                <View style={styles.captureButtonInner} />
+              <TouchableOpacity 
+                style={[styles.captureButton, isOrientationMismatch() && styles.captureButtonDisabled]} 
+                onPress={takePicture}
+                disabled={isOrientationMismatch()}
+              >
+                <View style={[styles.captureButtonInner, isOrientationMismatch() && styles.captureButtonInnerDisabled]} />
+                {isOrientationMismatch() && (
+                  <Text style={styles.captureButtonWarning}>🔄</Text>
+                )}
               </TouchableOpacity>
 
               {/* Save button on right */}
               <TouchableOpacity
                 style={styles.saveButton}
-                onPress={() => navigation.navigate('Home')}
+                onPress={() => {
+                  console.log('Save button pressed (split after) - going back');
+                  navigation.goBack();
+                }}
               >
                 <Text style={styles.saveButtonText}>💾</Text>
                 <Text style={styles.saveButtonLabel}>Save</Text>
@@ -748,7 +1315,58 @@ export default function CameraScreen({ route, navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: 'black'
+    backgroundColor: '#000',
+    width: '100%',
+    height: '100%'
+  },
+  swipeIndicator: {
+    position: 'absolute',
+    bottom: 10,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 999,
+    paddingVertical: 10
+  },
+  swipeHandle: {
+    width: 60,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)'
+  },
+  orientationWarning: {
+    position: 'absolute',
+    top: '40%',
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(242, 195, 27, 0.95)',
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    zIndex: 999,
+    borderWidth: 3,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 8,
+    elevation: 10
+  },
+  rotatePhoneIcon: {
+    fontSize: 64,
+    marginBottom: 12
+  },
+  orientationWarningText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.TEXT,
+    marginBottom: 8
+  },
+  orientationWarningHint: {
+    fontSize: 14,
+    color: COLORS.TEXT,
+    textAlign: 'center',
+    opacity: 0.8
   },
   message: {
     textAlign: 'center',
@@ -795,17 +1413,58 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: 'flex-end'
   },
+  roomIndicator: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 25,
+    zIndex: 1000,
+    elevation: 1000,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    gap: 8
+  },
+  roomIndicatorIcon: {
+    fontSize: 20
+  },
+  roomIndicatorTextContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8
+  },
+  roomIndicatorText: {
+    color: COLORS.PRIMARY,
+    fontSize: 16,
+    fontWeight: 'bold'
+  },
+  roomIndicatorMode: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6
+  },
   closeButtonTopRight: {
     position: 'absolute',
-    top: 10,
-    right: 10,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    top: 50,
+    right: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0,0,0,0.7)',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 10
+    zIndex: 1000,
+    elevation: 1000,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)'
   },
   closeButton: {
     width: 44,
@@ -862,11 +1521,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 20
   },
+  captureButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#ccc'
+  },
   captureButtonInner: {
     width: 68,
     height: 68,
     borderRadius: 34,
     backgroundColor: COLORS.PRIMARY
+  },
+  captureButtonInnerDisabled: {
+    backgroundColor: '#999'
+  },
+  captureButtonWarning: {
+    position: 'absolute',
+    fontSize: 32
   },
   zoomContainer: {
     alignItems: 'center',
@@ -961,6 +1631,210 @@ const styles = StyleSheet.create({
   aspectRatioTextActive: {
     color: COLORS.TEXT
   },
+  aspectRatioHint: {
+    fontSize: 10,
+    marginTop: 2
+  },
+  aspectRatioLockIcon: {
+    position: 'absolute',
+    top: 2,
+    right: 2,
+    fontSize: 10
+  },
+  // Thumbnail viewer styles (overlay mode)
+  thumbnailViewerContainer: {
+    position: 'absolute',
+    left: 10,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY
+  },
+  thumbnailLandscape: {
+    width: 100,
+    height: 75  // Landscape orientation - wider than tall
+  },
+  thumbnailPortrait: {
+    width: 56,
+    height: 84  // Portrait orientation - taller than wide (3:4 ratio approx)
+  },
+  thumbnailViewerImage: {
+    width: '100%',
+    height: '100%'
+  },
+  thumbnailViewerLabel: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    fontSize: 20
+  },
+  // Full screen styles
+  fullScreenContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    zIndex: 1001,
+    elevation: 1001
+  },
+  fullScreenBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000',
+    width: '100%',
+    height: '100%'
+  },
+  fullScreenScroll: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%'
+  },
+  fullScreenSlide: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000'
+  },
+  fullScreenImage: {
+    width: '100%',
+    height: '100%'
+  },
+  fullScreenInfo: {
+    position: 'absolute',
+    top: 60,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center'
+  },
+  fullScreenName: {
+    color: COLORS.PRIMARY,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 4
+  },
+  fullScreenHint: {
+    color: COLORS.GRAY,
+    fontSize: 13
+  },
+  // Carousel styles
+  carouselOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1002,
+    elevation: 1002
+  },
+  carouselBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#000'
+  },
+  carouselCloseHintText: {
+    color: COLORS.GRAY,
+    fontSize: 14,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20
+  },
+  carouselContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    justifyContent: 'center'
+  },
+  carouselSwipeIndicator: {
+    position: 'absolute',
+    top: 20,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10,
+    paddingVertical: 10
+  },
+  carouselDragHandle: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
+    marginBottom: 8
+  },
+  carouselSlide: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000'
+  },
+  carouselImage: {
+    width: '100%',
+    height: '100%'
+  },
+  carouselInfo: {
+    position: 'absolute',
+    bottom: 40,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    paddingVertical: 12,
+    paddingHorizontal: 20
+  },
+  carouselPhotoName: {
+    color: COLORS.PRIMARY,
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 4
+  },
+  carouselCounter: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600'
+  },
+  carouselCloseButton: {
+    position: 'absolute',
+    top: 60,
+    right: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.PRIMARY,
+    justifyContent: 'center',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
+    elevation: 5
+  },
+  carouselCloseButtonText: {
+    color: COLORS.TEXT,
+    fontSize: 24,
+    fontWeight: 'bold'
+  },
   photoFrameGuide: {
     position: 'absolute',
     top: '5%',
@@ -1020,9 +1894,22 @@ const styles = StyleSheet.create({
     borderColor: COLORS.PRIMARY
   },
   // Split mode styles
+  splitContentWrapper: {
+    flex: 1,
+    flexDirection: 'column'
+  },
   splitHalfContainer: {
     flex: 1,
     position: 'relative'
+  },
+  closeButtonLayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 1000,
+    elevation: 1000
   },
   galleryContainer: {
     flex: 1,
