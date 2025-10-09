@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   Image,
   Dimensions,
-  Alert
+  Alert,
+  PanResponder
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
@@ -23,6 +24,27 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function AllPhotosScreen({ navigation }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos } = usePhotos();
+
+  // PanResponder for swipe down to close
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const { dy } = gestureState;
+        // Detect swipe down
+        return dy > 10;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const { dy } = gestureState;
+        const threshold = 100; // Swipe down at least 100px
+        
+        if (dy > threshold) {
+          console.log('All Photos - swipe down detected, going back');
+          navigation.goBack();
+        }
+      }
+    })
+  ).current;
 
   const handleDeleteAll = () => {
     Alert.alert(
@@ -167,7 +189,12 @@ export default function AllPhotosScreen({ navigation }) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
+      {/* Swipe down indicator */}
+      <View style={styles.swipeIndicator}>
+        <View style={styles.swipeHandle} />
+      </View>
+
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -214,6 +241,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.BACKGROUND
+  },
+  swipeIndicator: {
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 4
+  },
+  swipeHandle: {
+    width: 40,
+    height: 4,
+    backgroundColor: COLORS.GRAY,
+    borderRadius: 2
   },
   header: {
     flexDirection: 'row',

@@ -55,7 +55,9 @@ export default function App() {
                 name="AllPhotos" 
                 component={AllPhotosScreen}
                 options={{
-                  animation: 'slide_from_right'
+                  presentation: 'modal',
+                  animation: 'slide_from_bottom',
+                  animationDuration: 300
                 }}
               />
               <Stack.Screen 

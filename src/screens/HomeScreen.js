@@ -239,20 +239,12 @@ export default function HomeScreen({ navigation }) {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>ProofPix</Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity
-            style={styles.allPhotosButton}
-            onPress={() => navigation.navigate('AllPhotos')}
-          >
-            <Text style={styles.allPhotosButtonText}>📷 All Photos</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={() => navigation.navigate('Settings')}
-          >
-            <Text style={styles.settingsButtonText}>⚙️</Text>
-          </TouchableOpacity>
-        </View>
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={() => navigation.navigate('Settings')}
+        >
+          <Text style={styles.settingsButtonText}>⚙️</Text>
+        </TouchableOpacity>
       </View>
 
       {renderRoomTabs()}
@@ -262,6 +254,14 @@ export default function HomeScreen({ navigation }) {
           {renderPhotoGrid()}
         </ScrollView>
       </View>
+
+      {/* All Photos button at bottom */}
+      <TouchableOpacity
+        style={styles.allPhotosButtonBottom}
+        onPress={() => navigation.navigate('AllPhotos')}
+      >
+        <Text style={styles.allPhotosButtonText}>📷 All Photos</Text>
+      </TouchableOpacity>
     </SafeAreaView>
   );
 }
@@ -283,21 +283,23 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.TEXT
   },
-  headerButtons: {
-    flexDirection: 'row',
-    gap: 8,
-    alignItems: 'center'
-  },
-  allPhotosButton: {
+  allPhotosButtonBottom: {
     backgroundColor: COLORS.PRIMARY,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8
+    marginHorizontal: 20,
+    marginBottom: 20,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5
   },
   allPhotosButtonText: {
     color: COLORS.TEXT,
-    fontWeight: '600',
-    fontSize: 12
+    fontWeight: 'bold',
+    fontSize: 16
   },
   settingsButton: {
     width: 40,

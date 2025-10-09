@@ -4,6 +4,7 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   Image,
   Alert,
   Dimensions,
@@ -37,17 +38,36 @@ export default function CameraScreen({ route, navigation }) {
   const [showCarousel, setShowCarousel] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
   const [fullScreenIndex, setFullScreenIndex] = useState(0);
+  const [showGallery, setShowGallery] = useState(false);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const [showEnlargedGallery, setShowEnlargedGallery] = useState(false);
+  const [enlargedGalleryIndex, setEnlargedGalleryIndex] = useState(0);
+  const [enlargedGalleryPhoto, setEnlargedGalleryPhoto] = useState(null);
+  const [cameraViewMode, setCameraViewMode] = useState('portrait'); // 'portrait' or 'landscape'
   const [deviceOrientation, setDeviceOrientation] = useState('portrait');
+  const [isGalleryAnimating, setIsGalleryAnimating] = useState(false);
+  const longPressGalleryTimer = useRef(null);
+  const enlargedGalleryScrollRef = useRef(null);
+  const tapStartTime = useRef(null);
   const [dimensions, setDimensions] = useState({ width: initialWidth, height: initialHeight });
   const lastTap = useRef(null);
   const longPressTimer = useRef(null);
   const cameraRef = useRef(null);
   const carouselScrollRef = useRef(null);
   const fullScreenScrollRef = useRef(null);
+  const galleryScrollRef = useRef(null);
   const carouselTranslateY = useRef(new Animated.Value(0)).current;
+  const enlargedGalleryTranslateY = useRef(new Animated.Value(0)).current;
+  const cameraScale = useRef(new Animated.Value(1)).current;
+  const cameraTranslateY = useRef(new Animated.Value(0)).current;
+  const galleryOpacity = useRef(new Animated.Value(0)).current;
   const currentRoomRef = useRef(room);
   const dimensionsRef = useRef(dimensions);
   const showCarouselRef = useRef(showCarousel);
+  const showGalleryRef = useRef(showGallery);
+  const showEnlargedGalleryRef = useRef(showEnlargedGallery);
+  const enlargedGalleryPhotoRef = useRef(enlargedGalleryPhoto);
+  const isGalleryAnimatingRef = useRef(false);
   const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto } = usePhotos();
   const { cameraMode } = useSettings();
 
@@ -76,6 +96,57 @@ export default function CameraScreen({ route, navigation }) {
   useEffect(() => {
     showCarouselRef.current = showCarousel;
   }, [showCarousel]);
+
+  // Update showGallery ref when showGallery changes
+  useEffect(() => {
+    showGalleryRef.current = showGallery;
+  }, [showGallery]);
+
+  // Update showEnlargedGallery ref when it changes
+  useEffect(() => {
+    showEnlargedGalleryRef.current = showEnlargedGallery;
+  }, [showEnlargedGallery]);
+
+  // Update enlargedGalleryPhoto ref when it changes
+  useEffect(() => {
+    enlargedGalleryPhotoRef.current = enlargedGalleryPhoto;
+  }, [enlargedGalleryPhoto]);
+
+  // Set gallery index when opening gallery or changing selection
+  useEffect(() => {
+    if (showGallery) {
+      const photos = mode === 'before' ? getBeforePhotos(room) : getUnpairedBeforePhotos(room);
+      
+      if (mode === 'after' && selectedBeforePhoto) {
+        const index = photos.findIndex(p => p.id === selectedBeforePhoto.id);
+        if (index !== -1) {
+          setGalleryIndex(index);
+          // Scroll to the selected photo
+          setTimeout(() => {
+            if (galleryScrollRef.current) {
+              galleryScrollRef.current.scrollTo({ x: index * 112, animated: false });
+            }
+          }, 50);
+        }
+      } else {
+        setGalleryIndex(0);
+      }
+    }
+  }, [showGallery, mode, room]);
+
+  // Scroll enlarged gallery to correct position when opening
+  useEffect(() => {
+    if (showEnlargedGallery && enlargedGalleryScrollRef.current) {
+      setTimeout(() => {
+        if (enlargedGalleryScrollRef.current) {
+          enlargedGalleryScrollRef.current.scrollTo({ 
+            x: enlargedGalleryIndex * dimensions.width, 
+            animated: false 
+          });
+        }
+      }, 50);
+    }
+  }, [showEnlargedGallery]);
 
 
   // Handle double tap
@@ -260,21 +331,25 @@ export default function CameraScreen({ route, navigation }) {
   const combinedPanResponder = useRef(
     PanResponder.create({
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        // Don't capture gestures if carousel is open
+        // Don't capture gestures if carousel or gallery is open
         if (showCarouselRef.current) {
           console.log('Combined: Carousel is open - ignoring gesture');
           return false;
         }
+        if (showGalleryRef.current) {
+          console.log('Combined: Gallery is open - ignoring gesture');
+          return false;
+        }
         
         const { dx, dy } = gestureState;
-        // Vertical swipe down for closing
+        // Vertical swipe down for closing camera
         if (Math.abs(dy) > Math.abs(dx) && dy > 10) {
-          console.log('Combined: Vertical swipe DOWN detected');
+          console.log('Combined: Vertical swipe DOWN detected (will close camera)');
           return true;
         }
         // Horizontal swipe for room switching
         if (Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 30) {
-          console.log('Combined: Horizontal swipe detected');
+          console.log('Combined: Horizontal swipe detected (will switch room)');
           return true;
         }
         return false;
@@ -332,6 +407,315 @@ export default function CameraScreen({ route, navigation }) {
     })
   ).current;
 
+  // Unified PanResponder for camera view (handles swipe up/down based on gallery state)
+  const cameraViewPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Don't activate if carousel, fullscreen, enlarged gallery/photo is open, or gallery is animating
+        if (showCarouselRef.current || isFullScreen || isGalleryAnimatingRef.current || enlargedGalleryPhotoRef.current || showEnlargedGalleryRef.current) {
+          console.log('Camera gesture blocked:', { 
+            carousel: showCarouselRef.current, 
+            fullscreen: isFullScreen,
+            animating: isGalleryAnimatingRef.current,
+            enlarged: enlargedGalleryPhotoRef.current !== null,
+            enlargedGallery: showEnlargedGalleryRef.current
+          });
+          return false;
+        }
+        
+        const { dx, dy } = gestureState;
+        
+        // If gallery is shown, only respond to swipe down
+        if (showGalleryRef.current) {
+          const isSwipeDown = Math.abs(dy) > Math.abs(dx) && dy > 2;
+          console.log('Camera with gallery - swipe down check:', { dy, dx, isSwipeDown });
+          return isSwipeDown;
+        }
+        
+        // If gallery is NOT shown, respond to swipe up, swipe down, or horizontal swipes (reduced threshold)
+        const isVerticalSwipe = Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10;
+        const isHorizontalSwipe = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10;
+        
+        console.log('Camera without gallery - gesture check:', { dy, dx, vertical: isVerticalSwipe, horizontal: isHorizontalSwipe });
+        return isVerticalSwipe || isHorizontalSwipe;
+      },
+      onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
+        // Don't activate if carousel, fullscreen, enlarged gallery/photo is open, or gallery is animating
+        if (showCarouselRef.current || isFullScreen || isGalleryAnimatingRef.current || enlargedGalleryPhotoRef.current || showEnlargedGalleryRef.current) {
+          return false;
+        }
+        
+        const { dx, dy } = gestureState;
+        
+        // Capture vertical or horizontal swipes early
+        if (showGalleryRef.current) {
+          const shouldCapture = Math.abs(dy) > Math.abs(dx) && dy > 2;
+          console.log('Capture check with gallery:', { dy, dx, shouldCapture });
+          return shouldCapture;
+        }
+        
+        return (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) || 
+               (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10);
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const { dx, dy } = gestureState;
+        
+        // If gallery is shown, swipe down closes it
+        if (showGalleryRef.current && dy > 30) {
+          console.log('Swipe down with gallery - closing gallery. Current state:', { 
+            gallery: showGalleryRef.current, 
+            cameraViewMode,
+            deviceOrientation 
+          });
+          
+          // Set animating flag to block new gestures
+          isGalleryAnimatingRef.current = true;
+          setIsGalleryAnimating(true);
+          
+          // Update state immediately before animation
+          setShowGallery(false);
+          
+          console.log('Gallery closing - animating to scale: 1, translateY: 0');
+          
+          Animated.parallel([
+            Animated.spring(cameraScale, {
+              toValue: 1,
+              useNativeDriver: true,
+              tension: 50,
+              friction: 10
+            }),
+            Animated.spring(cameraTranslateY, {
+              toValue: 0,
+              useNativeDriver: true,
+              tension: 50,
+              friction: 10
+            }),
+            Animated.timing(galleryOpacity, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true
+            })
+          ]).start(() => {
+            console.log('Gallery animation complete. Resetting values explicitly.');
+            // Explicitly reset values to ensure they're at default
+            cameraScale.setValue(1);
+            cameraTranslateY.setValue(0);
+            galleryOpacity.setValue(0);
+            
+            // Add small delay before allowing next gesture
+            setTimeout(() => {
+              isGalleryAnimatingRef.current = false;
+              setIsGalleryAnimating(false);
+              console.log('Gallery animation flag cleared - ready for next gesture');
+            }, 100);
+          });
+          return;
+        }
+        
+        // If gallery is NOT shown, handle all gestures
+        if (!showGalleryRef.current) {
+          // Check for vertical swipe
+          if (Math.abs(dy) > Math.abs(dx)) {
+            // Swipe down - close camera
+            if (dy > 100) {
+              console.log('Swipe down without gallery - closing camera');
+              navigation.goBack();
+              return;
+            }
+            // Swipe up - show gallery
+            if (dy < -100) {
+              console.log('Swipe up - showing gallery');
+              
+              // Set animating flag
+              isGalleryAnimatingRef.current = true;
+              setIsGalleryAnimating(true);
+              setShowGallery(true);
+              
+              const galleryHeight = dimensions.height * 0.4;
+              const cameraHeight = dimensions.height - galleryHeight;
+              const scale = cameraHeight / dimensions.height;
+              const translateY = -galleryHeight / 2;
+              
+              console.log('Gallery opening - scale:', scale, 'translateY:', translateY, 'galleryHeight:', galleryHeight);
+              
+              Animated.parallel([
+                Animated.spring(cameraScale, {
+                  toValue: scale,
+                  useNativeDriver: true,
+                  tension: 50,
+                  friction: 10
+                }),
+                Animated.spring(cameraTranslateY, {
+                  toValue: translateY,
+                  useNativeDriver: true,
+                  tension: 50,
+                  friction: 10
+                }),
+                Animated.timing(galleryOpacity, {
+                  toValue: 1,
+                  duration: 300,
+                  useNativeDriver: true
+                })
+              ]).start(() => {
+                console.log('Gallery open animation complete');
+                setTimeout(() => {
+                  isGalleryAnimatingRef.current = false;
+                  setIsGalleryAnimating(false);
+                  console.log('Gallery open animation flag cleared');
+                }, 100);
+              });
+              return;
+            }
+          }
+          
+          // Check for horizontal swipe (room switching)
+          if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+            console.log('Horizontal swipe - switching room');
+            const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
+            
+            if (dx > 0) {
+              // Swipe right - previous room
+              const newIndex = currentIndex > 0 ? currentIndex - 1 : ROOMS.length - 1;
+              const newRoom = ROOMS[newIndex].id;
+              setRoom(newRoom);
+              if (mode === 'after') {
+                const beforePhotos = getBeforePhotos(newRoom);
+                if (beforePhotos.length > 0) {
+                  setSelectedBeforePhoto(beforePhotos[0]);
+                } else {
+                  setSelectedBeforePhoto(null);
+                  Alert.alert(
+                    'No Before Photos',
+                    `There are no before photos in ${ROOMS[newIndex].name}. Please take a before photo first.`,
+                    [{ text: 'OK' }]
+                  );
+                }
+              } else {
+                setSelectedBeforePhoto(null);
+              }
+            } else {
+              // Swipe left - next room
+              const newIndex = currentIndex < ROOMS.length - 1 ? currentIndex + 1 : 0;
+              const newRoom = ROOMS[newIndex].id;
+              setRoom(newRoom);
+              if (mode === 'after') {
+                const beforePhotos = getBeforePhotos(newRoom);
+                if (beforePhotos.length > 0) {
+                  setSelectedBeforePhoto(beforePhotos[0]);
+                } else {
+                  setSelectedBeforePhoto(null);
+                  Alert.alert(
+                    'No Before Photos',
+                    `There are no before photos in ${ROOMS[newIndex].name}. Please take a before photo first.`,
+                    [{ text: 'OK' }]
+                  );
+                }
+              } else {
+                setSelectedBeforePhoto(null);
+              }
+            }
+          }
+        }
+      },
+      onPanResponderTerminationRequest: () => false
+    })
+  ).current;
+
+  // PanResponder for swipe down on enlarged gallery carousel
+  const enlargedGalleryPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const { dy } = gestureState;
+        return showEnlargedGalleryRef.current && dy > 10;
+      },
+      onPanResponderMove: (evt, gestureState) => {
+        if (gestureState.dy > 0) {
+          enlargedGalleryTranslateY.setValue(gestureState.dy);
+        }
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const { dy } = gestureState;
+        const threshold = 100;
+        
+        if (dy > threshold) {
+          console.log('Enlarged gallery swipe down - closing');
+          Animated.timing(enlargedGalleryTranslateY, {
+            toValue: dimensions.height,
+            duration: 300,
+            useNativeDriver: true
+          }).start(() => {
+            setShowEnlargedGallery(false);
+            enlargedGalleryTranslateY.setValue(0);
+          });
+        } else {
+          Animated.spring(enlargedGalleryTranslateY, {
+            toValue: 0,
+            useNativeDriver: true
+          }).start();
+        }
+      }
+    })
+  ).current;
+
+  // PanResponder for swipe down to hide gallery (only closes gallery, doesn't close camera)
+  const gallerySwipeDownPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => {
+        const shouldSet = showGalleryRef.current;
+        console.log('Gallery swipe down - start should set:', shouldSet);
+        return shouldSet;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Only activate if gallery is shown and swiping down
+        if (!showGalleryRef.current) {
+          console.log('Gallery swipe down: Gallery not shown');
+          return false;
+        }
+        
+        const { dy } = gestureState;
+        const isSwipeDown = dy > 10;
+        
+        console.log('Gallery swipe down check:', { dy, isSwipeDown, gallery: showGalleryRef.current });
+        return isSwipeDown;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const { dy } = gestureState;
+        const threshold = 50; // Swipe down at least 50px
+        
+        console.log('Gallery swipe down release:', { dy, threshold, gallery: showGalleryRef.current });
+        
+        if (dy > threshold && showGalleryRef.current) {
+          console.log('Swipe-down detected - hiding gallery (returning to full camera)');
+          
+          Animated.parallel([
+            Animated.spring(cameraScale, {
+              toValue: 1,
+              useNativeDriver: true,
+              tension: 50,
+              friction: 10
+            }),
+            Animated.spring(cameraTranslateY, {
+              toValue: 0,
+              useNativeDriver: true,
+              tension: 50,
+              friction: 10
+            }),
+            Animated.timing(galleryOpacity, {
+              toValue: 0,
+              duration: 200,
+              useNativeDriver: true
+            })
+          ]).start(() => {
+            setShowGallery(false);
+          });
+        }
+      }
+    })
+  ).current;
+
   // Detect screen rotation and update dimensions
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
@@ -370,19 +754,36 @@ export default function CameraScreen({ route, navigation }) {
     }
   }, [mode, room]);
 
-  // Set aspect ratio to match before photo in after mode (for both overlay and split modes)
+  // Set aspect ratio to match before photo in after mode
   useEffect(() => {
     if (mode === 'after') {
       const activeBeforePhoto = getActiveBeforePhoto();
       if (activeBeforePhoto) {
         if (activeBeforePhoto.aspectRatio) {
-        setAspectRatio(activeBeforePhoto.aspectRatio);
-      }
-        // Note: We don't force device orientation, but we use the saved orientation for thumbnails
-        // The user can physically rotate their device as needed
+          setAspectRatio(activeBeforePhoto.aspectRatio);
+        }
       }
     }
   }, [selectedBeforePhoto, mode, beforePhoto]);
+
+  // In after mode, camera view mode follows device orientation (no toggle available)
+  useEffect(() => {
+    if (mode === 'after') {
+      setCameraViewMode(deviceOrientation);
+    }
+  }, [mode, deviceOrientation]);
+
+  // Log when selectedBeforePhoto changes in after mode
+  useEffect(() => {
+    if (mode === 'after' && selectedBeforePhoto) {
+      console.log('📸 Selected before photo changed:', {
+        name: selectedBeforePhoto.name,
+        orientation: selectedBeforePhoto.orientation,
+        deviceOrientation,
+        willShowWarning: selectedBeforePhoto.orientation !== deviceOrientation
+      });
+    }
+  }, [selectedBeforePhoto, mode, deviceOrientation]);
 
   // Ensure carousel starts at correct position
   useEffect(() => {
@@ -421,7 +822,7 @@ export default function CameraScreen({ route, navigation }) {
       const beforeOrientation = getActiveBeforePhoto()?.orientation || 'portrait';
       Alert.alert(
         'Wrong Orientation',
-        `Please rotate your phone to ${beforeOrientation} mode to match the before photo.`,
+        `The before photo was taken in ${beforeOrientation} mode. Please rotate your phone to ${beforeOrientation} orientation to match.`,
         [{ text: 'OK' }]
       );
       return;
@@ -457,9 +858,9 @@ export default function CameraScreen({ route, navigation }) {
       // Save to device
       const savedUri = await savePhotoToDevice(uri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`);
 
-      // Capture current orientation at the moment of taking the photo
+      // Capture device orientation (actual phone orientation)
       const currentOrientation = deviceOrientation;
-      console.log('Saving before photo with orientation:', currentOrientation);
+      console.log('Saving before photo with orientation:', currentOrientation, 'Device:', deviceOrientation, 'Camera view mode:', cameraViewMode);
 
       // Add to photos with device orientation
       const newPhoto = {
@@ -469,7 +870,7 @@ export default function CameraScreen({ route, navigation }) {
         mode: PHOTO_MODES.BEFORE,
         name: photoName,
         timestamp: Date.now(),
-        aspectRatio,
+        aspectRatio: cameraViewMode === 'landscape' ? '4:3' : '2:3',
         orientation: currentOrientation
       };
 
@@ -822,14 +1223,21 @@ export default function CameraScreen({ route, navigation }) {
     if (mode !== 'after') return false;
     
     const activeBeforePhoto = getActiveBeforePhoto();
-    if (!activeBeforePhoto) return false;
+    if (!activeBeforePhoto) {
+      console.log('🔍 No active before photo for orientation check');
+      return false;
+    }
     
     const beforeOrientation = activeBeforePhoto.orientation || 'portrait';
+    // In after mode, device orientation must match before photo orientation
     const mismatch = beforeOrientation !== deviceOrientation;
     
-    if (mismatch) {
-      console.log('⚠️ Orientation mismatch! Before:', beforeOrientation, 'Current:', deviceOrientation);
-    }
+    console.log('🔍 Orientation check:', {
+      photoName: activeBeforePhoto.name,
+      beforeOrientation,
+      deviceOrientation,
+      mismatch
+    });
     
     return mismatch;
   };
@@ -838,92 +1246,151 @@ export default function CameraScreen({ route, navigation }) {
   const renderOverlayMode = () => (
     <View 
       style={styles.container}
-      {...combinedPanResponder.panHandlers}
     >
-      {/* Swipe indicator */}
-      <View style={styles.swipeIndicator}>
-        <View style={styles.swipeHandle} />
-      </View>
-
-      {/* Room name indicator with mode */}
-      <View style={styles.roomIndicator}>
-        <Text style={styles.roomIndicatorIcon}>{getCurrentRoomInfo().icon}</Text>
-        <View style={styles.roomIndicatorTextContainer}>
-          <Text style={styles.roomIndicatorText}>{getCurrentRoomInfo().name}</Text>
-          <Text style={styles.roomIndicatorMode}>{mode.toUpperCase()}</Text>
+      {/* Animated camera view 
+          Gesture handling:
+          - When gallery is shown: swipe down closes gallery (returns to full camera)
+          - When gallery is NOT shown: swipe down closes camera (navigates to main), swipe up shows gallery, horizontal swipes switch rooms
+      */}
+      <Animated.View
+        style={[
+          styles.cameraWrapper,
+          {
+            transform: [
+              { scaleX: cameraScale },
+              { scaleY: cameraScale },
+              { translateY: cameraTranslateY }
+            ]
+          }
+        ]}
+        {...cameraViewPanResponder.panHandlers}
+      >
+        {/* Swipe indicator */}
+        <View style={styles.swipeIndicator}>
+          <View style={styles.swipeHandle} />
         </View>
-      </View>
 
-      {/* Orientation mismatch warning */}
-      {isOrientationMismatch() && (
-        <View style={styles.orientationWarning}>
-          <Text style={styles.rotatePhoneIcon}>🔄</Text>
-          <Text style={styles.orientationWarningText}>Rotate Phone!</Text>
-          <Text style={styles.orientationWarningHint}>
-            Before photo was taken in {getActiveBeforePhoto()?.orientation || 'portrait'} mode
-          </Text>
+        {/* Room name indicator with mode */}
+        <View style={styles.roomIndicator}>
+          <Text style={styles.roomIndicatorIcon}>{getCurrentRoomInfo().icon}</Text>
+          <View style={styles.roomIndicatorTextContainer}>
+            <Text style={styles.roomIndicatorText}>{getCurrentRoomInfo().name}</Text>
+            <Text style={styles.roomIndicatorMode}>{mode.toUpperCase()}</Text>
+          </View>
         </View>
-      )}
 
-      {/* Camera preview with before photo overlay (for after mode) */}
-      <View style={styles.cameraContainer}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing={facing}
-        />
-        {/* Before photo overlay (for after mode) */}
-        {mode === 'after' && getActiveBeforePhoto() && (
-          <View style={styles.beforePhotoOverlay}>
-            <Image
-              source={{ uri: getActiveBeforePhoto().uri }}
-              style={styles.beforePhotoImage}
-              resizeMode="cover"
-            />
+        {/* Orientation mismatch warning */}
+        {(() => {
+          const mismatch = isOrientationMismatch();
+          console.log('⚠️ Rendering warning check:', { mismatch, showEnlargedGallery, mode });
+          return mismatch;
+        })() && (
+          <View style={styles.orientationWarning}>
+            <Text style={styles.rotatePhoneIcon}>🔄</Text>
+            <Text style={styles.orientationWarningText}>Rotate Phone!</Text>
+            <Text style={styles.orientationWarningHint}>
+              Before photo was taken in {getActiveBeforePhoto()?.orientation || 'portrait'} mode. 
+              Please rotate your device.
+            </Text>
           </View>
         )}
-      </View>
 
-      {/* Controls */}
-      <View style={styles.controls}>
+        {/* Camera preview with before photo overlay (for after mode) */}
+        <View style={styles.cameraContainer}>
+          {/* Letterbox container for landscape mode */}
+          {(() => {
+            const showLetterbox = cameraViewMode === 'landscape' && deviceOrientation === 'portrait';
+            console.log('Camera render - Letterbox check:', { cameraViewMode, deviceOrientation, showLetterbox });
+            return showLetterbox;
+          })() ? (
+            <View style={styles.letterboxContainer}>
+              {/* Top bar */}
+              <View style={styles.letterboxBar} />
+              
+              {/* Camera in landscape aspect ratio */}
+              <View style={styles.letterboxCamera}>
+                <CameraView
+                  ref={cameraRef}
+                  style={styles.camera}
+                  facing={facing}
+                />
+                {/* Before photo overlay (for after mode) */}
+                {mode === 'after' && getActiveBeforePhoto() && (
+                  <View style={styles.beforePhotoOverlay}>
+                    <Image
+                      source={{ uri: getActiveBeforePhoto().uri }}
+                      style={styles.beforePhotoImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                )}
+              </View>
+              
+              {/* Bottom bar */}
+              <View style={styles.letterboxBar} />
+            </View>
+          ) : (
+            <>
+              <CameraView
+                ref={cameraRef}
+                style={styles.camera}
+                facing={facing}
+              />
+              {/* Before photo overlay (for after mode) */}
+              {mode === 'after' && getActiveBeforePhoto() && (
+                <View style={styles.beforePhotoOverlay}>
+                  <Image
+                    source={{ uri: getActiveBeforePhoto().uri }}
+                    style={styles.beforePhotoImage}
+                    resizeMode="cover"
+                  />
+                </View>
+              )}
+            </>
+          )}
+        </View>
+      </Animated.View>
+
+      {/* Controls - fixed at bottom, outside camera wrapper */}
+      <View style={styles.controls} pointerEvents="box-none">
         <View style={styles.bottomControls}>
           {/* Main control row */}
           <View style={styles.mainControlRow}>
-            {/* Thumbnail viewer - left side */}
-            {(() => {
-                const activePhoto = getActiveBeforePhoto();
+            {/* Left side thumbnail - only show when gallery is NOT open */}
+            {!showGallery && !showEnlargedGallery && (() => {
+              const activePhoto = getActiveBeforePhoto();
+              
+              if (activePhoto) {
+                const photoOrientation = activePhoto.orientation || 'portrait';
+                console.log('Thumbnail - Photo orientation:', photoOrientation, 'Photo:', activePhoto.name, 'Room:', room);
+                return (
+                  <TouchableOpacity
+                    style={[
+                      styles.thumbnailViewerContainer,
+                      photoOrientation === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
+                    ]}
+                    activeOpacity={1}
+                    onPress={handleDoubleTap}
+                    onPressIn={handleThumbnailPressIn}
+                    onPressOut={handleThumbnailPressOut}
+                  >
+                    <Image
+                      source={{ uri: activePhoto.uri }}
+                      style={styles.thumbnailViewerImage}
+                      resizeMode="cover"
+                    />
+                    <Text style={styles.thumbnailViewerLabel}>👁</Text>
+                  </TouchableOpacity>
+                );
+              } else {
+                // Show empty placeholder matching current camera view mode
+                return (
+                  <View style={[styles.thumbnailViewerContainer, cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait]} />
+                );
+              }
+            })()}
 
-                if (activePhoto) {
-                  const photoOrientation = activePhoto.orientation || 'portrait';
-                  console.log('Thumbnail - Photo orientation:', photoOrientation, 'Photo:', activePhoto.name, 'Room:', room);
-                  return (
-                    <TouchableOpacity
-                      style={[
-                        styles.thumbnailViewerContainer,
-                        photoOrientation === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
-                      ]}
-                      activeOpacity={1}
-                      onPress={handleDoubleTap}
-                      onPressIn={handleThumbnailPressIn}
-                      onPressOut={handleThumbnailPressOut}
-                    >
-                      <Image
-                        source={{ uri: activePhoto.uri }}
-                        style={styles.thumbnailViewerImage}
-                        resizeMode="cover"
-                      />
-                      <Text style={styles.thumbnailViewerLabel}>👁</Text>
-                    </TouchableOpacity>
-                  );
-                } else {
-                  // Show empty placeholder
-                  return (
-                    <View style={[styles.thumbnailViewerContainer, deviceOrientation === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait]} />
-                  );
-                }
-              })()}
-
-            {/* Capture button - center (no absolute positioning needed, centered by parent) */}
+            {/* Capture button - center */}
             <TouchableOpacity 
               style={[styles.captureButton, isOrientationMismatch() && styles.captureButtonDisabled]} 
               onPress={takePicture}
@@ -935,20 +1402,270 @@ export default function CameraScreen({ route, navigation }) {
               )}
             </TouchableOpacity>
 
-            {/* Save button - right side (absolute positioned) */}
-            <TouchableOpacity
-              style={styles.saveButton}
-              onPress={() => {
-                console.log('Save button pressed - going back');
-                navigation.goBack();
-              }}
-            >
-              <Text style={styles.saveButtonText}>💾</Text>
-              <Text style={styles.saveButtonLabel}>Save</Text>
-            </TouchableOpacity>
+            {/* Right side button */}
+            {mode === 'before' ? (
+              /* Camera orientation toggle - only in before mode */
+              <TouchableOpacity
+                style={[
+                  styles.orientationToggle,
+                  cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
+                ]}
+                onPress={() => {
+                  const newMode = cameraViewMode === 'portrait' ? 'landscape' : 'portrait';
+                  console.log('Toggling camera view mode:', newMode);
+                  setCameraViewMode(newMode);
+                }}
+              >
+                <View style={styles.orientationToggleIcon}>
+                  <Text style={styles.orientationToggleText}>
+                    {cameraViewMode === 'portrait' ? '📐' : '📱'}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ) : (
+              /* Save button - in after mode */
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={() => {
+                  console.log('Save button pressed - going back');
+                  navigation.goBack();
+                }}
+              >
+                <Text style={styles.saveButtonText}>💾</Text>
+                <Text style={styles.saveButtonLabel}>Save</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
+
+      {/* Gallery at bottom - shown when swiping up */}
+      {showGallery && (
+        <Animated.View 
+          style={[
+            styles.bottomGallery,
+            {
+              opacity: galleryOpacity,
+              height: dimensions.height * 0.4
+            }
+          ]}
+        >
+          <Text style={styles.galleryTitle}>
+            {mode === 'before' ? `${getCurrentRoomInfo().name} Photos` : 'Before Photos'}
+          </Text>
+          {(() => {
+            const photos = mode === 'before' ? getBeforePhotos(room) : getUnpairedBeforePhotos(room);
+            
+            if (photos.length === 0) {
+              return (
+                <View style={styles.galleryEmpty}>
+                  <Text style={styles.galleryEmptyText}>
+                    {mode === 'before' ? 'No photos yet' : 'All photos paired'}
+                  </Text>
+                </View>
+              );
+            }
+            
+            return (
+              <ScrollView
+                ref={galleryScrollRef}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                snapToInterval={112} // Gallery item width (100) + gap (12)
+                decelerationRate="fast"
+                snapToAlignment="center"
+                contentOffset={{ x: galleryIndex * 112, y: 0 }}
+                onMomentumScrollEnd={(event) => {
+                  const offsetX = event.nativeEvent.contentOffset.x;
+                  const index = Math.round(offsetX / 112);
+                  console.log('Gallery scrolled to index:', index, 'Photo:', photos[index]?.name);
+                  setGalleryIndex(index);
+                  
+                  // In after mode, auto-select the visible photo
+                  if (mode === 'after' && photos[index]) {
+                    setSelectedBeforePhoto(photos[index]);
+                  }
+                }}
+                contentContainerStyle={styles.galleryContent}
+              >
+                {photos.map((photo, index) => (
+                <View
+                  key={photo.id}
+                  style={[
+                    styles.galleryItem,
+                    mode === 'after' && selectedBeforePhoto?.id === photo.id && styles.galleryItemSelected
+                  ]}
+                >
+                  <TouchableWithoutFeedback
+                    onPressIn={() => {
+                      // Track tap start time
+                      tapStartTime.current = Date.now();
+                      
+                      // Start long press timer for full-screen
+                      longPressGalleryTimer.current = setTimeout(() => {
+                        console.log('Half-screen gallery - long press, showing full screen:', photo.name);
+                        setEnlargedGalleryPhoto(photo);
+                      }, 300);
+                    }}
+                    onPressOut={() => {
+                      const pressDuration = Date.now() - (tapStartTime.current || 0);
+                      
+                      // Cancel long press timer
+                      if (longPressGalleryTimer.current) {
+                        clearTimeout(longPressGalleryTimer.current);
+                        longPressGalleryTimer.current = null;
+                      }
+                      
+                      // If full-screen photo is showing, close it
+                      if (enlargedGalleryPhoto) {
+                        console.log('Half-screen gallery - releasing full screen');
+                        setEnlargedGalleryPhoto(null);
+                      }
+                      // If it was a quick tap (< 300ms), open enlarged carousel
+                      else if (pressDuration < 300) {
+                        console.log('Half-screen gallery - quick tap, opening enlarged carousel:', photo.name);
+                        setEnlargedGalleryIndex(index);
+                        setShowEnlargedGallery(true);
+                        
+                        // In after mode, immediately select the tapped photo
+                        if (mode === 'after') {
+                          console.log('After mode - selecting photo immediately:', photo.name);
+                          setSelectedBeforePhoto(photo);
+                        }
+                      }
+                      
+                      tapStartTime.current = null;
+                    }}
+                  >
+                    <View>
+                      <Image
+                        source={{ uri: photo.uri }}
+                        style={styles.galleryImage}
+                        resizeMode="cover"
+                      />
+                      <Text style={styles.galleryItemName} numberOfLines={1}>
+                        {photo.name}
+                      </Text>
+                    </View>
+                  </TouchableWithoutFeedback>
+                </View>
+              ))}
+              </ScrollView>
+            );
+          })()}
+        </Animated.View>
+      )}
+
+      {/* Enlarged gallery carousel - shown when tapping a gallery item */}
+      {showEnlargedGallery && (() => {
+        const photos = mode === 'before' ? getBeforePhotos(room) : getUnpairedBeforePhotos(room);
+        
+        return (
+          <Animated.View 
+            style={[
+              styles.enlargedGalleryContainer,
+              {
+                height: dimensions.height * 0.4,
+                transform: [{ translateY: enlargedGalleryTranslateY }]
+              }
+            ]}
+            {...enlargedGalleryPanResponder.panHandlers}
+          >
+            <TouchableOpacity
+              style={styles.enlargedGalleryCloseButton}
+              onPress={() => {
+                console.log('Closing enlarged gallery');
+                setShowEnlargedGallery(false);
+              }}
+            >
+              <Text style={styles.enlargedGalleryCloseText}>✕</Text>
+            </TouchableOpacity>
+            <ScrollView
+              ref={enlargedGalleryScrollRef}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={{ flex: 1 }}
+              contentOffset={{ x: enlargedGalleryIndex * dimensions.width, y: 0 }}
+              onMomentumScrollEnd={(event) => {
+                const offsetX = event.nativeEvent.contentOffset.x;
+                const index = Math.round(offsetX / dimensions.width);
+                console.log('📸 Enlarged gallery scrolled to index:', index, 'Photo:', photos[index]?.name);
+                setEnlargedGalleryIndex(index);
+                
+                // In after mode, auto-select the visible photo
+                if (mode === 'after' && photos[index]) {
+                  console.log('📸 Auto-selecting photo from scroll:', {
+                    name: photos[index].name,
+                    orientation: photos[index].orientation,
+                    deviceOrientation
+                  });
+                  setSelectedBeforePhoto(photos[index]);
+                }
+              }}
+            >
+              {photos.map((photo, index) => (
+                <TouchableWithoutFeedback
+                  key={photo.id}
+                  onPressIn={() => {
+                    // Track when the press started
+                    tapStartTime.current = Date.now();
+                    
+                    // Start long press timer for full-screen
+                    longPressGalleryTimer.current = setTimeout(() => {
+                      console.log('Long press - showing full screen:', photo.name);
+                      setEnlargedGalleryPhoto(photo);
+                    }, 300);
+                  }}
+                  onPressOut={() => {
+                    const pressDuration = Date.now() - (tapStartTime.current || 0);
+                    
+                    // Cancel long press timer if released early
+                    if (longPressGalleryTimer.current) {
+                      clearTimeout(longPressGalleryTimer.current);
+                      longPressGalleryTimer.current = null;
+                    }
+                    
+                    // If full-screen photo is showing, close it on release
+                    if (enlargedGalleryPhoto) {
+                      console.log('Released - closing full screen');
+                      setEnlargedGalleryPhoto(null);
+                    } 
+                    // If it was a quick tap (< 300ms) and in after mode, select the photo
+                    else if (pressDuration < 300 && mode === 'after') {
+                      console.log('Quick tap - selecting photo:', photo.name);
+                      setSelectedBeforePhoto(photo);
+                      setEnlargedGalleryIndex(index);
+                    }
+                    
+                    tapStartTime.current = null;
+                  }}
+                >
+                  <View style={[styles.enlargedGallerySlide, { width: dimensions.width }]}>
+                    <Image
+                      source={{ uri: photo.uri }}
+                      style={styles.enlargedGalleryImage}
+                      resizeMode="contain"
+                    />
+                  </View>
+                </TouchableWithoutFeedback>
+              ))}
+            </ScrollView>
+          </Animated.View>
+        );
+      })()}
+
+      {/* Full-screen photo - shown when long-pressing in enlarged gallery */}
+      {enlargedGalleryPhoto && (
+        <View style={styles.fullScreenPhotoContainer}>
+          <Image
+            source={{ uri: enlargedGalleryPhoto.uri }}
+            style={styles.fullScreenPhotoImage}
+            resizeMode="contain"
+          />
+          <Text style={styles.fullScreenPhotoName}>{enlargedGalleryPhoto.name}</Text>
+        </View>
+      )}
 
       {/* Close button - rendered outside controls for proper layering */}
       <TouchableOpacity
@@ -1112,9 +1829,10 @@ export default function CameraScreen({ route, navigation }) {
           {isOrientationMismatch() && (
             <View style={styles.orientationWarning}>
               <Text style={styles.rotatePhoneIcon}>🔄</Text>
-              <Text style={styles.orientationWarningText}>Rotate Phone!</Text>
+              <Text style={styles.orientationWarningText}>Wrong Orientation!</Text>
               <Text style={styles.orientationWarningHint}>
-                Before photo was taken in {(selectedBeforePhoto || beforePhoto)?.orientation || 'portrait'} mode
+                Before photo was taken in {getActiveBeforePhoto()?.orientation || 'portrait'} mode. 
+                {deviceOrientation === 'portrait' ? ' Tap the orientation button to switch.' : ' Please rotate your phone.'}
               </Text>
             </View>
           )}
@@ -1225,9 +1943,10 @@ export default function CameraScreen({ route, navigation }) {
           {isOrientationMismatch() && (
             <View style={styles.orientationWarning}>
               <Text style={styles.rotatePhoneIcon}>🔄</Text>
-              <Text style={styles.orientationWarningText}>Rotate Phone!</Text>
+              <Text style={styles.orientationWarningText}>Wrong Orientation!</Text>
               <Text style={styles.orientationWarningHint}>
-                Before photo was taken in {(selectedBeforePhoto || beforePhoto)?.orientation || 'portrait'} mode
+                Before photo was taken in {getActiveBeforePhoto()?.orientation || 'portrait'} mode. 
+                {deviceOrientation === 'portrait' ? ' Tap the orientation button to switch.' : ' Please rotate your phone.'}
               </Text>
             </View>
           )}
@@ -1343,7 +2062,8 @@ const styles = StyleSheet.create({
     padding: 24,
     borderRadius: 16,
     alignItems: 'center',
-    zIndex: 999,
+    zIndex: 1500,
+    elevation: 1500,
     borderWidth: 3,
     borderColor: '#fff',
     shadowColor: '#000',
@@ -1386,7 +2106,11 @@ const styles = StyleSheet.create({
     fontWeight: 'bold'
   },
   cameraContainer: {
-    flex: 1
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0
   },
   camera: {
     flex: 1
@@ -1411,7 +2135,9 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    justifyContent: 'flex-end'
+    justifyContent: 'flex-end',
+    zIndex: 260,
+    elevation: 260
   },
   roomIndicator: {
     position: 'absolute',
@@ -1491,7 +2217,7 @@ const styles = StyleSheet.create({
   },
   bottomControls: {
     alignItems: 'center',
-    paddingBottom: 40,
+    paddingBottom: 10,
     paddingHorizontal: 20
   },
   mainControlRow: {
@@ -1641,7 +2367,7 @@ const styles = StyleSheet.create({
     right: 2,
     fontSize: 10
   },
-  // Thumbnail viewer styles (overlay mode)
+  // Thumbnail viewer styles (overlay mode - left side of shutter button)
   thumbnailViewerContainer: {
     position: 'absolute',
     left: 10,
@@ -1930,36 +2656,6 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     textAlign: 'left'
   },
-  galleryItem: {
-    borderRadius: 8,
-    overflow: 'hidden',
-    borderWidth: 3,
-    borderColor: 'transparent',
-    marginRight: 10
-  },
-  galleryItemSelected: {
-    borderColor: COLORS.PRIMARY
-  },
-  galleryImage: {
-    width: 120,
-    height: 120,
-    backgroundColor: '#333'
-  },
-  galleryItemName: {
-    color: 'white',
-    fontSize: 11,
-    fontWeight: '600',
-    textAlign: 'center',
-    padding: 4,
-    backgroundColor: 'rgba(0,0,0,0.7)'
-  },
-  galleryEmptyText: {
-    color: COLORS.GRAY,
-    fontSize: 14,
-    fontStyle: 'italic',
-    padding: 20,
-    textAlign: 'center'
-  },
   splitBeforeImage: {
     width: '100%',
     height: '100%'
@@ -2032,5 +2728,184 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     paddingHorizontal: 20,
     backgroundColor: 'rgba(0,0,0,0.7)'
+  },
+  // Gallery swipe-up styles
+  cameraWrapper: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000'
+  },
+  bottomGallery: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#1a1a1a',
+    borderTopWidth: 2,
+    borderTopColor: COLORS.PRIMARY,
+    paddingTop: 10,
+    zIndex: 150,
+    elevation: 150
+  },
+  galleryTitle: {
+    color: COLORS.PRIMARY,
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    marginLeft: 16,
+    textAlign: 'left'
+  },
+  galleryContent: {
+    paddingHorizontal: 16,
+    gap: 12
+  },
+  galleryItem: {
+    borderRadius: 8,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: 'transparent',
+    width: 100,
+    alignSelf: 'flex-start'
+  },
+  galleryItemSelected: {
+    borderColor: COLORS.PRIMARY
+  },
+  galleryImage: {
+    width: 100,
+    height: 100,
+    backgroundColor: '#333'
+  },
+  galleryItemName: {
+    color: 'white',
+    fontSize: 11,
+    fontWeight: '600',
+    textAlign: 'center',
+    padding: 6,
+    backgroundColor: 'rgba(0,0,0,0.8)',
+    width: 100
+  },
+  galleryEmpty: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 40
+  },
+  galleryEmptyText: {
+    color: COLORS.GRAY,
+    fontSize: 14,
+    fontStyle: 'italic'
+  },
+  // Enlarged gallery carousel styles (bottom 40%)
+  enlargedGalleryContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    borderWidth: 3,
+    borderColor: COLORS.PRIMARY,
+    borderBottomWidth: 0,
+    borderLeftWidth: 0,
+    borderRightWidth: 0,
+    zIndex: 250,
+    elevation: 250
+  },
+  enlargedGalleryCloseButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 260
+  },
+  enlargedGalleryCloseText: {
+    color: COLORS.PRIMARY,
+    fontSize: 24,
+    fontWeight: 'bold'
+  },
+  enlargedGallerySlide: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  enlargedGalleryImage: {
+    width: '100%',
+    height: '100%'
+  },
+  // Full-screen photo styles (entire screen)
+  fullScreenPhotoContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 300,
+    elevation: 300
+  },
+  fullScreenPhotoImage: {
+    width: '100%',
+    height: '100%'
+  },
+  fullScreenPhotoName: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    color: COLORS.PRIMARY,
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    paddingVertical: 12,
+    paddingHorizontal: 20
+  },
+  // Orientation toggle styles (replaces save button in before mode)
+  orientationToggle: {
+    position: 'absolute',
+    right: 10,
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    transform: [{ rotate: '90deg' }],
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  orientationToggleIcon: {
+    transform: [{ rotate: '-90deg' }]
+  },
+  orientationToggleText: {
+    fontSize: 24
+  },
+  // Letterbox styles for landscape camera mode
+  letterboxContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#000'
+  },
+  letterboxBar: {
+    width: '100%',
+    backgroundColor: '#000',
+    flex: 1
+  },
+  letterboxCamera: {
+    width: '100%',
+    aspectRatio: 4 / 3, // Landscape 4:3 aspect ratio
+    position: 'relative',
+    overflow: 'hidden'
   }
 });
