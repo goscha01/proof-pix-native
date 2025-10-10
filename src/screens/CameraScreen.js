@@ -60,7 +60,9 @@ export default function CameraScreen({ route, navigation }) {
   const [tempPhotoUri, setTempPhotoUri] = useState(null);
   const [tempPhotoLabel, setTempPhotoLabel] = useState(null);
   const [tempPhotoDimensions, setTempPhotoDimensions] = useState({ width: 1080, height: 1920 });
+  const [showRoomIndicator, setShowRoomIndicator] = useState(false);
   const longPressGalleryTimer = useRef(null);
+  const roomIndicatorTimer = useRef(null);
   const enlargedGalleryScrollRef = useRef(null);
   const tapStartTime = useRef(null);
   const [dimensions, setDimensions] = useState({ width: initialWidth, height: initialHeight });
@@ -866,6 +868,36 @@ export default function CameraScreen({ route, navigation }) {
   }, [permission]);
 
   // Force orientation check on mount to ensure correct initial state
+  // Show room indicator when room changes (but not on initial mount)
+  const isInitialMount = useRef(true);
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+    
+    // Clear any existing timer
+    if (roomIndicatorTimer.current) {
+      clearTimeout(roomIndicatorTimer.current);
+    }
+    
+    // Show indicator
+    console.log('Room changed - showing indicator for:', room);
+    setShowRoomIndicator(true);
+    
+    // Hide after 500ms
+    roomIndicatorTimer.current = setTimeout(() => {
+      setShowRoomIndicator(false);
+      roomIndicatorTimer.current = null;
+    }, 500);
+    
+    return () => {
+      if (roomIndicatorTimer.current) {
+        clearTimeout(roomIndicatorTimer.current);
+      }
+    };
+  }, [room]);
+
   useEffect(() => {
     const checkOrientation = async () => {
       // Delay to ensure screen transition is complete and stable
@@ -1581,16 +1613,16 @@ export default function CameraScreen({ route, navigation }) {
                     }}
                   >
                     <View>
-                      <Image
+                <Image
                         source={{ uri: photo.uri }}
                         style={styles.galleryImage}
-                        resizeMode="cover"
-                      />
+                  resizeMode="cover"
+                />
                       <Text style={styles.galleryItemName} numberOfLines={1}>
                         {photo.name}
                       </Text>
                     </View>
-                  </TouchableOpacity>
+              </TouchableOpacity>
                 </View>
               ))}
               </ScrollView>
@@ -1613,9 +1645,10 @@ export default function CameraScreen({ route, navigation }) {
             ]}
             {...enlargedGalleryPanResponder.panHandlers}
           >
+            {/* Close button - top right */}
             <TouchableOpacity
               style={styles.enlargedGalleryCloseButton}
-        onPress={() => {
+              onPress={() => {
                 console.log('Closing enlarged gallery');
                 // Clear both states immediately
                 setEnlargedGalleryPhoto(null);
@@ -1623,6 +1656,46 @@ export default function CameraScreen({ route, navigation }) {
               }}
             >
               <Text style={styles.enlargedGalleryCloseText}>✕</Text>
+            </TouchableOpacity>
+
+            {/* Delete button - top left */}
+      <TouchableOpacity
+              style={styles.enlargedGalleryDeleteButton}
+        onPress={() => {
+                const currentPhoto = photos[enlargedGalleryIndex];
+                if (currentPhoto) {
+                  Alert.alert(
+                    'Delete Photo',
+                    `Are you sure you want to delete "${currentPhoto.name}"?`,
+                    [
+                      {
+                        text: 'Cancel',
+                        style: 'cancel'
+                      },
+                      {
+                        text: 'Delete',
+                        style: 'destructive',
+                        onPress: async () => {
+                          console.log('Deleting photo:', currentPhoto.name);
+                          await deletePhoto(currentPhoto.id);
+                          
+                          // Close enlarged gallery and refresh
+                          setEnlargedGalleryPhoto(null);
+                          setShowEnlargedGallery(false);
+                          
+                          // If no more photos, close gallery
+                          const remainingPhotos = mode === 'before' ? getBeforePhotos(room) : getUnpairedBeforePhotos(room);
+                          if (remainingPhotos.length === 0) {
+                            setShowGallery(false);
+                          }
+                        }
+                      }
+                    ]
+                  );
+                }
+              }}
+            >
+              <Text style={styles.enlargedGalleryDeleteText}>🗑️</Text>
       </TouchableOpacity>
             <ScrollView
               ref={enlargedGalleryScrollRef}
@@ -1727,6 +1800,16 @@ export default function CameraScreen({ route, navigation }) {
             resizeMode="contain"
           />
           <Text style={styles.fullScreenPhotoName}>{enlargedGalleryPhoto.name}</Text>
+        </View>
+      )}
+
+      {/* Room transition indicator - shown briefly when switching rooms */}
+      {showRoomIndicator && (
+        <View style={styles.roomTransitionIndicator}>
+          <View style={styles.roomTransitionCard}>
+            <Text style={styles.roomTransitionIcon}>{getCurrentRoomInfo().icon}</Text>
+            <Text style={styles.roomTransitionName}>{getCurrentRoomInfo().name}</Text>
+          </View>
         </View>
       )}
 
@@ -2560,6 +2643,24 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold'
   },
+  enlargedGalleryDeleteButton: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 260
+  },
+  enlargedGalleryDeleteText: {
+    color: COLORS.PRIMARY,
+    fontSize: 20
+  },
   enlargedGallerySlide: {
     flex: 1,
     justifyContent: 'center',
@@ -2598,6 +2699,37 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     paddingVertical: 12,
     paddingHorizontal: 20
+  },
+  // Room transition indicator (shows briefly when switching rooms)
+  roomTransitionIndicator: {
+    position: 'absolute',
+    top: '35%',
+    left: 0,
+    right: 0,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 500,
+    pointerEvents: 'none'
+  },
+  roomTransitionCard: {
+    width: 120,
+    height: 120,
+    backgroundColor: 'rgba(240, 240, 240, 0.5)',
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 8
+  },
+  roomTransitionIcon: {
+    fontSize: 48
+  },
+  roomTransitionName: {
+    color: COLORS.GRAY,
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center'
   },
   // Orientation toggle styles (replaces save button in before mode)
   orientationToggle: {
