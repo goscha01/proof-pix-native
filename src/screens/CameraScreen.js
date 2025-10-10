@@ -550,10 +550,19 @@ export default function CameraScreen({ route, navigation }) {
               
               const galleryHeight = dimensions.height * 0.4;
               const cameraHeight = dimensions.height - galleryHeight;
-              const scale = cameraHeight / dimensions.height;
+              
+              // Scale to fill width, cropping top/bottom
+              // Container: width × cameraHeight (60% of screen)
+              // Camera: 4:3 aspect ratio
+              // To fill width: scale = baseScale × (cameraAspect / containerAspect)
+              const containerAspect = dimensions.width / cameraHeight; // W/H of visible area
+              const cameraAspect = 4 / 3; // Camera is 4:3 (W/H)
+              const baseScale = cameraHeight / dimensions.height; // 0.6
+              const zoomFactor = cameraAspect / containerAspect; // Zoom to fill width
+              const scale = baseScale * zoomFactor; // Final scale
               const translateY = -galleryHeight / 2;
               
-              console.log('Gallery opening - scale:', scale, 'translateY:', translateY, 'galleryHeight:', galleryHeight);
+              console.log('Gallery opening - baseScale:', baseScale.toFixed(2), 'zoomFactor:', zoomFactor.toFixed(2), 'final scale:', scale.toFixed(2), 'translateY:', translateY);
               
               Animated.parallel([
                 Animated.spring(cameraScale, {
@@ -1177,7 +1186,7 @@ export default function CameraScreen({ route, navigation }) {
 
   // Render overlay mode (current implementation)
   const renderOverlayMode = () => (
-    <View 
+              <View
       style={styles.container}
     >
       {/* Animated camera view 
@@ -1186,7 +1195,7 @@ export default function CameraScreen({ route, navigation }) {
           - When gallery is NOT shown: swipe down closes camera (navigates to main), swipe up shows gallery, horizontal swipes switch rooms
       */}
       <Animated.View
-        style={[
+                style={[
           styles.cameraWrapper,
           {
             transform: [
@@ -1211,7 +1220,7 @@ export default function CameraScreen({ route, navigation }) {
               Before photo was taken in {getActiveBeforePhoto()?.orientation || 'portrait'} mode. 
               Please rotate your device.
             </Text>
-          </View>
+        </View>
         )}
 
       {/* Camera preview with before photo overlay (for after mode) */}
@@ -1607,11 +1616,17 @@ export default function CameraScreen({ route, navigation }) {
                   }}
                 >
                   <View style={[styles.enlargedGallerySlide, { width: dimensions.width }]}>
-                    <Image
-                      source={{ uri: photo.uri }}
-                      style={styles.enlargedGalleryImage}
-                      resizeMode="contain"
-                    />
+                    <View style={{
+                      width: dimensions.width,
+                      aspectRatio: dimensions.width / (dimensions.height * 0.6), // Match camera's aspect ratio
+                      overflow: 'hidden'
+                    }}>
+                      <Image
+                        source={{ uri: photo.uri }}
+                        style={styles.enlargedGalleryImage}
+                        resizeMode="cover"
+                      />
+                    </View>
                   </View>
                 </TouchableWithoutFeedback>
               ))}
@@ -1758,7 +1773,7 @@ export default function CameraScreen({ route, navigation }) {
   const renderLabelView = () => {
     if (!tempPhotoUri || !tempPhotoLabel) return null;
 
-    return (
+      return (
       <View
         ref={labelViewRef}
         style={[
@@ -1777,9 +1792,9 @@ export default function CameraScreen({ route, navigation }) {
         />
         <View style={styles.hiddenPhotoLabel}>
           <Text style={styles.hiddenPhotoLabelText}>{tempPhotoLabel}</Text>
+          </View>
         </View>
-      </View>
-    );
+      );
   };
 
   return (
