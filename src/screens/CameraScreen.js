@@ -84,7 +84,7 @@ export default function CameraScreen({ route, navigation }) {
   const showEnlargedGalleryRef = useRef(showEnlargedGallery);
   const enlargedGalleryPhotoRef = useRef(enlargedGalleryPhoto);
   const isGalleryAnimatingRef = useRef(false);
-  const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto } = usePhotos();
+  const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom } = usePhotos();
   const { showLabels } = useSettings();
   const labelViewRef = useRef(null);
 
@@ -99,10 +99,12 @@ export default function CameraScreen({ route, navigation }) {
     }
   };
 
-  // Update ref when room changes
+  // Update ref when room changes AND sync with global room state
   useEffect(() => {
     currentRoomRef.current = room;
-  }, [room]);
+    // Update global room state so HomeScreen shows the same room when camera closes
+    setCurrentRoom(room);
+  }, [room, setCurrentRoom]);
 
   // Update dimensions ref when dimensions change
   useEffect(() => {
@@ -439,12 +441,12 @@ export default function CameraScreen({ route, navigation }) {
       onStartShouldSetPanResponder: () => false,
       onStartShouldSetPanResponderCapture: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        // Don't activate if carousel, fullscreen, enlarged gallery/photo is open, or gallery is animating
-        if (showCarouselRef.current || isFullScreen || isGalleryAnimatingRef.current || enlargedGalleryPhotoRef.current || showEnlargedGalleryRef.current) {
+        // Don't activate if carousel, fullscreen, or enlarged gallery/photo is open
+        // NOTE: Allow gestures even when gallery is animating, so user can cancel the opening animation
+        if (showCarouselRef.current || isFullScreen || enlargedGalleryPhotoRef.current || showEnlargedGalleryRef.current) {
           console.log('Camera gesture blocked:', { 
             carousel: showCarouselRef.current, 
             fullscreen: isFullScreen,
-            animating: isGalleryAnimatingRef.current,
             enlarged: enlargedGalleryPhotoRef.current !== null,
             enlargedGallery: showEnlargedGalleryRef.current
           });
@@ -453,14 +455,20 @@ export default function CameraScreen({ route, navigation }) {
         
         const { dx, dy } = gestureState;
         
-        // If gallery is shown, only respond to swipe down
+        // If gallery is shown, respond to swipe down from ANYWHERE or horizontal swipe
         if (showGalleryRef.current) {
-          const isSwipeDown = Math.abs(dy) > Math.abs(dx) && dy > 2;
-          console.log('Camera with gallery - swipe down check:', { dy, dx, isSwipeDown });
-          return isSwipeDown;
+          const gestureY = evt.nativeEvent.pageY;
+          const screenHeight = dimensionsRef.current.height;
+          const galleryTop = screenHeight * 0.6; // top of bottom gallery area
+          const isTopArea = gestureY < galleryTop;
+          const isSwipeDown = dy > 0 && (Math.abs(dy) >= Math.abs(dx) || Math.abs(dx) < 5);
+          const isHorizontal = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 5;
+          console.log('Camera with gallery - gesture check:', { dy, dx, isSwipeDown, isHorizontal, gestureY, isTopArea });
+          // Only allow horizontal room switching from TOP area; bottom area horizontal should be handled by ScrollView
+          return isSwipeDown || (isTopArea && isHorizontal);
         }
         
-        // If gallery is NOT shown, respond to swipe up, swipe down, or horizontal swipes (reduced threshold)
+        // If gallery is NOT shown, respond to swipe up, swipe down, or horizontal swipes
         const isVerticalSwipe = Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10;
         const isHorizontalSwipe = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10;
         
@@ -468,24 +476,46 @@ export default function CameraScreen({ route, navigation }) {
         return isVerticalSwipe || isHorizontalSwipe;
       },
       onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
-        // Don't activate if carousel, fullscreen, enlarged gallery/photo is open, or gallery is animating
-        if (showCarouselRef.current || isFullScreen || isGalleryAnimatingRef.current || enlargedGalleryPhotoRef.current || showEnlargedGalleryRef.current) {
+        // Don't activate if carousel, fullscreen, or enlarged gallery/photo is open
+        // NOTE: Allow gestures even when gallery is animating, so user can cancel the opening animation
+        if (showCarouselRef.current || isFullScreen || enlargedGalleryPhotoRef.current || showEnlargedGalleryRef.current) {
           return false;
         }
         
         const { dx, dy } = gestureState;
         
         // When gallery is shown:
-        // - Allow vertical swipes (swipe down on camera to close gallery)
-        // - Allow horizontal swipes ON CAMERA for room switching
-        // - Gallery ScrollView handles its own horizontal scrolling with directionalLockEnabled
+        // Capture strategy: be EXTREMELY aggressive to beat ScrollView
         if (showGalleryRef.current) {
-          // Vertical down swipes or horizontal swipes (low threshold for capture)
-          const isVerticalDown = Math.abs(dy) > Math.abs(dx) && dy > 5;
-          const isHorizontal = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 15;
-          const shouldCapture = isVerticalDown || isHorizontal;
-          console.log('Capture check with gallery:', { dy, dx, isVerticalDown, isHorizontal, shouldCapture });
-          return shouldCapture;
+          const gestureY = evt.nativeEvent.pageY;
+          const screenHeight = dimensionsRef.current.height;
+          const galleryTop = screenHeight * 0.6;
+          const isBottomArea = gestureY >= galleryTop;
+          
+          // Gallery area (bottom 40%): Capture at the SLIGHTEST vertical movement
+          // We need to capture before ScrollView claims it
+          if (isBottomArea) {
+            // ANY downward movement, even 0.1px, as long as it's not clearly horizontal
+            const isDownward = dy > 0;
+            const notClearlyHorizontal = Math.abs(dx) <= Math.abs(dy) || Math.abs(dx) < 5;
+            if (isDownward && notClearlyHorizontal) {
+              console.log('🎯 CAPTURE Gallery swipe:', { dy, dx, gestureY, screenHeight, galleryTop });
+              return true;
+            }
+            // Don't capture horizontal gestures - let ScrollView handle them
+            console.log('❌ NOT capturing (horizontal):', { dy, dx });
+            return false;
+          }
+          
+          // Camera area (top 60%): Standard capture for vertical/horizontal
+          const isVertical = dy > 2 && Math.abs(dy) > Math.abs(dx);
+          const isHorizontal = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10;
+          if (isVertical || isHorizontal) {
+            console.log('Capture - Camera area:', { dy, dx, gestureY, isVertical, isHorizontal });
+            return true;
+          }
+          
+          return false;
         }
         
         return (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10) || 
@@ -496,13 +526,19 @@ export default function CameraScreen({ route, navigation }) {
         
         // If gallery is shown, handle swipes
         if (showGalleryRef.current) {
-          // Vertical swipe down - close gallery
-          if (Math.abs(dy) > Math.abs(dx) && dy > 30) {
+          // Vertical swipe down - close gallery (reduced threshold for better responsiveness)
+          if (Math.abs(dy) > Math.abs(dx) && dy > 20) {
             console.log('Swipe down with gallery - closing gallery. Current state:', { 
               gallery: showGalleryRef.current, 
               cameraViewMode,
-              deviceOrientation 
+              deviceOrientation,
+              wasAnimating: isGalleryAnimatingRef.current
             });
+            
+            // Stop any ongoing animations immediately
+            cameraScale.stopAnimation();
+            cameraTranslateY.stopAnimation();
+            galleryOpacity.stopAnimation();
             
             // Set animating flag to block new gestures
             isGalleryAnimatingRef.current = true;
@@ -548,8 +584,15 @@ export default function CameraScreen({ route, navigation }) {
             return;
           }
           
-          // Horizontal swipe - switch rooms (in half-screen mode)
-          if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+          // Horizontal swipe - switch rooms (in half-screen mode, reduced threshold)
+          if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) {
+            // Only switch rooms if the gesture started in the TOP camera area
+            const startY = gestureState.y0;
+            const galleryTop = dimensionsRef.current.height * 0.6;
+            if (startY >= galleryTop) {
+              console.log('Horizontal swipe started in gallery area - do not switch rooms');
+              return;
+            }
             console.log('Horizontal swipe with gallery - switching room');
             const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
             
@@ -659,8 +702,8 @@ export default function CameraScreen({ route, navigation }) {
             }
           }
           
-          // Check for horizontal swipe (room switching)
-          if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+          // Check for horizontal swipe (room switching, reduced threshold)
+          if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) {
             console.log('Horizontal swipe - switching room');
             const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
             
@@ -735,69 +778,6 @@ export default function CameraScreen({ route, navigation }) {
           setShowEnlargedGallery(false);
         }
         // If swipe wasn't strong enough, just ignore it (no spring back animation needed)
-      }
-    })
-  ).current;
-
-  // PanResponder for swipe down on gallery area (only closes gallery, doesn't close camera)
-  const gallerySwipeDownPanResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => false, // Don't capture on start
-      onMoveShouldSetPanResponder: (evt, gestureState) => {
-        // Only activate if gallery is shown and it's a vertical down swipe (not horizontal)
-        if (!showGalleryRef.current) return false;
-        
-        const { dx, dy } = gestureState;
-        // Must be clearly vertical (dy > dx) and moving down
-        const isVerticalDown = Math.abs(dy) > Math.abs(dx) && dy > 15;
-        
-        console.log('Gallery area swipe check:', { dx, dy, isVerticalDown });
-        return isVerticalDown;
-      },
-      onPanResponderRelease: (evt, gestureState) => {
-        const { dy, dx } = gestureState;
-        const threshold = 50; // Swipe down at least 50px
-        
-        console.log('Gallery area swipe release:', { dx, dy, threshold });
-        
-        // Must be vertical and exceed threshold
-        if (Math.abs(dy) > Math.abs(dx) && dy > threshold && showGalleryRef.current) {
-          console.log('Gallery swipe-down detected - closing gallery (returning to full camera)');
-          
-          // Set animating flag
-          isGalleryAnimatingRef.current = true;
-          setIsGalleryAnimating(true);
-          setShowGallery(false);
-          
-          Animated.parallel([
-            Animated.spring(cameraScale, {
-              toValue: 1,
-              useNativeDriver: true,
-              tension: 50,
-              friction: 10
-            }),
-            Animated.spring(cameraTranslateY, {
-              toValue: 0,
-              useNativeDriver: true,
-              tension: 50,
-              friction: 10
-            }),
-            Animated.timing(galleryOpacity, {
-              toValue: 0,
-              duration: 200,
-              useNativeDriver: true
-            })
-          ]).start(() => {
-            cameraScale.setValue(1);
-            cameraTranslateY.setValue(0);
-            galleryOpacity.setValue(0);
-            
-            setTimeout(() => {
-              isGalleryAnimatingRef.current = false;
-              setIsGalleryAnimating(false);
-            }, 100);
-          });
-        }
       }
     })
   ).current;
@@ -1280,6 +1260,7 @@ export default function CameraScreen({ route, navigation }) {
   const renderOverlayMode = () => (
               <View
       style={styles.container}
+      {...cameraViewPanResponder.panHandlers}
     >
       {/* Animated camera view 
           Gesture handling:
@@ -1297,7 +1278,6 @@ export default function CameraScreen({ route, navigation }) {
             ]
           }
         ]}
-        {...cameraViewPanResponder.panHandlers}
       >
         {/* Orientation mismatch warning */}
         {(() => {
@@ -1511,7 +1491,6 @@ export default function CameraScreen({ route, navigation }) {
               height: dimensions.height * 0.4
             }
           ]}
-          {...gallerySwipeDownPanResponder.panHandlers}
         >
           <Text style={styles.galleryTitle}>
             {mode === 'before' ? `${getCurrentRoomInfo().name} Photos` : 'Before Photos'}
@@ -1804,14 +1783,27 @@ export default function CameraScreen({ route, navigation }) {
       )}
 
       {/* Room transition indicator - shown briefly when switching rooms */}
-      {showRoomIndicator && (
-        <View style={styles.roomTransitionIndicator}>
-          <View style={styles.roomTransitionCard}>
-            <Text style={styles.roomTransitionIcon}>{getCurrentRoomInfo().icon}</Text>
-            <Text style={styles.roomTransitionName}>{getCurrentRoomInfo().name}</Text>
+      {showRoomIndicator && (() => {
+        const squareSize = (dimensions.width - 60) / 2;
+        const iconSize = 48; // matches styles.roomTransitionIcon
+        const screenCenterTopForCard = (dimensions.height - squareSize) / 2; // centers the square
+        // Both full and half screen: move up by 1/3 of square size
+        const topOffset = squareSize / 3;
+        const computedTop = screenCenterTopForCard - topOffset;
+        return (
+          <View style={[styles.roomTransitionIndicator, { top: computedTop }]}>
+            <View
+              style={[
+                styles.roomTransitionCard,
+                { width: squareSize, height: squareSize }
+              ]}
+            >
+              <Text style={styles.roomTransitionIcon}>{getCurrentRoomInfo().icon}</Text>
+              <Text style={styles.roomTransitionName}>{getCurrentRoomInfo().name}</Text>
+            </View>
           </View>
-        </View>
-      )}
+        );
+      })()}
 
       {/* Full screen view - activated by holding thumbnail */}
       {isFullScreen && !showCarousel && (() => {
@@ -2703,10 +2695,10 @@ const styles = StyleSheet.create({
   // Room transition indicator (shows briefly when switching rooms)
   roomTransitionIndicator: {
     position: 'absolute',
-    top: '35%',
+    top: '50%',
     left: 0,
     right: 0,
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     alignItems: 'center',
     zIndex: 500,
     pointerEvents: 'none'
@@ -2726,7 +2718,7 @@ const styles = StyleSheet.create({
     fontSize: 48
   },
   roomTransitionName: {
-    color: COLORS.GRAY,
+    color: '#000',
     fontSize: 14,
     fontWeight: '600',
     textAlign: 'center'
