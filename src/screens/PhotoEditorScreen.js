@@ -19,16 +19,20 @@ import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, TEMPLATE_CONFIGS } from '../consta
 export default function PhotoEditorScreen({ route, navigation }) {
   const { beforePhoto, afterPhoto } = route.params;
 
-  // Set default template based on cameraViewMode (not device orientation)
-  // Landscape camera view → stacked (horizontal split), Portrait camera view → side-by-side (vertical split)
+  // Set default template based on PHONE ORIENTATION or CAMERA VIEW MODE
+  // Landscape phone position OR landscape camera view → stacked (horizontal split)
+  // Portrait phone position AND portrait camera view → side-by-side (vertical split)
   const getDefaultTemplate = () => {
+    const phoneOrientation = beforePhoto.orientation || 'portrait';
     const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
-    console.log('PhotoEditor - Before photo cameraViewMode:', cameraViewMode);
-    if (cameraViewMode === 'landscape') {
-      // Landscape camera view creates STACKED combined photos (horizontal split)
+    console.log('PhotoEditor - Phone orientation:', phoneOrientation, 'Camera view mode:', cameraViewMode);
+    
+    // Use stacked if EITHER phone is landscape OR camera view is landscape (letterbox)
+    if (phoneOrientation === 'landscape' || cameraViewMode === 'landscape') {
+      // STACKED combined photos (horizontal split)
       return TEMPLATE_TYPES.STACK_PORTRAIT;
     } else {
-      // Portrait camera view creates SIDE-BY-SIDE combined photos (vertical split)
+      // SIDE-BY-SIDE combined photos (vertical split)
       return TEMPLATE_TYPES.SIDE_BY_SIDE_LANDSCAPE;
     }
   };
@@ -94,23 +98,26 @@ export default function PhotoEditorScreen({ route, navigation }) {
     })
   ).current;
 
-  // Filter templates based on cameraViewMode (not device orientation)
-  // Landscape camera view → only stacked templates, Portrait camera view → only side-by-side templates
+  // Filter templates based on PHONE ORIENTATION or CAMERA VIEW MODE
+  // Landscape phone position OR landscape camera view → only stacked templates
+  // Portrait phone position AND portrait camera view → only side-by-side templates
   const getAvailableTemplates = () => {
+    const phoneOrientation = beforePhoto.orientation || 'portrait';
     const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
     const allTemplates = Object.entries(TEMPLATE_CONFIGS);
 
-    console.log('Filtering templates for cameraViewMode:', cameraViewMode);
+    console.log('Filtering templates - Phone:', phoneOrientation, 'Camera view:', cameraViewMode);
 
-    if (cameraViewMode === 'landscape') {
-      // Landscape camera view: only STACKED layouts (horizontal split, top/bottom)
+    // Use stacked if EITHER phone is landscape OR camera view is landscape (letterbox)
+    if (phoneOrientation === 'landscape' || cameraViewMode === 'landscape') {
+      // Only STACKED layouts (horizontal split, top/bottom)
       const filtered = allTemplates.filter(([key, config]) => config.layout === 'stack');
-      console.log('Landscape camera view filtered templates (stack only):', filtered.map(([k, c]) => c.name));
+      console.log('Landscape mode - filtered templates (stack only):', filtered.map(([k, c]) => c.name));
       return filtered;
     } else {
-      // Portrait camera view: only SIDE-BY-SIDE layouts (vertical split, left/right)
+      // Only SIDE-BY-SIDE layouts (vertical split, left/right)
       const filtered = allTemplates.filter(([key, config]) => config.layout === 'sidebyside');
-      console.log('Portrait camera view filtered templates (side-by-side only):', filtered.map(([k, c]) => c.name));
+      console.log('Portrait mode - filtered templates (side-by-side only):', filtered.map(([k, c]) => c.name));
       return filtered;
     }
   };

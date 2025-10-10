@@ -142,10 +142,11 @@ export default function AllPhotosScreen({ navigation }) {
   );
 
   const renderPhotoCard = (photo, borderColor, photoType, photoSet, isLast = false) => {
-    // For combined thumbnail, show split preview based on cameraViewMode - tap to retake after
+    // For combined thumbnail, show split preview based on phone orientation OR camera view mode - tap to retake after
     if (photoType === 'combined' && !photo && photoSet.before && photoSet.after) {
+      const phoneOrientation = photoSet.before.orientation || 'portrait';
       const cameraViewMode = photoSet.before.cameraViewMode || 'portrait';
-      const isLandscape = cameraViewMode === 'landscape';
+      const isLandscape = phoneOrientation === 'landscape' || cameraViewMode === 'landscape';
 
       return (
         <TouchableOpacity
@@ -307,7 +308,7 @@ export default function AllPhotosScreen({ navigation }) {
           <View style={styles.fullScreenPhotoContainer}>
             <View style={[
               styles.fullScreenCombinedPreview,
-              (fullScreenPhotoSet.before.cameraViewMode || fullScreenPhotoSet.before.orientation) === 'landscape' 
+              (fullScreenPhotoSet.before.orientation === 'landscape' || fullScreenPhotoSet.before.cameraViewMode === 'landscape')
                 ? styles.fullScreenStacked 
                 : styles.fullScreenSideBySide
             ]}>

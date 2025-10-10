@@ -245,9 +245,10 @@ export default function HomeScreen({ navigation }) {
           );
         } else {
           // Has after photo but no combined yet - show split preview, tap to retake after
-          // Landscape camera view = stacked (top/bottom), Portrait camera view = side-by-side (left/right)
+          // Landscape phone OR landscape camera view = stacked (top/bottom)
+          const phoneOrientation = beforePhoto.orientation || 'portrait';
           const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
-          const isLandscape = cameraViewMode === 'landscape';
+          const isLandscape = phoneOrientation === 'landscape' || cameraViewMode === 'landscape';
 
           gridItems.push(
             <TouchableOpacity
@@ -382,7 +383,7 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.fullScreenPhotoContainer}>
             <View style={[
               styles.fullScreenCombinedPreview,
-              (fullScreenPhotoSet.before.cameraViewMode || fullScreenPhotoSet.before.orientation) === 'landscape' 
+              (fullScreenPhotoSet.before.orientation === 'landscape' || fullScreenPhotoSet.before.cameraViewMode === 'landscape')
                 ? styles.fullScreenStacked 
                 : styles.fullScreenSideBySide
             ]}>
