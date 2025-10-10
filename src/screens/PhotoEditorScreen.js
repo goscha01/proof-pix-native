@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   Image,
   Alert,
   ActivityIndicator,
-  ScrollView
+  ScrollView,
+  PanResponder
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import { usePhotos } from '../context/PhotoContext';
@@ -36,6 +37,61 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const combinedRef = useRef(null);
   const { addPhoto, getUnpairedBeforePhotos } = usePhotos();
   const { showLabels } = useSettings();
+  const templateTypeRef = useRef(templateType);
+
+  // Update ref when templateType changes
+  useEffect(() => {
+    templateTypeRef.current = templateType;
+  }, [templateType]);
+
+  // PanResponder for swipe gestures
+  const handleSwipeChangeTemplate = (direction) => {
+    const templates = getAvailableTemplates();
+    const currentIndex = templates.findIndex(([key]) => key === templateTypeRef.current);
+    
+    console.log('Swipe detected:', direction, 'Current:', templateTypeRef.current, 'Index:', currentIndex, 'Total:', templates.length);
+    
+    if (direction === 'left' && currentIndex < templates.length - 1) {
+      // Swipe left - next template
+      const nextTemplate = templates[currentIndex + 1][0];
+      console.log('Setting next template:', nextTemplate);
+      setTemplateType(nextTemplate);
+    } else if (direction === 'right' && currentIndex > 0) {
+      // Swipe right - previous template
+      const prevTemplate = templates[currentIndex - 1][0];
+      console.log('Setting previous template:', prevTemplate);
+      setTemplateType(prevTemplate);
+    }
+  };
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const { dy, dx } = gestureState;
+        // Activate for downward swipes or strong horizontal swipes
+        return Math.abs(dy) > 10 || Math.abs(dx) > 10;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const { dy, dx } = gestureState;
+        
+        // Swipe down to close
+        if (dy > 100 && Math.abs(dx) < 50) {
+          navigation.goBack();
+          return;
+        }
+        
+        // Swipe left/right to change template
+        if (Math.abs(dx) > 80 && Math.abs(dy) < 50) {
+          if (dx < 0) {
+            handleSwipeChangeTemplate('left');
+          } else if (dx > 0) {
+            handleSwipeChangeTemplate('right');
+          }
+        }
+      }
+    })
+  ).current;
 
   // Filter templates based on orientation
   // Landscape (horizontal) → only stacked templates, Portrait (vertical) → only side-by-side templates
@@ -177,7 +233,12 @@ export default function PhotoEditorScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container}>
+    <View style={styles.container} {...panResponder.panHandlers}>
+      {/* Swipe down indicator */}
+      <View style={styles.swipeIndicator}>
+        <View style={styles.swipeHandle} />
+      </View>
+
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
@@ -191,6 +252,28 @@ export default function PhotoEditorScreen({ route, navigation }) {
 
       <View style={styles.previewContainer}>
         {renderCombinedPreview()}
+        
+        {/* Swipe indicators */}
+        <View style={styles.swipeIndicators}>
+          <Text style={styles.swipeHint}>← Swipe to change format →</Text>
+          {(() => {
+            const templates = getAvailableTemplates();
+            const currentIndex = templates.findIndex(([key]) => key === templateType);
+            return (
+              <View style={styles.dotsContainer}>
+                {templates.map(([key], index) => (
+                  <View
+                    key={key}
+                    style={[
+                      styles.dot,
+                      index === currentIndex && styles.dotActive
+                    ]}
+                  />
+                ))}
+              </View>
+            );
+          })()}
+        </View>
       </View>
 
       <View style={styles.templateSelector}>
@@ -242,6 +325,20 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.BACKGROUND
   },
+  swipeIndicator: {
+    position: 'absolute',
+    top: 10,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 10
+  },
+  swipeHandle: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#ccc'
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -265,7 +362,34 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 20
+    padding: 20,
+    position: 'relative'
+  },
+  swipeIndicators: {
+    position: 'absolute',
+    bottom: 30,
+    left: 0,
+    right: 0,
+    alignItems: 'center'
+  },
+  swipeHint: {
+    fontSize: 12,
+    color: '#999',
+    marginBottom: 8
+  },
+  dotsContainer: {
+    flexDirection: 'row',
+    gap: 8
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#ccc'
+  },
+  dotActive: {
+    backgroundColor: COLORS.PRIMARY,
+    width: 24
   },
   combinedPreview: {
     backgroundColor: 'white',

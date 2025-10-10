@@ -5,6 +5,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   Image,
   Dimensions,
   PanResponder
@@ -26,6 +27,13 @@ export default function HomeScreen({ navigation }) {
     getCombinedPhotos
   } = usePhotos();
 
+  const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
+  const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
+  const longPressTimer = useRef(null);
+  const longPressTriggered = useRef(false);
+  const touchStartPos = useRef(null);
+  const isSwiping = useRef(false);
+  
   const beforePhotos = getBeforePhotos(currentRoom);
   const afterPhotos = getAfterPhotos(currentRoom);
   const currentRoomRef = useRef(currentRoom);
@@ -51,12 +59,55 @@ export default function HomeScreen({ navigation }) {
     currentRoomRef.current = currentRoom;
   }, [currentRoom]);
 
+  // Long press handlers for full-screen photo
+  const handleLongPressStart = (photo, beforePhoto = null, afterPhoto = null) => {
+    longPressTriggered.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      if (beforePhoto && afterPhoto) {
+        // Show combined preview with both photos
+        setFullScreenPhotoSet({ before: beforePhoto, after: afterPhoto });
+      } else {
+        // Show single photo
+        setFullScreenPhoto(photo);
+      }
+    }, 500); // 500ms for long press
+  };
+
+  const handleLongPressEnd = () => {
+    const wasLongPress = longPressTriggered.current;
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    setFullScreenPhoto(null);
+    setFullScreenPhotoSet(null);
+    
+    // Only delay reset if it was actually a long press
+    if (wasLongPress) {
+      setTimeout(() => {
+        longPressTriggered.current = false;
+      }, 100);
+    } else {
+      // Quick tap - reset immediately so onPress can fire
+      longPressTriggered.current = false;
+    }
+  };
+
   // PanResponder for room switching
   const panResponder = useRef(
     PanResponder.create({
+      onStartShouldSetPanResponder: () => {
+        isSwiping.current = false;
+        return false;
+      },
       onMoveShouldSetPanResponder: (evt, gestureState) => {
         // Activate for horizontal swipes
-        return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 30;
+        const isHorizontalSwipe = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 30;
+        if (isHorizontalSwipe) {
+          isSwiping.current = true;
+        }
+        return isHorizontalSwipe;
       },
       onPanResponderRelease: (evt, gestureState) => {
         const swipeThreshold = 50;
@@ -71,6 +122,11 @@ export default function HomeScreen({ navigation }) {
           const newIndex = currentIndex < ROOMS.length - 1 ? currentIndex + 1 : 0;
           setCurrentRoom(ROOMS[newIndex].id);
         }
+        
+        // Reset swipe flag after a short delay
+        setTimeout(() => {
+          isSwiping.current = false;
+        }, 100);
       }
     })
   ).current;
@@ -116,6 +172,32 @@ export default function HomeScreen({ navigation }) {
   const renderPhotoGrid = () => {
     const gridItems = [];
     const combinedPhotos = getCombinedPhotos(currentRoom);
+    const hasPhotos = beforePhotos.length > 0;
+
+    // If no photos, show centered take photo button
+    if (!hasPhotos) {
+      return (
+        <View style={styles.emptyStateContainer}>
+          <TouchableOpacity
+            style={styles.addPhotoItem}
+            delayPressIn={100}
+            onPress={() => {
+              if (!isSwiping.current) {
+                navigation.navigate('Camera', {
+                  mode: 'before',
+                  room: currentRoom
+                });
+              }
+            }}
+          >
+            <Text style={styles.addPhotoIcon}>
+              {ROOMS.find((r) => r.id === currentRoom)?.icon || '📷'}
+            </Text>
+            <Text style={styles.addPhotoText}>Take Photo</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
 
     // Add before photos
     beforePhotos.forEach((beforePhoto) => {
@@ -135,15 +217,20 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity
               key={combinedPhoto.id}
               style={styles.photoItem}
-              onPress={() =>
-                navigation.navigate('Camera', {
-                  mode: 'after',
-                  beforePhoto,
-                  afterPhoto,
-                  combinedPhoto,
-                  room: currentRoom
-                })
-              }
+              delayPressIn={100}
+              onPress={() => {
+                if (!longPressTriggered.current && !isSwiping.current) {
+                  navigation.navigate('Camera', {
+                    mode: 'after',
+                    beforePhoto,
+                    afterPhoto,
+                    combinedPhoto,
+                    room: currentRoom
+                  });
+                }
+              }}
+              onPressIn={() => handleLongPressStart(combinedPhoto)}
+              onPressOut={handleLongPressEnd}
             >
               <CroppedThumbnail
                 imageUri={combinedPhoto.uri}
@@ -166,14 +253,19 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity
               key={beforePhoto.id}
               style={styles.photoItem}
-              onPress={() =>
-                navigation.navigate('Camera', {
-                  mode: 'after',
-                  beforePhoto,
-                  afterPhoto,
-                  room: currentRoom
-                })
-              }
+              delayPressIn={100}
+              onPress={() => {
+                if (!longPressTriggered.current && !isSwiping.current) {
+                  navigation.navigate('Camera', {
+                    mode: 'after',
+                    beforePhoto,
+                    afterPhoto,
+                    room: currentRoom
+                  });
+                }
+              }}
+              onPressIn={() => handleLongPressStart(null, beforePhoto, afterPhoto)}
+              onPressOut={handleLongPressEnd}
             >
               <View style={[styles.splitPreview, isLandscape ? styles.stackedPreview : styles.sideBySidePreview]}>
                 <Image source={{ uri: beforePhoto.uri }} style={styles.halfPreviewImage} resizeMode="cover" />
@@ -191,13 +283,18 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity
             key={beforePhoto.id}
             style={[styles.photoItem, styles.photoItemPending]}
-            onPress={() =>
-              navigation.navigate('Camera', {
-                mode: 'after',
-                beforePhoto,
-                room: currentRoom
-              })
-            }
+            delayPressIn={100}
+            onPress={() => {
+              if (!longPressTriggered.current && !isSwiping.current) {
+                navigation.navigate('Camera', {
+                  mode: 'after',
+                  beforePhoto,
+                  room: currentRoom
+                });
+              }
+            }}
+            onPressIn={() => handleLongPressStart(beforePhoto)}
+            onPressOut={handleLongPressEnd}
           >
             <CroppedThumbnail
               imageUri={beforePhoto.uri}
@@ -218,12 +315,15 @@ export default function HomeScreen({ navigation }) {
       <TouchableOpacity
         key="add-photo"
         style={styles.addPhotoItem}
-        onPress={() =>
-          navigation.navigate('Camera', {
-            mode: 'before',
-            room: currentRoom
-          })
-        }
+        delayPressIn={100}
+        onPress={() => {
+          if (!isSwiping.current) {
+            navigation.navigate('Camera', {
+              mode: 'before',
+              room: currentRoom
+            });
+          }
+        }}
       >
         <Text style={styles.addPhotoIcon}>
           {ROOMS.find((r) => r.id === currentRoom)?.icon || '📷'}
@@ -262,6 +362,48 @@ export default function HomeScreen({ navigation }) {
       >
         <Text style={styles.allPhotosButtonText}>📷 All Photos</Text>
       </TouchableOpacity>
+
+      {/* Full-screen photo view - single photo */}
+      {fullScreenPhoto && (
+        <TouchableWithoutFeedback onPress={handleLongPressEnd}>
+          <View style={styles.fullScreenPhotoContainer}>
+            <Image
+              source={{ uri: fullScreenPhoto.uri }}
+              style={styles.fullScreenPhoto}
+              resizeMode="contain"
+            />
+          </View>
+        </TouchableWithoutFeedback>
+      )}
+
+      {/* Full-screen combined photo view - 1:1 square with before/after */}
+      {fullScreenPhotoSet && (
+        <TouchableWithoutFeedback onPress={handleLongPressEnd}>
+          <View style={styles.fullScreenPhotoContainer}>
+            <View style={[
+              styles.fullScreenCombinedPreview,
+              fullScreenPhotoSet.before.orientation === 'landscape' 
+                ? styles.fullScreenStacked 
+                : styles.fullScreenSideBySide
+            ]}>
+              <View style={styles.fullScreenHalf}>
+                <Image
+                  source={{ uri: fullScreenPhotoSet.before.uri }}
+                  style={styles.fullScreenHalfImage}
+                  resizeMode="cover"
+                />
+              </View>
+              <View style={styles.fullScreenHalf}>
+                <Image
+                  source={{ uri: fullScreenPhotoSet.after.uri }}
+                  style={styles.fullScreenHalfImage}
+                  resizeMode="cover"
+                />
+              </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      )}
     </SafeAreaView>
   );
 }
@@ -427,6 +569,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600'
   },
+  emptyStateContainer: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    alignItems: 'center',
+    paddingTop: '33%'
+  },
   splitPreview: {
     width: '100%',
     height: '100%',
@@ -450,5 +598,44 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: COLORS.PRIMARY
+  },
+  fullScreenPhotoContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000
+  },
+  fullScreenPhoto: {
+    width: '100%',
+    height: '100%'
+  },
+  fullScreenCombinedPreview: {
+    aspectRatio: 1,
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: 500,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: COLORS.PRIMARY
+  },
+  fullScreenStacked: {
+    flexDirection: 'column'
+  },
+  fullScreenSideBySide: {
+    flexDirection: 'row'
+  },
+  fullScreenHalf: {
+    flex: 1
+  },
+  fullScreenHalfImage: {
+    width: '100%',
+    height: '100%'
   }
 });

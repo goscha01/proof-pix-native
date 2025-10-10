@@ -45,7 +45,10 @@ export default function CameraScreen({ route, navigation }) {
   const [enlargedGalleryPhoto, setEnlargedGalleryPhoto] = useState(null);
   const [cameraViewMode, setCameraViewMode] = useState('portrait'); // 'portrait' or 'landscape'
   const [deviceOrientation, setDeviceOrientation] = useState('portrait');
+  const [specificOrientation, setSpecificOrientation] = useState(1); // 1=PORTRAIT, 3=LANDSCAPE_LEFT, 4=LANDSCAPE_RIGHT
   const [isGalleryAnimating, setIsGalleryAnimating] = useState(false);
+  const [tempPhotoUri, setTempPhotoUri] = useState(null);
+  const [tempPhotoLabel, setTempPhotoLabel] = useState(null);
   const longPressGalleryTimer = useRef(null);
   const enlargedGalleryScrollRef = useRef(null);
   const tapStartTime = useRef(null);
@@ -69,7 +72,8 @@ export default function CameraScreen({ route, navigation }) {
   const enlargedGalleryPhotoRef = useRef(enlargedGalleryPhoto);
   const isGalleryAnimatingRef = useRef(false);
   const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto } = usePhotos();
-  const { cameraMode } = useSettings();
+  const { cameraMode, showLabels } = useSettings();
+  const labelViewRef = useRef(null);
 
   // Helper function to get the active before photo based on current room and mode
   const getActiveBeforePhoto = () => {
@@ -721,12 +725,38 @@ export default function CameraScreen({ route, navigation }) {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       const newOrientation = window.width > window.height ? 'landscape' : 'portrait';
       console.log('Screen rotated - Width:', window.width, 'Height:', window.height, 'Orientation:', newOrientation);
+      
+      // Update dimensions immediately for instant response
       setDimensions({ width: window.width, height: window.height });
       setDeviceOrientation(newOrientation);
     });
 
+    // Get specific orientation (landscape-left vs landscape-right)
+    const getSpecificOrientation = async () => {
+      const orientation = await ScreenOrientation.getOrientationAsync();
+      console.log('Specific orientation value:', orientation);
+      setSpecificOrientation(orientation);
+    };
+    
+    const orientationSubscription = ScreenOrientation.addOrientationChangeListener((event) => {
+      const orientation = event.orientationInfo.orientation;
+      const orientationNames = {
+        1: 'PORTRAIT',
+        2: 'PORTRAIT_UPSIDE_DOWN',
+        3: 'LANDSCAPE_LEFT (counter-clockwise)',
+        4: 'LANDSCAPE_RIGHT (clockwise)'
+      };
+      console.log('📱 Orientation changed to:', orientation, '-', orientationNames[orientation]);
+      
+      // Update immediately - native rotation is already smooth
+      setSpecificOrientation(event.orientationInfo.orientation);
+    });
+    
+    getSpecificOrientation();
+
     return () => {
       subscription?.remove();
+      ScreenOrientation.removeOrientationChangeListener(orientationSubscription);
     };
   }, []);
 
@@ -760,9 +790,9 @@ export default function CameraScreen({ route, navigation }) {
       const activeBeforePhoto = getActiveBeforePhoto();
       if (activeBeforePhoto) {
         if (activeBeforePhoto.aspectRatio) {
-          setAspectRatio(activeBeforePhoto.aspectRatio);
-        }
+        setAspectRatio(activeBeforePhoto.aspectRatio);
       }
+    }
     }
   }, [selectedBeforePhoto, mode, beforePhoto]);
 
@@ -848,6 +878,62 @@ export default function CameraScreen({ route, navigation }) {
     }
   };
 
+  // Helper function to add label to photo
+  const addLabelToPhoto = async (uri, labelText) => {
+    console.log('addLabelToPhoto called - showLabels:', showLabels, 'labelText:', labelText);
+    if (!showLabels) {
+      console.log('Labels disabled, returning original URI');
+      return uri;
+    }
+
+    try {
+      // Get image dimensions
+      return new Promise((resolve) => {
+        Image.getSize(uri, async (width, height) => {
+          console.log('Image dimensions:', width, 'x', height);
+          console.log('Setting temp photo state for label capture');
+          setTempPhotoUri(uri);
+          setTempPhotoLabel(labelText);
+          
+          // Wait for next frame to ensure view is rendered
+          setTimeout(async () => {
+            try {
+              console.log('Attempting to capture labeled view, ref exists:', !!labelViewRef.current);
+              if (labelViewRef.current) {
+                const capturedUri = await captureRef(labelViewRef, {
+                  format: 'jpg',
+                  quality: 0.95,
+                  width,
+                  height
+                });
+                console.log('Successfully captured labeled photo:', capturedUri);
+                setTempPhotoUri(null);
+                setTempPhotoLabel(null);
+                resolve(capturedUri);
+              } else {
+                console.log('Label view ref not found, returning original URI');
+                setTempPhotoUri(null);
+                setTempPhotoLabel(null);
+                resolve(uri);
+              }
+            } catch (error) {
+              console.error('Error adding label to photo:', error);
+              setTempPhotoUri(null);
+              setTempPhotoLabel(null);
+              resolve(uri);
+            }
+          }, 300);
+        }, (error) => {
+          console.error('Error getting image size:', error);
+          resolve(uri);
+        });
+      });
+    } catch (error) {
+      console.error('Error in addLabelToPhoto:', error);
+      return uri;
+    }
+  };
+
   const handleBeforePhoto = async (uri) => {
     try {
       // Generate photo name
@@ -855,8 +941,11 @@ export default function CameraScreen({ route, navigation }) {
       const photoNumber = roomPhotos.length + 1;
       const photoName = `${room.charAt(0).toUpperCase() + room.slice(1)} ${photoNumber}`;
 
+      // Add label if enabled
+      const processedUri = await addLabelToPhoto(uri, 'BEFORE');
+
       // Save to device
-      const savedUri = await savePhotoToDevice(uri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`);
+      const savedUri = await savePhotoToDevice(processedUri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`);
 
       // Capture device orientation (actual phone orientation)
       const currentOrientation = deviceOrientation;
@@ -910,9 +999,12 @@ export default function CameraScreen({ route, navigation }) {
         await deletePhoto(existingCombinedPhoto.id);
       }
 
+      // Add label if enabled
+      const processedUri = await addLabelToPhoto(uri, 'AFTER');
+
       // Save to device
       const savedUri = await savePhotoToDevice(
-        uri,
+        processedUri,
         `${activeBeforePhoto.room}_${activeBeforePhoto.name}_AFTER_${Date.now()}.jpg`
       );
 
@@ -1270,15 +1362,6 @@ export default function CameraScreen({ route, navigation }) {
           <View style={styles.swipeHandle} />
         </View>
 
-        {/* Room name indicator with mode */}
-        <View style={styles.roomIndicator}>
-          <Text style={styles.roomIndicatorIcon}>{getCurrentRoomInfo().icon}</Text>
-          <View style={styles.roomIndicatorTextContainer}>
-            <Text style={styles.roomIndicatorText}>{getCurrentRoomInfo().name}</Text>
-            <Text style={styles.roomIndicatorMode}>{mode.toUpperCase()}</Text>
-          </View>
-        </View>
-
         {/* Orientation mismatch warning */}
         {(() => {
           const mismatch = isOrientationMismatch();
@@ -1295,8 +1378,8 @@ export default function CameraScreen({ route, navigation }) {
           </View>
         )}
 
-        {/* Camera preview with before photo overlay (for after mode) */}
-        <View style={styles.cameraContainer}>
+      {/* Camera preview with before photo overlay (for after mode) */}
+      <View style={styles.cameraContainer}>
           {/* Letterbox container for landscape mode */}
           {(() => {
             const showLetterbox = cameraViewMode === 'landscape' && deviceOrientation === 'portrait';
@@ -1309,23 +1392,24 @@ export default function CameraScreen({ route, navigation }) {
               
               {/* Camera in landscape aspect ratio */}
               <View style={styles.letterboxCamera}>
-                <CameraView
-                  ref={cameraRef}
-                  style={styles.camera}
-                  facing={facing}
-                />
-                {/* Before photo overlay (for after mode) */}
+        <CameraView
+          ref={cameraRef}
+          style={styles.camera}
+          facing={facing}
+        />
+        
+        {/* Before photo overlay (for after mode) */}
                 {mode === 'after' && getActiveBeforePhoto() && (
-                  <View style={styles.beforePhotoOverlay}>
-                    <Image
+          <View style={styles.beforePhotoOverlay}>
+            <Image
                       source={{ uri: getActiveBeforePhoto().uri }}
-                      style={styles.beforePhotoImage}
-                      resizeMode="cover"
-                    />
-                  </View>
-                )}
-              </View>
-              
+              style={styles.beforePhotoImage}
+              resizeMode="cover"
+            />
+          </View>
+        )}
+      </View>
+
               {/* Bottom bar */}
               <View style={styles.letterboxBar} />
             </View>
@@ -1336,6 +1420,7 @@ export default function CameraScreen({ route, navigation }) {
                 style={styles.camera}
                 facing={facing}
               />
+              
               {/* Before photo overlay (for after mode) */}
               {mode === 'after' && getActiveBeforePhoto() && (
                 <View style={styles.beforePhotoOverlay}>
@@ -1351,8 +1436,49 @@ export default function CameraScreen({ route, navigation }) {
         </View>
       </Animated.View>
 
-      {/* Controls - fixed at bottom, outside camera wrapper */}
-      <View style={styles.controls} pointerEvents="box-none">
+
+      {/* Fixed UI Layer - doesn't rotate with device */}
+      <Animated.View style={[
+        styles.fixedUILayer,
+        // Counter-rotate to keep UI fixed to screen geometry
+        // LANDSCAPE_LEFT (3) = buttons should be on RIGHT (counter-rotate -90)
+        specificOrientation === 3 && {
+          transform: [{ rotate: '90deg' }],
+          width: dimensions.height,
+          height: dimensions.width,
+          left: (dimensions.width - dimensions.height) / 2,
+          top: (dimensions.height - dimensions.width) / 2
+        },
+        // LANDSCAPE_RIGHT (4) = buttons should be on LEFT (counter-rotate +90)
+        specificOrientation === 4 && {
+          transform: [{ rotate: '-90deg' }],
+          width: dimensions.height,
+          height: dimensions.width,
+          left: (dimensions.width - dimensions.height) / 2,
+          top: (dimensions.height - dimensions.width) / 2
+        }
+      ]} pointerEvents="box-none">
+        {/* Room name indicator - fixed to screen */}
+        <View style={styles.roomIndicator}>
+          <Text style={styles.roomIndicatorIcon}>{getCurrentRoomInfo().icon}</Text>
+          <View style={styles.roomIndicatorTextContainer}>
+            <Text style={styles.roomIndicatorText}>{getCurrentRoomInfo().name}</Text>
+            <Text style={styles.roomIndicatorMode}>{mode.toUpperCase()}</Text>
+          </View>
+        </View>
+
+        {/* Close button - fixed to screen */}
+        <TouchableOpacity
+          style={styles.closeButtonTopRight}
+          onPress={() => {
+            console.log('Close button pressed - going back');
+            navigation.goBack();
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.closeButtonText}>✕</Text>
+        </TouchableOpacity>
+
         <View style={styles.bottomControls}>
           {/* Main control row */}
           <View style={styles.mainControlRow}>
@@ -1364,34 +1490,37 @@ export default function CameraScreen({ route, navigation }) {
                 const photoOrientation = activePhoto.orientation || 'portrait';
                 console.log('Thumbnail - Photo orientation:', photoOrientation, 'Photo:', activePhoto.name, 'Room:', room);
                 return (
-                  <TouchableOpacity
+              <TouchableOpacity
                     style={[
                       styles.thumbnailViewerContainer,
                       photoOrientation === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
                     ]}
-                    activeOpacity={1}
-                    onPress={handleDoubleTap}
+                activeOpacity={1}
+                onPress={handleDoubleTap}
                     onPressIn={handleThumbnailPressIn}
                     onPressOut={handleThumbnailPressOut}
-                  >
-                    <Image
+              >
+                <Image
                       source={{ uri: activePhoto.uri }}
-                      style={styles.thumbnailViewerImage}
-                      resizeMode="cover"
-                    />
-                    <Text style={styles.thumbnailViewerLabel}>👁</Text>
-                  </TouchableOpacity>
+                  style={styles.thumbnailViewerImage}
+                  resizeMode="cover"
+                />
+                <Text style={styles.thumbnailViewerLabel}>👁</Text>
+              </TouchableOpacity>
                 );
               } else {
                 // Show empty placeholder matching current camera view mode
                 return (
-                  <View style={[styles.thumbnailViewerContainer, cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait]} />
+                  <View style={[
+                    styles.thumbnailViewerContainer, 
+                    cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
+                  ]} />
                 );
               }
             })()}
 
             {/* Capture button - center */}
-            <TouchableOpacity 
+              <TouchableOpacity
               style={[styles.captureButton, isOrientationMismatch() && styles.captureButtonDisabled]} 
               onPress={takePicture}
               disabled={isOrientationMismatch()}
@@ -1424,20 +1553,20 @@ export default function CameraScreen({ route, navigation }) {
               </TouchableOpacity>
             ) : (
               /* Save button - in after mode */
-              <TouchableOpacity
-                style={styles.saveButton}
+            <TouchableOpacity
+              style={styles.saveButton}
                 onPress={() => {
                   console.log('Save button pressed - going back');
                   navigation.goBack();
                 }}
-              >
-                <Text style={styles.saveButtonText}>💾</Text>
-                <Text style={styles.saveButtonLabel}>Save</Text>
-              </TouchableOpacity>
+            >
+              <Text style={styles.saveButtonText}>💾</Text>
+              <Text style={styles.saveButtonLabel}>Save</Text>
+            </TouchableOpacity>
             )}
           </View>
         </View>
-      </View>
+      </Animated.View>
 
       {/* Gallery at bottom - shown when swiping up */}
       {showGallery && (
@@ -1571,15 +1700,15 @@ export default function CameraScreen({ route, navigation }) {
             ]}
             {...enlargedGalleryPanResponder.panHandlers}
           >
-            <TouchableOpacity
+      <TouchableOpacity
               style={styles.enlargedGalleryCloseButton}
-              onPress={() => {
+        onPress={() => {
                 console.log('Closing enlarged gallery');
                 setShowEnlargedGallery(false);
-              }}
-            >
+        }}
+      >
               <Text style={styles.enlargedGalleryCloseText}>✕</Text>
-            </TouchableOpacity>
+      </TouchableOpacity>
             <ScrollView
               ref={enlargedGalleryScrollRef}
               horizontal
@@ -1667,18 +1796,6 @@ export default function CameraScreen({ route, navigation }) {
         </View>
       )}
 
-      {/* Close button - rendered outside controls for proper layering */}
-      <TouchableOpacity
-        style={styles.closeButtonTopRight}
-        onPress={() => {
-          console.log('Close button pressed - going back');
-          navigation.goBack();
-        }}
-        activeOpacity={0.7}
-      >
-        <Text style={styles.closeButtonText}>✕</Text>
-      </TouchableOpacity>
-
       {/* Full screen view - activated by holding thumbnail */}
       {isFullScreen && !showCarousel && (() => {
         const photos = mode === 'after' ? getUnpairedBeforePhotos(room) : getBeforePhotos(room);
@@ -1732,7 +1849,7 @@ export default function CameraScreen({ route, navigation }) {
         
         return (
           <View style={styles.carouselOverlay}>
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.carouselBackground}
               activeOpacity={1}
               onPress={() => {
@@ -2028,7 +2145,33 @@ export default function CameraScreen({ route, navigation }) {
     }
   };
 
-  return cameraMode === 'split' ? renderSplitMode() : renderOverlayMode();
+  const renderLabelView = () => {
+    if (!tempPhotoUri || !tempPhotoLabel) return null;
+
+    return (
+      <View
+        ref={labelViewRef}
+        style={styles.hiddenLabelView}
+        collapsable={false}
+      >
+        <Image
+          source={{ uri: tempPhotoUri }}
+          style={styles.hiddenLabelImage}
+          resizeMode="cover"
+        />
+        <View style={styles.hiddenPhotoLabel}>
+          <Text style={styles.hiddenPhotoLabelText}>{tempPhotoLabel}</Text>
+        </View>
+      </View>
+    );
+  };
+
+  return (
+    <>
+      {cameraMode === 'split' ? renderSplitMode() : renderOverlayMode()}
+      {renderLabelView()}
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -2036,7 +2179,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#000',
     width: '100%',
-    height: '100%'
+    height: '100%',
+    overflow: 'hidden'
   },
   swipeIndicator: {
     position: 'absolute',
@@ -2110,7 +2254,8 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 0
+    bottom: 0,
+    backgroundColor: '#000'
   },
   camera: {
     flex: 1
@@ -2128,6 +2273,18 @@ const styles = StyleSheet.create({
   beforePhotoImage: {
     width: '100%',
     height: '100%'
+  },
+  fixedUILayer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: 'flex-end',
+    zIndex: 260,
+    elevation: 260,
+    backgroundColor: 'transparent',
+    overflow: 'hidden'
   },
   controls: {
     position: 'absolute',
@@ -2218,14 +2375,16 @@ const styles = StyleSheet.create({
   bottomControls: {
     alignItems: 'center',
     paddingBottom: 10,
-    paddingHorizontal: 20
+    paddingHorizontal: 20,
+    backgroundColor: 'transparent'
   },
   mainControlRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     width: '100%',
-    position: 'relative'
+    position: 'relative',
+    paddingHorizontal: 10
   },
   modeInfo: {
     backgroundColor: 'rgba(0,0,0,0.7)',
@@ -2278,6 +2437,8 @@ const styles = StyleSheet.create({
     backdropFilter: 'blur(10px)'
   },
   saveButton: {
+    position: 'absolute',
+    right: 10,
     width: 80,
     height: 80,
     borderRadius: 40,
@@ -2285,9 +2446,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
-    borderColor: COLORS.PRIMARY,
-    position: 'absolute',
-    right: 10
+    borderColor: COLORS.PRIMARY
   },
   saveButtonText: {
     fontSize: 28,
@@ -2736,7 +2895,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#000'
+    backgroundColor: '#000',
+    overflow: 'hidden'
   },
   bottomGallery: {
     position: 'absolute',
@@ -2907,5 +3067,31 @@ const styles = StyleSheet.create({
     aspectRatio: 4 / 3, // Landscape 4:3 aspect ratio
     position: 'relative',
     overflow: 'hidden'
+  },
+  // Hidden view for adding labels to photos
+  hiddenLabelView: {
+    position: 'absolute',
+    top: -10000,
+    left: 0,
+    width: 1080,
+    height: 1920
+  },
+  hiddenLabelImage: {
+    width: '100%',
+    height: '100%'
+  },
+  hiddenPhotoLabel: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    backgroundColor: COLORS.PRIMARY,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 12
+  },
+  hiddenPhotoLabelText: {
+    color: COLORS.TEXT,
+    fontSize: 24,
+    fontWeight: 'bold'
   }
 });

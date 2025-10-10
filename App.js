@@ -1,4 +1,5 @@
 import React from 'react';
+import { View, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -17,13 +18,15 @@ const Stack = createNativeStackNavigator();
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <SettingsProvider>
-        <PhotoProvider>
-          <NavigationContainer>
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <SafeAreaProvider>
+        <SettingsProvider>
+          <PhotoProvider>
+            <NavigationContainer>
             <Stack.Navigator
               screenOptions={{
-                headerShown: false
+                headerShown: false,
+                contentStyle: { backgroundColor: '#000' }
               }}
             >
               <Stack.Screen 
@@ -80,5 +83,6 @@ export default function App() {
         </PhotoProvider>
       </SettingsProvider>
     </SafeAreaProvider>
+    </View>
   );
 }

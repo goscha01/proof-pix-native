@@ -1,10 +1,11 @@
-import React, { useRef } from 'react';
+import React, { useRef, useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   Image,
   Dimensions,
   Alert,
@@ -24,6 +25,45 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function AllPhotosScreen({ navigation }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos } = usePhotos();
+  const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
+  const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
+  const longPressTimer = useRef(null);
+  const longPressTriggered = useRef(false);
+
+  // Long press handlers for full-screen photo
+  const handleLongPressStart = (photo, photoSet = null) => {
+    longPressTriggered.current = false;
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      if (photoSet) {
+        // Show combined preview with both photos
+        setFullScreenPhotoSet(photoSet);
+      } else {
+        // Show single photo
+        setFullScreenPhoto(photo);
+      }
+    }, 500); // 500ms for long press
+  };
+
+  const handleLongPressEnd = () => {
+    const wasLongPress = longPressTriggered.current;
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+    setFullScreenPhoto(null);
+    setFullScreenPhotoSet(null);
+    
+    // Only delay reset if it was actually a long press
+    if (wasLongPress) {
+      setTimeout(() => {
+        longPressTriggered.current = false;
+      }, 100);
+    } else {
+      // Quick tap - reset immediately so onPress can fire
+      longPressTriggered.current = false;
+    }
+  };
 
   // PanResponder for swipe down to close
   const panResponder = useRef(
@@ -111,12 +151,15 @@ export default function AllPhotosScreen({ navigation }) {
         <TouchableOpacity
           key={photoType}
           style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast]}
-          onPress={() => navigation.navigate('Camera', {
-            mode: 'after',
-            beforePhoto: photoSet.before,
-            afterPhoto: photoSet.after,
-            room: photoSet.before.room
-          })}
+          onPress={() => {
+            if (longPressTriggered.current) return;
+            navigation.navigate('PhotoEditor', {
+              beforePhoto: photoSet.before,
+              afterPhoto: photoSet.after
+            });
+          }}
+          onPressIn={() => handleLongPressStart(null, photoSet)}
+          onPressOut={handleLongPressEnd}
         >
           <View style={[styles.combinedThumbnail, isLandscape ? styles.stackedThumbnail : styles.sideBySideThumbnail]}>
             <Image source={{ uri: photoSet.before.uri }} style={styles.halfImage} resizeMode="cover" />
@@ -129,14 +172,13 @@ export default function AllPhotosScreen({ navigation }) {
     if (!photo) return <View key={photoType} style={[styles.photoCard, isLast && styles.photoCardLast]}>{renderDummyCard('—')}</View>;
 
     const handlePress = () => {
+      if (longPressTriggered.current) return;
+      
       if (photoType === 'combined') {
-        // Combined column - navigate to camera to retake after photo
-        navigation.navigate('Camera', {
-          mode: 'after',
+        // Combined column - navigate to PhotoEditor to choose format
+        navigation.navigate('PhotoEditor', {
           beforePhoto: photoSet.before,
-          afterPhoto: photoSet.after,
-          combinedPhoto: photo,
-          room: photoSet.before.room
+          afterPhoto: photoSet.after
         });
       } else {
         // Before or After column - show individual photo detail
@@ -149,6 +191,8 @@ export default function AllPhotosScreen({ navigation }) {
         key={photoType}
         style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast]}
         onPress={handlePress}
+        onPressIn={() => handleLongPressStart(photo, photoType === 'combined' ? photoSet : null)}
+        onPressOut={handleLongPressEnd}
       >
         <CroppedThumbnail
           imageUri={photo.uri}
@@ -203,15 +247,15 @@ export default function AllPhotosScreen({ navigation }) {
           <Text style={styles.backButtonText}>‹ Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>All Photos</Text>
-        {photos.length > 0 && (
-          <TouchableOpacity
-            style={styles.deleteAllButton}
-            onPress={handleDeleteAll}
-          >
-            <Text style={styles.deleteAllButtonText}>🗑️ Delete All</Text>
-          </TouchableOpacity>
-        )}
-        {photos.length === 0 && <View style={{ width: 60 }} />}
+        <TouchableOpacity
+          style={styles.uploadButton}
+          onPress={() => {
+            console.log('Upload button pressed');
+            Alert.alert('Upload', 'Upload functionality coming soon!');
+          }}
+        >
+          <Text style={styles.uploadButtonText}>📤</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.columnHeaders}>
@@ -232,6 +276,58 @@ export default function AllPhotosScreen({ navigation }) {
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           {ROOMS.map(room => renderRoomSection(room))}
         </ScrollView>
+      )}
+
+      {/* Delete All button at bottom - only show if photos exist */}
+      {photos.length > 0 && (
+        <TouchableOpacity
+          style={styles.deleteAllButtonBottom}
+          onPress={handleDeleteAll}
+        >
+          <Text style={styles.deleteAllButtonBottomText}>🗑️ Delete All Photos</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* Full-screen photo view - single photo */}
+      {fullScreenPhoto && (
+        <TouchableWithoutFeedback onPress={handleLongPressEnd}>
+          <View style={styles.fullScreenPhotoContainer}>
+            <Image
+              source={{ uri: fullScreenPhoto.uri }}
+              style={styles.fullScreenPhoto}
+              resizeMode="contain"
+            />
+          </View>
+        </TouchableWithoutFeedback>
+      )}
+
+      {/* Full-screen combined photo view - 1:1 square with before/after */}
+      {fullScreenPhotoSet && (
+        <TouchableWithoutFeedback onPress={handleLongPressEnd}>
+          <View style={styles.fullScreenPhotoContainer}>
+            <View style={[
+              styles.fullScreenCombinedPreview,
+              fullScreenPhotoSet.before.orientation === 'landscape' 
+                ? styles.fullScreenStacked 
+                : styles.fullScreenSideBySide
+            ]}>
+              <View style={styles.fullScreenHalf}>
+                <Image
+                  source={{ uri: fullScreenPhotoSet.before.uri }}
+                  style={styles.fullScreenHalfImage}
+                  resizeMode="cover"
+                />
+              </View>
+              <View style={styles.fullScreenHalf}>
+                <Image
+                  source={{ uri: fullScreenPhotoSet.after.uri }}
+                  style={styles.fullScreenHalfImage}
+                  resizeMode="cover"
+                />
+              </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
       )}
     </SafeAreaView>
   );
@@ -275,16 +371,34 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.TEXT
   },
-  deleteAllButton: {
-    backgroundColor: '#FF4444',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8
+  uploadButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.PRIMARY,
+    justifyContent: 'center',
+    alignItems: 'center'
   },
-  deleteAllButtonText: {
+  uploadButtonText: {
+    fontSize: 20
+  },
+  deleteAllButtonBottom: {
+    backgroundColor: '#FF4444',
+    marginHorizontal: 20,
+    marginBottom: 20,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5
+  },
+  deleteAllButtonBottomText: {
     color: 'white',
-    fontSize: 12,
-    fontWeight: '600'
+    fontWeight: 'bold',
+    fontSize: 16
   },
   columnHeaders: {
     flexDirection: 'row',
@@ -423,5 +537,44 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.GRAY,
     textAlign: 'center'
+  },
+  fullScreenPhotoContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000
+  },
+  fullScreenPhoto: {
+    width: '100%',
+    height: '100%'
+  },
+  fullScreenCombinedPreview: {
+    aspectRatio: 1,
+    width: '90%',
+    maxWidth: 500,
+    maxHeight: 500,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 3,
+    borderColor: COLORS.PRIMARY
+  },
+  fullScreenStacked: {
+    flexDirection: 'column'
+  },
+  fullScreenSideBySide: {
+    flexDirection: 'row'
+  },
+  fullScreenHalf: {
+    flex: 1
+  },
+  fullScreenHalfImage: {
+    width: '100%',
+    height: '100%'
   }
 });

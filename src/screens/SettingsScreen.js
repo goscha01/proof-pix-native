@@ -124,7 +124,7 @@ export default function SettingsScreen({ navigation }) {
             <View style={styles.settingInfo}>
               <Text style={styles.settingLabel}>Show Labels</Text>
               <Text style={styles.settingDescription}>
-                Display "BEFORE" and "AFTER" labels on combined photos
+                Display "BEFORE" and "AFTER" labels on all photos
               </Text>
             </View>
             <Switch
