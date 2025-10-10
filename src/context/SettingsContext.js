@@ -15,7 +15,6 @@ export const useSettings = () => {
 
 export const SettingsProvider = ({ children }) => {
   const [showLabels, setShowLabels] = useState(true);
-  const [cameraMode, setCameraMode] = useState('split'); // 'overlay' or 'split' - default is split
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('');
   const [loading, setLoading] = useState(true);
@@ -31,7 +30,6 @@ export const SettingsProvider = ({ children }) => {
       if (stored) {
         const settings = JSON.parse(stored);
         setShowLabels(settings.showLabels ?? true);
-        setCameraMode(settings.cameraMode ?? 'split'); // Default to split mode
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? '');
       }
@@ -46,7 +44,6 @@ export const SettingsProvider = ({ children }) => {
     try {
       const settings = {
         showLabels,
-        cameraMode,
         userName,
         location,
         ...newSettings
@@ -63,11 +60,6 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ showLabels: newValue });
   };
 
-  const updateCameraMode = async (mode) => {
-    setCameraMode(mode);
-    await saveSettings({ cameraMode: mode });
-  };
-
   const updateUserInfo = async (name, loc) => {
     setUserName(name);
     setLocation(loc);
@@ -77,8 +69,6 @@ export const SettingsProvider = ({ children }) => {
   const value = {
     showLabels,
     toggleLabels,
-    cameraMode,
-    updateCameraMode,
     userName,
     location,
     updateUserInfo,

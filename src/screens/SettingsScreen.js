@@ -16,8 +16,6 @@ export default function SettingsScreen({ navigation }) {
   const {
     showLabels,
     toggleLabels,
-    cameraMode,
-    updateCameraMode,
     userName,
     location,
     updateUserInfo
@@ -70,49 +68,6 @@ export default function SettingsScreen({ navigation }) {
               placeholderTextColor={COLORS.GRAY}
               onBlur={handleSaveUserInfo}
             />
-          </View>
-        </View>
-
-        {/* Camera Settings */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Camera Settings</Text>
-
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingLabel}>Camera Mode</Text>
-              <Text style={styles.settingDescription}>
-                Choose how photos are displayed in the camera
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.modeButtons}>
-            <TouchableOpacity
-              style={[
-                styles.modeButton,
-                cameraMode === 'split' && styles.modeButtonActive
-              ]}
-              onPress={() => updateCameraMode('split')}
-            >
-              <Text style={styles.modeButtonTitle}>Split Screen Mode (Default)</Text>
-              <Text style={styles.modeButtonDescription}>
-                Before: Gallery on top, Camera below
-                {'\n'}After: Before photo on top, Camera below
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[
-                styles.modeButton,
-                cameraMode === 'overlay' && styles.modeButtonActive
-              ]}
-              onPress={() => updateCameraMode('overlay')}
-            >
-              <Text style={styles.modeButtonTitle}>Overlay Mode</Text>
-              <Text style={styles.modeButtonDescription}>
-                Transparent before photo overlay on camera
-              </Text>
-            </TouchableOpacity>
           </View>
         </View>
 
