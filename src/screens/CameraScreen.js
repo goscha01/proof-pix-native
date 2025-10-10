@@ -49,6 +49,7 @@ export default function CameraScreen({ route, navigation }) {
   const [isGalleryAnimating, setIsGalleryAnimating] = useState(false);
   const [tempPhotoUri, setTempPhotoUri] = useState(null);
   const [tempPhotoLabel, setTempPhotoLabel] = useState(null);
+  const [tempPhotoDimensions, setTempPhotoDimensions] = useState({ width: 1080, height: 1920 });
   const longPressGalleryTimer = useRef(null);
   const enlargedGalleryScrollRef = useRef(null);
   const tapStartTime = useRef(null);
@@ -892,6 +893,7 @@ export default function CameraScreen({ route, navigation }) {
         Image.getSize(uri, async (width, height) => {
           console.log('Image dimensions:', width, 'x', height);
           console.log('Setting temp photo state for label capture');
+          setTempPhotoDimensions({ width, height });
           setTempPhotoUri(uri);
           setTempPhotoLabel(labelText);
           
@@ -909,17 +911,20 @@ export default function CameraScreen({ route, navigation }) {
                 console.log('Successfully captured labeled photo:', capturedUri);
                 setTempPhotoUri(null);
                 setTempPhotoLabel(null);
+                setTempPhotoDimensions({ width: 1080, height: 1920 });
                 resolve(capturedUri);
               } else {
                 console.log('Label view ref not found, returning original URI');
                 setTempPhotoUri(null);
                 setTempPhotoLabel(null);
+                setTempPhotoDimensions({ width: 1080, height: 1920 });
                 resolve(uri);
               }
             } catch (error) {
               console.error('Error adding label to photo:', error);
               setTempPhotoUri(null);
               setTempPhotoLabel(null);
+              setTempPhotoDimensions({ width: 1080, height: 1920 });
               resolve(uri);
             }
           }, 300);
@@ -1591,7 +1596,7 @@ export default function CameraScreen({ route, navigation }) {
                   <Text style={styles.galleryEmptyText}>
                     {mode === 'before' ? 'No photos yet' : 'All photos paired'}
                   </Text>
-                </View>
+      </View>
               );
             }
             
@@ -2151,7 +2156,13 @@ export default function CameraScreen({ route, navigation }) {
     return (
       <View
         ref={labelViewRef}
-        style={styles.hiddenLabelView}
+        style={[
+          styles.hiddenLabelView,
+          {
+            width: tempPhotoDimensions.width,
+            height: tempPhotoDimensions.height
+          }
+        ]}
         collapsable={false}
       >
         <Image
@@ -3072,9 +3083,7 @@ const styles = StyleSheet.create({
   hiddenLabelView: {
     position: 'absolute',
     top: -10000,
-    left: 0,
-    width: 1080,
-    height: 1920
+    left: 0
   },
   hiddenLabelImage: {
     width: '100%',
