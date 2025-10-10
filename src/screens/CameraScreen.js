@@ -25,6 +25,17 @@ import { CroppedThumbnail } from '../components/CroppedThumbnail';
 const initialDimensions = Dimensions.get('window');
 const initialWidth = initialDimensions.width;
 const initialHeight = initialDimensions.height;
+const initialOrientation = initialWidth > initialHeight ? 'landscape' : 'portrait';
+
+// Get initial specific orientation synchronously
+const getInitialSpecificOrientation = () => {
+  if (initialOrientation === 'portrait') {
+    return 1; // PORTRAIT
+  } else {
+    // For landscape, default to LANDSCAPE_LEFT (3) - will be corrected immediately by async check
+    return 3;
+  }
+};
 
 export default function CameraScreen({ route, navigation }) {
   const { mode, beforePhoto, afterPhoto: existingAfterPhoto, combinedPhoto: existingCombinedPhoto, room: initialRoom } = route.params || {};
@@ -44,8 +55,8 @@ export default function CameraScreen({ route, navigation }) {
   const [enlargedGalleryIndex, setEnlargedGalleryIndex] = useState(0);
   const [enlargedGalleryPhoto, setEnlargedGalleryPhoto] = useState(null);
   const [cameraViewMode, setCameraViewMode] = useState('portrait'); // 'portrait' or 'landscape'
-  const [deviceOrientation, setDeviceOrientation] = useState('portrait');
-  const [specificOrientation, setSpecificOrientation] = useState(1); // 1=PORTRAIT, 3=LANDSCAPE_LEFT, 4=LANDSCAPE_RIGHT
+  const [deviceOrientation, setDeviceOrientation] = useState(initialOrientation);
+  const [specificOrientation, setSpecificOrientation] = useState(getInitialSpecificOrientation()); // 1=PORTRAIT, 3=LANDSCAPE_LEFT, 4=LANDSCAPE_RIGHT
   const [isGalleryAnimating, setIsGalleryAnimating] = useState(false);
   const [tempPhotoUri, setTempPhotoUri] = useState(null);
   const [tempPhotoLabel, setTempPhotoLabel] = useState(null);
@@ -730,12 +741,18 @@ export default function CameraScreen({ route, navigation }) {
       // Update dimensions immediately for instant response
       setDimensions({ width: window.width, height: window.height });
       setDeviceOrientation(newOrientation);
+      
+      // Also update specificOrientation to match if there's a clear portrait/landscape change
+      if (newOrientation === 'portrait') {
+        setSpecificOrientation(1); // Force to portrait
+      }
+      // For landscape, let the ScreenOrientation listener handle the specific value (3 or 4)
     });
 
     // Get specific orientation (landscape-left vs landscape-right)
     const getSpecificOrientation = async () => {
       const orientation = await ScreenOrientation.getOrientationAsync();
-      console.log('Specific orientation value:', orientation);
+      console.log('Initial specific orientation value:', orientation);
       setSpecificOrientation(orientation);
     };
     
@@ -749,10 +766,23 @@ export default function CameraScreen({ route, navigation }) {
       };
       console.log('📱 Orientation changed to:', orientation, '-', orientationNames[orientation]);
       
-      // Update immediately - native rotation is already smooth
-      setSpecificOrientation(event.orientationInfo.orientation);
+      // Cross-check with dimensions to ensure consistency
+      const currentDims = Dimensions.get('window');
+      const currentOrientation = currentDims.width > currentDims.height ? 'landscape' : 'portrait';
+      
+      if (currentOrientation === 'portrait' && (orientation === 3 || orientation === 4)) {
+        console.log('⚠️ Listener mismatch! Dimensions say portrait, correcting to 1');
+        setSpecificOrientation(1);
+      } else if (currentOrientation === 'landscape' && orientation === 1) {
+        console.log('⚠️ Listener mismatch! Dimensions say landscape, keeping landscape value');
+        // Keep the landscape orientation (3 or 4) - don't force to portrait
+      } else {
+        // Update immediately - native rotation is already smooth
+        setSpecificOrientation(event.orientationInfo.orientation);
+      }
     });
     
+    // Get orientation immediately on mount
     getSpecificOrientation();
 
     return () => {
@@ -766,6 +796,31 @@ export default function CameraScreen({ route, navigation }) {
       requestPermission();
     }
   }, [permission]);
+
+  // Force orientation check on mount to ensure correct initial state
+  useEffect(() => {
+    const checkOrientation = async () => {
+      // Delay to ensure screen transition is complete and stable
+      setTimeout(async () => {
+        const orientation = await ScreenOrientation.getOrientationAsync();
+        const currentDims = Dimensions.get('window');
+        const currentOrientation = currentDims.width > currentDims.height ? 'landscape' : 'portrait';
+        console.log('🔄 Force orientation check on mount:', orientation, 'Dimensions:', currentDims.width, 'x', currentDims.height, 'Calculated:', currentOrientation);
+        
+        // Cross-check: If dimensions say portrait but API says landscape (or vice versa), trust dimensions
+        if (currentOrientation === 'portrait' && (orientation === 3 || orientation === 4)) {
+          console.log('⚠️ Orientation mismatch detected! Correcting to PORTRAIT (1)');
+          setSpecificOrientation(1);
+        } else if (currentOrientation === 'landscape' && orientation === 1) {
+          console.log('⚠️ Orientation mismatch detected! Correcting to LANDSCAPE (3)');
+          setSpecificOrientation(3);
+        } else {
+          setSpecificOrientation(orientation);
+        }
+      }, 250);
+    };
+    checkOrientation();
+  }, []);
 
   // Initialize selectedBeforePhoto from beforePhoto if not set
   useEffect(() => {
@@ -797,12 +852,19 @@ export default function CameraScreen({ route, navigation }) {
     }
   }, [selectedBeforePhoto, mode, beforePhoto]);
 
-  // In after mode, camera view mode follows device orientation (no toggle available)
+  // In after mode, camera view mode should match the before photo's camera view mode
   useEffect(() => {
     if (mode === 'after') {
-      setCameraViewMode(deviceOrientation);
+      const activeBeforePhoto = getActiveBeforePhoto();
+      if (activeBeforePhoto && activeBeforePhoto.cameraViewMode) {
+        console.log('Setting after camera view mode to match before photo:', activeBeforePhoto.cameraViewMode);
+        setCameraViewMode(activeBeforePhoto.cameraViewMode);
+      } else {
+        // Fallback to device orientation if no cameraViewMode saved
+        setCameraViewMode(deviceOrientation);
+      }
     }
-  }, [mode, deviceOrientation]);
+  }, [mode, deviceOrientation, selectedBeforePhoto]);
 
   // Log when selectedBeforePhoto changes in after mode
   useEffect(() => {
@@ -956,7 +1018,7 @@ export default function CameraScreen({ route, navigation }) {
       const currentOrientation = deviceOrientation;
       console.log('Saving before photo with orientation:', currentOrientation, 'Device:', deviceOrientation, 'Camera view mode:', cameraViewMode);
 
-      // Add to photos with device orientation
+      // Add to photos with device orientation AND camera view mode
       const newPhoto = {
         id: Date.now(),
         uri: savedUri,
@@ -965,7 +1027,8 @@ export default function CameraScreen({ route, navigation }) {
         name: photoName,
         timestamp: Date.now(),
         aspectRatio: cameraViewMode === 'landscape' ? '4:3' : '2:3',
-        orientation: currentOrientation
+        orientation: currentOrientation,
+        cameraViewMode: cameraViewMode // Save the camera view mode
       };
 
       await addPhoto(newPhoto);
@@ -1013,7 +1076,7 @@ export default function CameraScreen({ route, navigation }) {
         `${activeBeforePhoto.room}_${activeBeforePhoto.name}_AFTER_${Date.now()}.jpg`
       );
 
-      // Add after photo (use same aspect ratio and orientation as before photo)
+      // Add after photo (use same aspect ratio, orientation, and camera view mode as before photo)
       const newAfterPhoto = {
         id: Date.now(),
         uri: savedUri,
@@ -1023,7 +1086,8 @@ export default function CameraScreen({ route, navigation }) {
         timestamp: Date.now(),
         beforePhotoId: beforePhotoId,
         aspectRatio: activeBeforePhoto.aspectRatio || '4:3',
-        orientation: activeBeforePhoto.orientation || deviceOrientation
+        orientation: activeBeforePhoto.orientation || deviceOrientation,
+        cameraViewMode: activeBeforePhoto.cameraViewMode || 'portrait'
       };
 
       console.log('Adding after photo with beforePhotoId:', beforePhotoId);
@@ -1362,11 +1426,6 @@ export default function CameraScreen({ route, navigation }) {
         ]}
         {...cameraViewPanResponder.panHandlers}
       >
-        {/* Swipe indicator */}
-        <View style={styles.swipeIndicator}>
-          <View style={styles.swipeHandle} />
-        </View>
-
         {/* Orientation mismatch warning */}
         {(() => {
           const mismatch = isOrientationMismatch();
@@ -1483,6 +1542,11 @@ export default function CameraScreen({ route, navigation }) {
         >
           <Text style={styles.closeButtonText}>✕</Text>
         </TouchableOpacity>
+
+        {/* Swipe indicator - fixed to screen */}
+        <View style={styles.swipeIndicator}>
+          <View style={styles.swipeHandle} />
+        </View>
 
         <View style={styles.bottomControls}>
           {/* Main control row */}
@@ -2195,11 +2259,11 @@ const styles = StyleSheet.create({
   },
   swipeIndicator: {
     position: 'absolute',
-    bottom: 10,
+    bottom: 100,
     left: 0,
     right: 0,
     alignItems: 'center',
-    zIndex: 999,
+    zIndex: 10,
     paddingVertical: 10
   },
   swipeHandle: {

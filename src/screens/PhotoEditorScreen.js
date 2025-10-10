@@ -19,15 +19,16 @@ import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, TEMPLATE_CONFIGS } from '../consta
 export default function PhotoEditorScreen({ route, navigation }) {
   const { beforePhoto, afterPhoto } = route.params;
 
-  // Set default template based on orientation
-  // Portrait (vertical) → side-by-side (vertical split), Landscape (horizontal) → stacked (horizontal split)
+  // Set default template based on cameraViewMode (not device orientation)
+  // Landscape camera view → stacked (horizontal split), Portrait camera view → side-by-side (vertical split)
   const getDefaultTemplate = () => {
-    const orientation = beforePhoto.orientation || 'portrait';
-    if (orientation === 'landscape') {
-      // Horizontal photos create STACKED combined photos (horizontal split)
+    const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
+    console.log('PhotoEditor - Before photo cameraViewMode:', cameraViewMode);
+    if (cameraViewMode === 'landscape') {
+      // Landscape camera view creates STACKED combined photos (horizontal split)
       return TEMPLATE_TYPES.STACK_PORTRAIT;
     } else {
-      // Vertical photos create SIDE-BY-SIDE combined photos (vertical split)
+      // Portrait camera view creates SIDE-BY-SIDE combined photos (vertical split)
       return TEMPLATE_TYPES.SIDE_BY_SIDE_LANDSCAPE;
     }
   };
@@ -93,23 +94,23 @@ export default function PhotoEditorScreen({ route, navigation }) {
     })
   ).current;
 
-  // Filter templates based on orientation
-  // Landscape (horizontal) → only stacked templates, Portrait (vertical) → only side-by-side templates
+  // Filter templates based on cameraViewMode (not device orientation)
+  // Landscape camera view → only stacked templates, Portrait camera view → only side-by-side templates
   const getAvailableTemplates = () => {
-    const orientation = beforePhoto.orientation || 'portrait';
+    const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
     const allTemplates = Object.entries(TEMPLATE_CONFIGS);
 
-    console.log('Filtering templates for orientation:', orientation);
+    console.log('Filtering templates for cameraViewMode:', cameraViewMode);
 
-    if (orientation === 'landscape') {
-      // Horizontal photos: only STACKED layouts (horizontal split, top/bottom)
+    if (cameraViewMode === 'landscape') {
+      // Landscape camera view: only STACKED layouts (horizontal split, top/bottom)
       const filtered = allTemplates.filter(([key, config]) => config.layout === 'stack');
-      console.log('Landscape (horizontal) filtered templates (stack only):', filtered.map(([k, c]) => c.name));
+      console.log('Landscape camera view filtered templates (stack only):', filtered.map(([k, c]) => c.name));
       return filtered;
     } else {
-      // Vertical photos: only SIDE-BY-SIDE layouts (vertical split, left/right)
+      // Portrait camera view: only SIDE-BY-SIDE layouts (vertical split, left/right)
       const filtered = allTemplates.filter(([key, config]) => config.layout === 'sidebyside');
-      console.log('Portrait (vertical) filtered templates (side-by-side only):', filtered.map(([k, c]) => c.name));
+      console.log('Portrait camera view filtered templates (side-by-side only):', filtered.map(([k, c]) => c.name));
       return filtered;
     }
   };
@@ -139,7 +140,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
         name: beforePhoto.name,
         timestamp: Date.now(),
         templateType,
-        orientation: beforePhoto.orientation || 'portrait'
+        orientation: beforePhoto.orientation || 'portrait',
+        cameraViewMode: beforePhoto.cameraViewMode || 'portrait'
       };
 
       console.log('Saving combined photo:', combinedPhoto);

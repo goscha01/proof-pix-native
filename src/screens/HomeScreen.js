@@ -245,9 +245,9 @@ export default function HomeScreen({ navigation }) {
           );
         } else {
           // Has after photo but no combined yet - show split preview, tap to retake after
-          // Landscape (horizontal) = stacked (top/bottom), Portrait (vertical) = side-by-side (left/right)
-          const photoOrientation = beforePhoto.orientation || 'portrait';
-          const isLandscape = photoOrientation === 'landscape';
+          // Landscape camera view = stacked (top/bottom), Portrait camera view = side-by-side (left/right)
+          const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
+          const isLandscape = cameraViewMode === 'landscape';
 
           gridItems.push(
             <TouchableOpacity
@@ -382,7 +382,7 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.fullScreenPhotoContainer}>
             <View style={[
               styles.fullScreenCombinedPreview,
-              fullScreenPhotoSet.before.orientation === 'landscape' 
+              (fullScreenPhotoSet.before.cameraViewMode || fullScreenPhotoSet.before.orientation) === 'landscape' 
                 ? styles.fullScreenStacked 
                 : styles.fullScreenSideBySide
             ]}>
