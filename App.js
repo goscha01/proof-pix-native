@@ -43,7 +43,9 @@ export default function App() {
                   presentation: 'card',
                   animation: 'slide_from_bottom',
                   animationDuration: 300,
-                  contentStyle: { backgroundColor: '#000' }
+                  contentStyle: { backgroundColor: '#000' },
+                  orientation: 'all',
+                  autoHideHomeIndicator: false
                 }}
               />
               <Stack.Screen 

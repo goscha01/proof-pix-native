@@ -16,10 +16,17 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.proofpix.app",
+      "requireFullScreen": false,
       "infoPlist": {
         "NSCameraUsageDescription": "ProofPix needs access to your camera to take before and after photos.",
         "NSPhotoLibraryUsageDescription": "ProofPix needs access to your photo library to save before and after photos.",
-        "NSPhotoLibraryAddUsageDescription": "ProofPix needs permission to save photos to your library."
+        "NSPhotoLibraryAddUsageDescription": "ProofPix needs permission to save photos to your library.",
+        "UIViewControllerBasedStatusBarAppearance": true,
+        "UISupportedInterfaceOrientations": [
+          "UIInterfaceOrientationPortrait",
+          "UIInterfaceOrientationLandscapeLeft",
+          "UIInterfaceOrientationLandscapeRight"
+        ]
       }
     },
     "android": {

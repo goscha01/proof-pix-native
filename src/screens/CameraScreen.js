@@ -1543,11 +1543,6 @@ export default function CameraScreen({ route, navigation }) {
           <Text style={styles.closeButtonText}>✕</Text>
         </TouchableOpacity>
 
-        {/* Swipe indicator - fixed to screen */}
-        <View style={styles.swipeIndicator}>
-          <View style={styles.swipeHandle} />
-        </View>
-
         <View style={styles.bottomControls}>
           {/* Main control row */}
           <View style={styles.mainControlRow}>
@@ -1997,11 +1992,6 @@ export default function CameraScreen({ route, navigation }) {
           style={styles.container}
           {...combinedPanResponder.panHandlers}
         >
-          {/* Swipe down indicator */}
-          <View style={styles.swipeIndicator}>
-            <View style={styles.swipeHandle} />
-          </View>
-
           {/* Room name indicator with mode */}
           <View style={styles.roomIndicator}>
             <Text style={styles.roomIndicatorIcon}>{getCurrentRoomInfo().icon}</Text>
@@ -2111,11 +2101,6 @@ export default function CameraScreen({ route, navigation }) {
           style={styles.container}
           {...combinedPanResponder.panHandlers}
         >
-          {/* Swipe down indicator */}
-          <View style={styles.swipeIndicator}>
-            <View style={styles.swipeHandle} />
-          </View>
-
           {/* Room name indicator with mode */}
           <View style={styles.roomIndicator}>
             <Text style={styles.roomIndicatorIcon}>{getCurrentRoomInfo().icon}</Text>
@@ -2256,21 +2241,6 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     overflow: 'hidden'
-  },
-  swipeIndicator: {
-    position: 'absolute',
-    bottom: 100,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 10,
-    paddingVertical: 10
-  },
-  swipeHandle: {
-    width: 60,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: 'rgba(255, 255, 255, 0.5)'
   },
   orientationWarning: {
     position: 'absolute',
