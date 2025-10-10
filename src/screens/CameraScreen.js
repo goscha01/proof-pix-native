@@ -1125,7 +1125,13 @@ export default function CameraScreen({ route, navigation }) {
             [
               {
                 text: 'OK',
-                onPress: () => navigation.goBack()
+                onPress: () => {
+                  if (navigation.canGoBack()) {
+                    navigation.goBack();
+                  } else {
+                    navigation.navigate('Home');
+                  }
+                }
               }
             ]
           );

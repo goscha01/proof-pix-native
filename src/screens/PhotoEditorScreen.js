@@ -82,7 +82,11 @@ export default function PhotoEditorScreen({ route, navigation }) {
         
         // Swipe down to close
         if (dy > 100 && Math.abs(dx) < 50) {
-          navigation.goBack();
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          } else {
+            navigation.navigate('Home');
+          }
           return;
         }
         
@@ -98,8 +102,9 @@ export default function PhotoEditorScreen({ route, navigation }) {
     })
   ).current;
 
-  // Filter templates based on PHONE ORIENTATION or CAMERA VIEW MODE
-  // Landscape phone position OR landscape camera view → only stacked templates
+  // Filter templates based on PHONE ORIENTATION and CAMERA VIEW MODE
+  // Letterbox mode (landscape camera view) → ALL templates available
+  // Landscape phone position → only stacked templates
   // Portrait phone position AND portrait camera view → only side-by-side templates
   const getAvailableTemplates = () => {
     const phoneOrientation = beforePhoto.orientation || 'portrait';
@@ -108,18 +113,23 @@ export default function PhotoEditorScreen({ route, navigation }) {
 
     console.log('Filtering templates - Phone:', phoneOrientation, 'Camera view:', cameraViewMode);
 
-    // Use stacked if EITHER phone is landscape OR camera view is landscape (letterbox)
-    if (phoneOrientation === 'landscape' || cameraViewMode === 'landscape') {
-      // Only STACKED layouts (horizontal split, top/bottom)
+    // LETTERBOX mode (landscape camera view) - show ALL templates
+    if (cameraViewMode === 'landscape') {
+      console.log('Letterbox mode - showing ALL templates:', allTemplates.map(([k, c]) => c.name));
+      return allTemplates;
+    }
+    
+    // Landscape phone position - only stacked
+    if (phoneOrientation === 'landscape') {
       const filtered = allTemplates.filter(([key, config]) => config.layout === 'stack');
-      console.log('Landscape mode - filtered templates (stack only):', filtered.map(([k, c]) => c.name));
-      return filtered;
-    } else {
-      // Only SIDE-BY-SIDE layouts (vertical split, left/right)
-      const filtered = allTemplates.filter(([key, config]) => config.layout === 'sidebyside');
-      console.log('Portrait mode - filtered templates (side-by-side only):', filtered.map(([k, c]) => c.name));
+      console.log('Landscape phone - filtered templates (stack only):', filtered.map(([k, c]) => c.name));
       return filtered;
     }
+    
+    // Portrait phone + portrait camera - only side-by-side
+    const filtered = allTemplates.filter(([key, config]) => config.layout === 'sidebyside');
+    console.log('Portrait mode - filtered templates (side-by-side only):', filtered.map(([k, c]) => c.name));
+    return filtered;
   };
 
   const saveCombinedPhoto = async () => {
@@ -251,7 +261,13 @@ export default function PhotoEditorScreen({ route, navigation }) {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => {
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('Home');
+            }
+          }}
         >
           <Text style={styles.backButtonText}>‹ Back</Text>
         </TouchableOpacity>
