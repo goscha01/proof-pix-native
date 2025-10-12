@@ -16,7 +16,7 @@ export const useSettings = () => {
 export const SettingsProvider = ({ children }) => {
   const [showLabels, setShowLabels] = useState(true);
   const [userName, setUserName] = useState('');
-  const [location, setLocation] = useState('');
+  const [location, setLocation] = useState('tampa'); // Default to Tampa
   const [loading, setLoading] = useState(true);
 
   // Load settings on mount
@@ -31,7 +31,7 @@ export const SettingsProvider = ({ children }) => {
         const settings = JSON.parse(stored);
         setShowLabels(settings.showLabels ?? true);
         setUserName(settings.userName ?? '');
-        setLocation(settings.location ?? '');
+        setLocation(settings.location ?? 'tampa');
       }
     } catch (error) {
       console.error('Error loading settings:', error);

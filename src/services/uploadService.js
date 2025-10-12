@@ -1,0 +1,308 @@
+/**
+ * Upload Service
+ * Handles uploading photos to Google Drive via Google Apps Script
+ */
+
+import * as FileSystem from 'expo-file-system/legacy';
+
+/**
+ * Convert file URI to base64 data URL
+ * @param {string} fileUri - The file URI (file://...)
+ * @returns {Promise<string>} - Base64 data URL (data:image/jpeg;base64,...)
+ */
+async function fileUriToBase64(fileUri) {
+  try {
+    console.log('📸 Reading file:', fileUri);
+
+    // Read the file as base64 (using string encoding type)
+    let base64;
+
+    // Build candidate URIs to try reading
+    const candidates = [fileUri];
+    if (fileUri.startsWith('file:///private/var/')) {
+      candidates.push(fileUri.replace('file:///private/var/', 'file:///var/'));
+    } else if (fileUri.startsWith('/private/var/')) {
+      candidates.push(`file://${fileUri.replace('/private/var/', '/var/')}`);
+    }
+
+    let lastError = null;
+    for (const candidate of candidates) {
+      try {
+        if (candidate !== fileUri) {
+          console.warn('⚠️ Primary read failed, retrying with fallback URI:', candidate);
+        }
+        base64 = await FileSystem.readAsStringAsync(candidate, { encoding: 'base64' });
+        if (base64) {
+          console.log('✅ File converted to base64, length:', base64.length);
+          return `data:image/jpeg;base64,${base64}`;
+        }
+      } catch (err) {
+        lastError = err;
+      }
+    }
+
+    // As a final fallback, try copying the file into cacheDirectory and read from there
+    try {
+      const source = candidates[0];
+      const fileName = (source.split('/').pop() || `tmp_${Date.now()}.jpg`).replace(/\?.*$/, '');
+      const dest = `${FileSystem.cacheDirectory}${Date.now()}_${fileName}`;
+      console.warn('⚠️ Copying to cache for read:', dest);
+      await FileSystem.copyAsync({ from: source, to: dest });
+      base64 = await FileSystem.readAsStringAsync(dest, { encoding: 'base64' });
+      if (base64) {
+        console.log('✅ File converted to base64 from cache, length:', base64.length);
+        return `data:image/jpeg;base64,${base64}`;
+      }
+    } catch (copyErr) {
+      lastError = copyErr;
+    }
+
+    // If we got here, we failed all attempts
+    if (lastError) throw lastError;
+    throw new Error('Unknown file read error');
+  } catch (error) {
+    console.error('❌ Error converting file to base64:', error);
+    throw new Error('Failed to read image file');
+  }
+}
+
+// Normalize any local path/URI into a proper file URI that Expo FS can read
+function normalizeFileUri(input) {
+  if (!input) return input;
+  if (input.startsWith('data:')) return input;
+  if (input.startsWith('file://')) return input;
+  if (input.startsWith('/')) return `file://${input}`; // iOS absolute path -> file:///...
+  return input;
+}
+
+/**
+ * Upload a single photo to Google Drive
+ * @param {Object} params - Upload parameters
+ * @param {string} params.imageDataUrl - Base64 data URL of the image
+ * @param {string} params.filename - Filename for the uploaded image
+ * @param {string} params.albumName - Album name (e.g., "John - Tampa - Dec 21, 2024")
+ * @param {string} params.room - Room name (e.g., "kitchen", "bathroom")
+ * @param {string} params.type - Photo type ("before", "after", or "mix")
+ * @param {string} params.format - Format type (e.g., "default", "portrait", "square")
+ * @param {string} params.location - Location/city
+ * @param {string} params.cleanerName - Cleaner's name
+ * @param {string} params.scriptUrl - Google Apps Script URL
+ * @param {string} params.folderId - Google Drive folder ID
+ * @param {Function} params.onProgress - Progress callback (optional)
+ * @returns {Promise<Object>} - Upload result
+ */
+export async function uploadPhoto({
+  imageDataUrl,
+  filename,
+  albumName,
+  room,
+  type,
+  format = 'default',
+  location,
+  cleanerName,
+  scriptUrl,
+  folderId,
+  onProgress
+}) {
+  try {
+    console.log(`📤 Starting upload: ${filename}, type: ${type}, format: ${format}`);
+
+    if (!scriptUrl || !folderId) {
+      throw new Error('Missing Google Drive configuration. Please set Script URL and Folder ID in Settings.');
+    }
+
+    if (!imageDataUrl) {
+      throw new Error('Missing image data');
+    }
+
+    // Convert to base64 if not already a data URL
+    let base64DataUrl = imageDataUrl;
+    if (!imageDataUrl.startsWith('data:')) {
+      const normalized = normalizeFileUri(imageDataUrl);
+      console.log('🔄 Converting URI to base64 (normalized):', normalized.substring(0, 60));
+      base64DataUrl = await fileUriToBase64(normalized);
+    } else {
+      console.log('✅ Already a data URL, length:', imageDataUrl.length);
+    }
+
+    // Extract just the base64 string (remove data:image/jpeg;base64, prefix if present)
+    let base64String = base64DataUrl;
+    if (base64DataUrl.includes('base64,')) {
+      base64String = base64DataUrl.split('base64,')[1];
+    }
+
+    console.log(`📊 Base64 string length: ${base64String.length}`);
+
+    // Prepare form data
+    const formData = new FormData();
+    formData.append('folderId', folderId);
+    formData.append('filename', filename);
+    formData.append('albumName', albumName);
+    formData.append('room', room || 'general');
+    formData.append('type', type);
+    formData.append('format', format);
+    formData.append('timestamp', Date.now().toString());
+    formData.append('location', location);
+    formData.append('cleanerName', cleanerName);
+    formData.append('image', base64String);
+
+    console.log(`🚀 Uploading to Google Drive...`);
+
+    // Upload to Google Drive
+    const response = await fetch(scriptUrl, {
+      method: 'POST',
+      body: formData
+    });
+
+    console.log(`📥 Response status: ${response.status}`);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ HTTP error! status: ${response.status}, body:`, errorText);
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log(`📋 Upload result:`, result);
+
+    if (result.success) {
+      console.log(`✅ Upload successful: ${filename}`);
+      return result;
+    } else {
+      console.error(`❌ Upload failed: ${result.message}`);
+      throw new Error(result.message || 'Upload failed');
+    }
+  } catch (error) {
+    console.error(`❌ Upload error for ${filename}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Upload multiple photos in batches
+ * @param {Array} photos - Array of photo objects with upload parameters
+ * @param {Object} config - Upload configuration
+ * @param {string} config.scriptUrl - Google Apps Script URL
+ * @param {string} config.folderId - Google Drive folder ID
+ * @param {string} config.albumName - Album name
+ * @param {string} config.location - Location/city
+ * @param {string} config.cleanerName - Cleaner's name
+ * @param {number} config.batchSize - Number of concurrent uploads (default: 3)
+ * @param {Function} config.onProgress - Progress callback (current, total)
+ * @param {Function} config.onBatchComplete - Callback after each batch
+ * @returns {Promise<Object>} - Upload results { successful: [], failed: [] }
+ */
+export async function uploadPhotoBatch(photos, config) {
+  const {
+    scriptUrl,
+    folderId,
+    albumName,
+    location,
+    cleanerName,
+    batchSize = 3,
+    onProgress,
+    onBatchComplete
+  } = config;
+
+  const successful = [];
+  const failed = [];
+  let completed = 0;
+  const total = photos.length;
+
+  // Split photos into batches
+  const batches = [];
+  for (let i = 0; i < photos.length; i += batchSize) {
+    batches.push(photos.slice(i, i + batchSize));
+  }
+
+  // Process each batch
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+    const batch = batches[batchIndex];
+
+    // Process all photos in the batch concurrently
+    const batchPromises = batch.map(photo => {
+      // Map photo mode to upload type
+      const photoType = photo.mode || photo.type || 'mix';
+
+      // Determine the format based on photo type
+      let format = 'default';
+      if (photoType === 'mix' && photo.templateType) {
+        // Combined photos use their templateType as the format
+        format = photo.templateType;
+      } else if (photo.format) {
+        // Use explicit format if provided
+        format = photo.format;
+      }
+
+      return uploadPhoto({
+        imageDataUrl: photo.uri,
+        filename: photo.filename || `${photo.name}_${format !== 'default' ? format : photoType}.jpg`,
+        albumName,
+        room: photo.room || 'general',
+        type: photoType,
+        format: format,
+        location,
+        cleanerName,
+        scriptUrl,
+        folderId
+      })
+        .then(result => ({ success: true, result, photo }))
+        .catch(error => ({ success: false, error, photo }));
+    });
+
+    // Wait for batch to complete
+    const results = await Promise.allSettled(batchPromises);
+
+    // Process results
+    results.forEach((result) => {
+      completed++;
+
+      if (result.status === 'fulfilled' && result.value.success) {
+        console.log(`✅ Batch upload success: ${result.value.photo?.filename || 'unknown'}`);
+        successful.push(result.value);
+      } else {
+        const errorInfo = result.value || { error: 'Unknown error', photo: null };
+        console.error(`❌ Batch upload failed:`, {
+          filename: errorInfo.photo?.filename,
+          error: errorInfo.error?.message || errorInfo.error
+        });
+        failed.push(errorInfo);
+      }
+
+      // Call progress callback
+      if (onProgress) {
+        onProgress(completed, total);
+      }
+    });
+
+    // Call batch complete callback
+    if (onBatchComplete) {
+      onBatchComplete(batchIndex + 1, batches.length);
+    }
+
+    // Small delay between batches to avoid overwhelming the server
+    if (batchIndex < batches.length - 1) {
+      await new Promise(resolve => setTimeout(resolve, 500));
+    }
+  }
+
+  return { successful, failed };
+}
+
+/**
+ * Create an album name from user info and date
+ * @param {string} userName - User/cleaner name
+ * @param {string} location - Location/city
+ * @param {Date} date - Date object (defaults to now)
+ * @returns {string} - Album name (e.g., "John - Tampa - Dec 21, 2024")
+ */
+export function createAlbumName(userName, location, date = new Date()) {
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[date.getMonth()];
+  const day = date.getDate();
+  const year = date.getFullYear();
+
+  const formattedLocation = location.charAt(0).toUpperCase() + location.slice(1).replace(/-/g, ' ');
+
+  return `${userName} - ${formattedLocation} - ${month} ${day}, ${year}`;
+}
