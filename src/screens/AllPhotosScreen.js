@@ -186,9 +186,25 @@ export default function AllPhotosScreen({ navigation }) {
           });
         });
 
-        // Calculate total renders needed
+        // Calculate total renders needed with per-pair filtering (match preview rules)
         const selectedTemplateKeys = Object.keys(TEMPLATE_CONFIGS).filter(k => selectedFormats[k]);
-        const totalRenders = pairs.length * selectedTemplateKeys.length;
+
+        const getAllowedTemplatesForPair = (pair) => {
+          const before = pair.before;
+          const beforeOrientation = before.orientation || 'portrait';
+          const cameraVM = before.cameraViewMode || 'portrait';
+          const isLetterbox = (cameraVM === 'landscape' && beforeOrientation === 'portrait');
+          const isLandscape = beforeOrientation === 'landscape' || cameraVM === 'landscape';
+
+          return selectedTemplateKeys.filter((key) => {
+            const layout = TEMPLATE_CONFIGS[key]?.layout;
+            if (isLetterbox) return true; // both stack and side-by-side
+            if (isLandscape) return layout === 'stack';
+            return layout === 'sidebyside';
+          });
+        };
+
+        const totalRenders = pairs.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
 
         if (totalRenders === 0) {
           Alert.alert('Nothing to Upload', 'No before/after pairs available to create combined photos.');
@@ -202,7 +218,8 @@ export default function AllPhotosScreen({ navigation }) {
         // Render each combination
         let renderCount = 0;
         for (const pair of pairs) {
-          for (const templateKey of selectedTemplateKeys) {
+          const allowedKeys = getAllowedTemplatesForPair(pair);
+          for (const templateKey of allowedKeys) {
             const cfg = TEMPLATE_CONFIGS[templateKey];
 
             // Set the current render
