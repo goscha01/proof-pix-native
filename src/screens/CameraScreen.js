@@ -11,7 +11,8 @@ import {
   ScrollView,
   Platform,
   PanResponder,
-  Animated
+  Animated,
+  PixelRatio
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { captureRef } from 'react-native-view-shot';
@@ -87,6 +88,12 @@ export default function CameraScreen({ route, navigation }) {
   const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom } = usePhotos();
   const { showLabels } = useSettings();
   const labelViewRef = useRef(null);
+  // Hidden vertical side-by-side base renderer
+  const sideBaseRef = useRef(null);
+  const [sideBasePair, setSideBasePair] = useState(null); // { beforeUri, afterUri }
+  const [sideBaseDims, setSideBaseDims] = useState(null); // { width, height, leftW, rightW }
+  const [sideLoadedA, setSideLoadedA] = useState(false);
+  const [sideLoadedB, setSideLoadedB] = useState(false);
 
   // Helper function to get the active before photo based on current room and mode
   const getActiveBeforePhoto = () => {
@@ -1173,6 +1180,100 @@ export default function CameraScreen({ route, navigation }) {
       console.log('Adding after photo with beforePhotoId:', beforePhotoId);
       await addPhoto(newAfterPhoto);
 
+      // Step 1: Create vertical side-by-side base combined (no crop, no padding, untransformed)
+      try {
+        // Measure original sizes
+        const getSize = (u) => new Promise((resolve) => {
+          Image.getSize(u, (w, h) => resolve({ w, h }), () => resolve({ w: 1080, h: 1920 }));
+        });
+        const aSize = await getSize(activeBeforePhoto.uri);
+        const bSize = await getSize(savedUri);
+        // Choose a relative total width: match device width in pixels for good fidelity
+        const logicalW = Dimensions.get('window').width;
+        const pixelScale = PixelRatio.get() || 2;
+        const totalW = Math.min(2160, Math.max(720, Math.round(logicalW * pixelScale))); // relative to device, capped
+
+        // Decide layout: landscape or letterbox -> STACK, else SIDE-BY-SIDE
+        const beforeOrientation = activeBeforePhoto.orientation || 'portrait';
+        const cameraVM = activeBeforePhoto.cameraViewMode || 'portrait';
+        const isLandscapePair = beforeOrientation === 'landscape' || cameraVM === 'landscape';
+
+        let dimsLocal;
+        if (isLandscapePair) {
+          // STACK: heights sum based on width
+          const r1h = aSize.h / aSize.w; // height per unit width
+          const r2h = bSize.h / bSize.w;
+          const totalH = Math.max(400, Math.round(totalW * (r1h + r2h)));
+          const topH = Math.round(totalW * r1h);
+          const bottomH = totalH - topH;
+          dimsLocal = { width: totalW, height: totalH, topH, bottomH };
+          console.log('🟩 Stack base dims:', { totalW, totalH, topH, bottomH, r1h, r2h });
+        } else {
+          // SIDE-BY-SIDE: widths split based on height-normalized ratios
+          const r1w = aSize.w / aSize.h;
+          const r2w = bSize.w / bSize.h;
+          const denom = (r1w + r2w) || 1;
+          const totalH = Math.max(400, Math.round(totalW / denom));
+          const leftW = Math.round(totalW * (r1w / denom));
+          const rightW = totalW - leftW;
+          dimsLocal = { width: totalW, height: totalH, leftW, rightW };
+          console.log('🟩 Side base dims:', { totalW, totalH, leftW, rightW, r1w, r2w });
+        }
+
+        setSideBaseDims(dimsLocal);
+        setSideBasePair({ beforeUri: activeBeforePhoto.uri, afterUri: savedUri, isLandscapePair });
+
+        // Allow mount (short)
+        console.log('🟩 Side base waiting for mount...');
+        await new Promise((r) => setTimeout(r, 60));
+        console.log('🟩 Side base mount complete');
+
+        // Prefetch images to improve load reliability
+        try {
+          await Promise.all([
+            Image.prefetch(activeBeforePhoto.uri),
+            Image.prefetch(savedUri)
+          ]);
+          console.log('🟩 Side base images prefetched');
+        } catch (pfErr) {
+          console.warn('⚠️ Side base prefetch failed:', pfErr?.message);
+        }
+        // Brief wait for images to load; don't block long
+        const start = Date.now();
+        const maxWaitMs = 300; // keep UI snappy
+        while (!(sideLoadedA && sideLoadedB) && (Date.now() - start) < maxWaitMs) {
+          await new Promise((r) => setTimeout(r, 20));
+        }
+        console.log('🟩 Side base load flags:', { sideLoadedA, sideLoadedB, hasRef: !!sideBaseRef.current });
+
+        // Capture without altering proportions
+        if (sideBaseRef.current) {
+          console.log('📸 Side base capturing with size:', dimsLocal.width, 'x', dimsLocal.height);
+          const capUri = await captureRef(sideBaseRef, {
+            format: 'jpg',
+            quality: 0.95,
+            width: dimsLocal.width,
+            height: dimsLocal.height
+          });
+          console.log('📸 Side base captured URI:', capUri);
+          const safeName = (activeBeforePhoto.name || 'Photo').replace(/\s+/g, '_');
+          const savedCombined = await savePhotoToDevice(
+            capUri,
+            `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}.jpg`
+          );
+          console.log('✅ Side base saved to device:', savedCombined);
+        } else {
+          console.warn('⚠️ Side base capture skipped: missing ref');
+        }
+      } catch (e) {
+        console.warn('⚠️ Side-by-side base save failed:', e?.message);
+      } finally {
+        setSideBasePair(null);
+        setSideBaseDims(null);
+        setSideLoadedA(false);
+        setSideLoadedB(false);
+      }
+
       // If we're replacing an existing combined photo, navigate to PhotoEditor to recreate it
       if (existingCombinedPhoto) {
         console.log('Navigating to PhotoEditor to recreate combined photo');
@@ -1959,6 +2060,57 @@ export default function CameraScreen({ route, navigation }) {
     <>
       {renderOverlayMode()}
       {renderLabelView()}
+
+      {/* Hidden vertical side-by-side renderer (no transform, no padding) */}
+      {sideBasePair && sideBaseDims && (
+        <View
+          ref={sideBaseRef}
+          style={{ position: 'absolute', top: -10000, left: 0, width: sideBaseDims.width, height: sideBaseDims.height, backgroundColor: 'transparent' }}
+          collapsable={false}
+        >
+          {sideBasePair.isLandscapePair ? (
+            // STACKED
+            <View style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+              <View style={{ width: '100%', height: sideBaseDims.topH }}>
+                <Image
+                  source={{ uri: sideBasePair.beforeUri }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode="cover"
+                  onLoad={() => setSideLoadedA(true)}
+                />
+              </View>
+              <View style={{ width: '100%', height: sideBaseDims.bottomH }}>
+                <Image
+                  source={{ uri: sideBasePair.afterUri }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode="cover"
+                  onLoad={() => setSideLoadedB(true)}
+                />
+              </View>
+            </View>
+          ) : (
+            // SIDE-BY-SIDE
+            <View style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
+              <View style={{ width: sideBaseDims.leftW, height: '100%' }}>
+                <Image
+                  source={{ uri: sideBasePair.beforeUri }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode="cover"
+                  onLoad={() => setSideLoadedA(true)}
+                />
+              </View>
+              <View style={{ width: sideBaseDims.rightW, height: '100%' }}>
+                <Image
+                  source={{ uri: sideBasePair.afterUri }}
+                  style={{ width: '100%', height: '100%' }}
+                  resizeMode="cover"
+                  onLoad={() => setSideLoadedB(true)}
+                />
+              </View>
+            </View>
+          )}
+        </View>
+      )}
     </>
   );
 }

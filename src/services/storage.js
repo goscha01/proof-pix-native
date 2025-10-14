@@ -1,6 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
+import * as FS from 'expo-file-system';
 import * as MediaLibrary from 'expo-media-library';
+import { Platform } from 'react-native';
 
 const PHOTOS_METADATA_KEY = 'cleaning-photos-metadata';
 const USER_PREFS_KEY = 'user-preferences';
@@ -69,10 +71,12 @@ export const savePhotoToDevice = async (uri, filename) => {
 
     // First, copy to app's document directory (for reliable access)
     const fileUri = `${FileSystem.documentDirectory}${filename}`;
+    let finalFileUri = fileUri;
 
     // If the URI is already in our directory, use it directly
     if (uri.startsWith(FileSystem.documentDirectory)) {
       console.log('📱 Photo already in document directory');
+      finalFileUri = uri; // keep the original file path
     } else {
       // Copy to document directory
       await FileSystem.copyAsync({
@@ -80,6 +84,7 @@ export const savePhotoToDevice = async (uri, filename) => {
         to: fileUri
       });
       console.log('📱 Photo copied to:', fileUri);
+      finalFileUri = fileUri;
     }
 
     // Request permission for media library
@@ -87,7 +92,7 @@ export const savePhotoToDevice = async (uri, filename) => {
     if (status === 'granted') {
       try {
         // Also save to media library (device photos)
-        const asset = await MediaLibrary.createAssetAsync(uri);
+        const asset = await MediaLibrary.createAssetAsync(finalFileUri);
 
         // Create/add to ProofPix album
         const album = await MediaLibrary.getAlbumAsync('ProofPix');
@@ -98,7 +103,27 @@ export const savePhotoToDevice = async (uri, filename) => {
         }
         console.log('📱 Photo saved to media library');
       } catch (mlError) {
-        console.warn('⚠️ Could not save to media library (Expo Go limitation):', mlError.message);
+        console.warn('⚠️ Could not save to media library (Expo Go/permission):', mlError.message);
+        // Android fallback: StorageAccessFramework prompt to save into user-selected folder (e.g., Pictures)
+        if (Platform.OS === 'android' && FS?.StorageAccessFramework) {
+          try {
+            const permissions = await FS.StorageAccessFramework.requestDirectoryPermissionsAsync();
+            if (permissions.granted) {
+              const base64 = await FileSystem.readAsStringAsync(finalFileUri, { encoding: FileSystem.EncodingType.Base64 });
+              const fileUriSAF = await FS.StorageAccessFramework.createFileAsync(
+                permissions.directoryUri,
+                filename,
+                'image/jpeg'
+              );
+              await FileSystem.writeAsStringAsync(fileUriSAF, base64, { encoding: FileSystem.EncodingType.Base64 });
+              console.log('📱 Photo saved via SAF to user-selected directory');
+            } else {
+              console.warn('⚠️ SAF directory permission not granted');
+            }
+          } catch (safError) {
+            console.warn('⚠️ SAF fallback failed:', safError.message);
+          }
+        }
       }
     } else {
       console.warn('⚠️ Media library permission denied, photo saved to app only');
@@ -106,7 +131,7 @@ export const savePhotoToDevice = async (uri, filename) => {
 
     console.log('📱 Photo saved successfully');
     // Return the file URI (not the ph:// URL from media library)
-    return uri.startsWith(FileSystem.documentDirectory) ? uri : fileUri;
+    return finalFileUri;
   } catch (error) {
     console.error('Error saving photo to device:', error);
     throw error;
