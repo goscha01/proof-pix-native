@@ -1197,6 +1197,7 @@ export default function CameraScreen({ route, navigation }) {
         const beforeOrientation = activeBeforePhoto.orientation || 'portrait';
         const cameraVM = activeBeforePhoto.cameraViewMode || 'portrait';
         const isLandscapePair = beforeOrientation === 'landscape' || cameraVM === 'landscape';
+        const isLetterbox = (beforeOrientation === 'portrait' && cameraVM === 'landscape');
 
         let dimsLocal;
         if (isLandscapePair) {
@@ -1257,11 +1258,64 @@ export default function CameraScreen({ route, navigation }) {
           });
           console.log('📸 Side base captured URI:', capUri);
           const safeName = (activeBeforePhoto.name || 'Photo').replace(/\s+/g, '_');
-          const savedCombined = await savePhotoToDevice(
+          const baseType = isLandscapePair ? 'STACK' : 'SIDE';
+          const firstSaved = await savePhotoToDevice(
             capUri,
-            `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}.jpg`
+            `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_${baseType}_${Date.now()}.jpg`
           );
-          console.log('✅ Side base saved to device:', savedCombined);
+          console.log(`✅ Base (${baseType}) saved to device:`, firstSaved);
+
+          // In LETTERBOX, also save the SIDE-BY-SIDE variant in addition to STACK
+          if (isLetterbox) {
+            try {
+              // Prepare side-by-side dims based on existing sizes and totalW
+              const r1wLB = aSize.w / aSize.h;
+              const r2wLB = bSize.w / bSize.h;
+              const denomLB = (r1wLB + r2wLB) || 1;
+              const totalHLB = Math.max(400, Math.round(totalW / denomLB));
+              const leftWLB = Math.round(totalW * (r1wLB / denomLB));
+              const rightWLB = totalW - leftWLB;
+              const sideDimsLB = { width: totalW, height: totalHLB, leftW: leftWLB, rightW: rightWLB };
+              console.log('🟩 Letterbox extra side-by-side dims:', { totalW, totalHLB, leftWLB, rightWLB, r1wLB, r2wLB });
+
+              // Reset load flags and mount the side-by-side renderer
+              setSideLoadedA(false);
+              setSideLoadedB(false);
+              setSideBaseDims(sideDimsLB);
+              setSideBasePair({ beforeUri: activeBeforePhoto.uri, afterUri: savedUri, isLandscapePair: false });
+
+              console.log('🟩 Letterbox side-by-side waiting for mount...');
+              await new Promise((r) => setTimeout(r, 60));
+              console.log('🟩 Letterbox side-by-side mount complete');
+
+              // Brief wait for images to load
+              const startLB = Date.now();
+              const maxWaitMsLB = 300;
+              while (!(sideLoadedA && sideLoadedB) && (Date.now() - startLB) < maxWaitMsLB) {
+                await new Promise((r) => setTimeout(r, 20));
+              }
+              console.log('🟩 Letterbox side-by-side load flags:', { sideLoadedA, sideLoadedB, hasRef: !!sideBaseRef.current });
+
+              if (sideBaseRef.current) {
+                console.log('📸 Letterbox side-by-side capturing with size:', sideDimsLB.width, 'x', sideDimsLB.height);
+                const capUriLB = await captureRef(sideBaseRef, {
+                  format: 'jpg',
+                  quality: 0.95,
+                  width: sideDimsLB.width,
+                  height: sideDimsLB.height
+                });
+                const secondSaved = await savePhotoToDevice(
+                  capUriLB,
+                  `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}.jpg`
+                );
+                console.log('✅ Letterbox side-by-side base saved to device:', secondSaved);
+              } else {
+                console.warn('⚠️ Letterbox side-by-side capture skipped: missing ref');
+              }
+            } catch (eLB) {
+              console.warn('⚠️ Letterbox side-by-side base save failed:', eLB?.message);
+            }
+          }
         } else {
           console.warn('⚠️ Side base capture skipped: missing ref');
         }
