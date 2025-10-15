@@ -11,7 +11,8 @@ import {
   Alert,
   PanResponder,
   Modal,
-  ActivityIndicator
+  ActivityIndicator,
+  Switch
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
@@ -21,6 +22,7 @@ import { CroppedThumbnail } from '../components/CroppedThumbnail';
 import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
 import { getLocationConfig } from '../config/locations';
 import { captureRef } from 'react-native-view-shot';
+import * as FileSystem from 'expo-file-system/legacy';
 
 const { width } = Dimensions.get('window');
 const SET_NAME_WIDTH = 80;
@@ -37,6 +39,8 @@ export default function AllPhotosScreen({ navigation }) {
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [optionsVisible, setOptionsVisible] = useState(false);
+  const [manageVisible, setManageVisible] = useState(false);
+  const [deleteFromStorage, setDeleteFromStorage] = useState(false);
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: false });
   const [selectedFormats, setSelectedFormats] = useState(() => {
     // Default: all formats pre-selected
@@ -304,10 +308,12 @@ export default function AllPhotosScreen({ navigation }) {
     }
   };
 
-  const handleDeleteAll = () => {
+  const handleDeleteAll = (alsoDeleteFiles = false) => {
     Alert.alert(
       'Delete All Photos',
-      'Are you sure you want to delete all photos? This action cannot be undone.',
+      alsoDeleteFiles
+        ? 'Are you sure you want to delete all photos? This will also remove the photo files from phone storage. This action cannot be undone.'
+        : 'Are you sure you want to delete all photos? This action cannot be undone.',
       [
         {
           text: 'Cancel',
@@ -317,7 +323,22 @@ export default function AllPhotosScreen({ navigation }) {
           text: 'Delete All',
           style: 'destructive',
           onPress: async () => {
-            await deleteAllPhotos();
+            try {
+              if (alsoDeleteFiles) {
+                // Best-effort delete of files stored in app document directory
+                for (const p of photos) {
+                  try {
+                    if (p?.uri && typeof p.uri === 'string' && p.uri.startsWith(FileSystem.documentDirectory)) {
+                      await FileSystem.deleteAsync(p.uri, { idempotent: true });
+                    }
+                  } catch (fileErr) {
+                    console.warn('⚠️ Failed deleting file:', p?.uri, fileErr?.message);
+                  }
+                }
+              }
+            } finally {
+              await deleteAllPhotos();
+            }
             Alert.alert('Success', 'All photos have been deleted');
           }
         }
@@ -466,12 +487,7 @@ export default function AllPhotosScreen({ navigation }) {
           <Text style={styles.backButtonText}>‹ Back</Text>
         </TouchableOpacity>
         <Text style={styles.title}>All Photos</Text>
-        <TouchableOpacity
-          style={styles.uploadButton}
-          onPress={handleUploadPhotos}
-        >
-          <Text style={styles.uploadButtonText}>📤</Text>
-        </TouchableOpacity>
+        <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.columnHeaders}>
@@ -494,13 +510,13 @@ export default function AllPhotosScreen({ navigation }) {
         </ScrollView>
       )}
 
-      {/* Delete All button at bottom - only show if photos exist */}
+      {/* Manage Projects button at bottom - only show if photos exist */}
       {photos.length > 0 && (
         <TouchableOpacity
-          style={styles.deleteAllButtonBottom}
-          onPress={handleDeleteAll}
+          style={[styles.deleteAllButtonBottom, { backgroundColor: '#22A45D' }]}
+          onPress={() => setManageVisible(true)}
         >
-          <Text style={styles.deleteAllButtonBottomText}>🗑️ Delete All Photos</Text>
+          <Text style={styles.deleteAllButtonBottomText}>🗂️ Manage Projects</Text>
         </TouchableOpacity>
       )}
 
@@ -698,6 +714,98 @@ export default function AllPhotosScreen({ navigation }) {
               <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary]} onPress={startUploadWithOptions}>
                 <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Start Upload</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Manage Projects Modal */}
+      <Modal
+        visible={manageVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setManageVisible(false)}
+      >
+        <View style={styles.optionsModalOverlay}>
+          <View style={styles.optionsModalContent}>
+            <Text style={styles.optionsTitle}>Manage Projects</Text>
+
+            <View>
+              <View style={{ marginTop: 4 }} />
+
+              <View style={styles.actionsList}>
+                {/* New (green) */}
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionWide, styles.actionGreen]}
+                  onPress={() => {
+                    setManageVisible(false);
+                    Alert.alert('New', 'Coming soon');
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>🆕 New</Text>
+                </TouchableOpacity>
+
+                {/* Save (amber) */}
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionWide, styles.actionSave]}
+                  onPress={() => {
+                    setManageVisible(false);
+                    Alert.alert('Save', 'Coming soon');
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, styles.actionSaveText]}>💾 Save</Text>
+                </TouchableOpacity>
+
+                {/* Upload (primary) */}
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}
+                  onPress={() => {
+                    setManageVisible(false);
+                    handleUploadPhotos();
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>📤 Upload</Text>
+                </TouchableOpacity>
+
+                {/* Share to (light blue) */}
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionWide, styles.actionInfo]}
+                  onPress={() => {
+                    setManageVisible(false);
+                    Alert.alert('Share to', 'Coming soon');
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, styles.actionInfoText]}>🔗 Share to</Text>
+                </TouchableOpacity>
+
+                {/* Delete All (red) */}
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
+                  onPress={() => {
+                    setManageVisible(false);
+                    handleDeleteAll(deleteFromStorage);
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>🗑️ Delete All</Text>
+                </TouchableOpacity>
+              </View>
+
+              {/* Switch label changed; thumb stays white */}
+              <View style={styles.checkboxRow}>
+                <Text style={styles.checkboxLabel}>Remove from phone</Text>
+                <Switch
+                  value={deleteFromStorage}
+                  onValueChange={setDeleteFromStorage}
+                  trackColor={{ false: COLORS.BORDER, true: '#CC0000' }}
+                  thumbColor={'white'}
+                />
+              </View>
+
+              <View style={styles.optionsActionsRowCenter}>
+                <TouchableOpacity style={[styles.actionBtn, styles.actionWide, styles.actionCancel]} onPress={() => setManageVisible(false)}>
+                  <Text style={styles.actionBtnText}>Close</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
@@ -1067,11 +1175,47 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 16
   },
-  actionBtn: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 12,
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    gap: 12
+  },
+  actionsList: {
     alignItems: 'center'
+  },
+  deleteRow: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  checkboxRow: {
+    marginTop: 8,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between'
+  },
+  checkboxLabel: {
+    fontSize: 14,
+    color: COLORS.TEXT,
+    marginRight: 12
+  },
+  actionBtn: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginVertical: 6
+  },
+  actionHalf: {
+    width: '48%'
+  },
+  actionWide: {
+    width: '92%'
+  },
+  optionsActionsRowCenter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 8
   },
   actionCancel: {
     backgroundColor: '#F2F2F2',
@@ -1081,11 +1225,37 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.PRIMARY,
     marginLeft: 8
   },
+  actionPrimaryFlat: {
+    backgroundColor: COLORS.PRIMARY
+  },
+  actionGreen: {
+    backgroundColor: '#22A45D'
+  },
+  actionSave: {
+    backgroundColor: '#FFE6B3'
+  },
+  actionSaveText: {
+    color: '#8A5A00'
+  },
+  actionInfo: {
+    backgroundColor: '#D6ECFF'
+  },
   actionBtnText: {
     color: COLORS.TEXT,
     fontWeight: '600'
   },
   actionPrimaryText: {
     color: 'white'
+  },
+  actionInfoText: {
+    color: '#0077CC'
+  },
+  actionDestructive: {
+    backgroundColor: '#FFE6E6',
+    marginTop: 8
+  },
+  actionDestructiveText: {
+    color: '#CC0000',
+    fontWeight: '700'
   }
 });
