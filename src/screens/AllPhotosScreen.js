@@ -12,17 +12,19 @@ import {
   PanResponder,
   Modal,
   ActivityIndicator,
-  Switch
+  Switch,
+  TextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
-import { COLORS, PHOTO_MODES, ROOMS, TEMPLATE_CONFIGS } from '../constants/rooms';
+import { COLORS, PHOTO_MODES, ROOMS, TEMPLATE_CONFIGS, TEMPLATE_TYPES } from '../constants/rooms';
 import { CroppedThumbnail } from '../components/CroppedThumbnail';
 import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
 import { getLocationConfig } from '../config/locations';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
+// Removed MediaLibrary (unused) and gesture-handler TextInput (use RN TextInput)
 
 const { width } = Dimensions.get('window');
 const SET_NAME_WIDTH = 80;
@@ -40,14 +42,21 @@ export default function AllPhotosScreen({ navigation }) {
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [manageVisible, setManageVisible] = useState(false);
-  const [deleteFromStorage, setDeleteFromStorage] = useState(false);
+  const [deleteFromStorage, setDeleteFromStorage] = useState(true);
+  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
+  const [confirmSaveVisible, setConfirmSaveVisible] = useState(false);
+  const [projectName, setProjectName] = useState('');
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: false });
   const [selectedFormats, setSelectedFormats] = useState(() => {
-    // Default: all formats pre-selected
+    // Default: only square formats enabled by default
     const initial = {};
-    Object.keys(TEMPLATE_CONFIGS).forEach((key) => { initial[key] = true; });
+    Object.keys(TEMPLATE_CONFIGS).forEach((key) => {
+      initial[key] = (key === TEMPLATE_TYPES.SQUARE_STACK || key === TEMPLATE_TYPES.SQUARE_SIDE);
+    });
     return initial;
   });
+  const [upgradeVisible, setUpgradeVisible] = useState(false);
+  const [showAdvancedFormats, setShowAdvancedFormats] = useState(false);
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
   const [renderingCombined, setRenderingCombined] = useState(false);
@@ -55,6 +64,21 @@ export default function AllPhotosScreen({ navigation }) {
   const [currentRenderPair, setCurrentRenderPair] = useState(null);
   const [currentRenderTemplate, setCurrentRenderTemplate] = useState(null);
   const renderViewRef = useRef(null);
+
+  const FREE_FORMATS = new Set([TEMPLATE_TYPES.SQUARE_STACK, TEMPLATE_TYPES.SQUARE_SIDE]);
+  const handleFormatToggle = (key) => {
+    try {
+      if (!FREE_FORMATS.has(key)) {
+        // Close options first, then show upgrade to avoid modal stacking issues
+        setOptionsVisible(false);
+        setTimeout(() => setUpgradeVisible(true), 120);
+        return;
+      }
+      setSelectedFormats(prev => ({ ...prev, [key]: !prev[key] }));
+    } catch (e) {
+      console.warn('Format toggle error:', e?.message);
+    }
+  };
 
   // Long press handlers for full-screen photo
   const handleLongPressStart = (photo, photoSet = null) => {
@@ -308,42 +332,24 @@ export default function AllPhotosScreen({ navigation }) {
     }
   };
 
-  const handleDeleteAll = (alsoDeleteFiles = false) => {
-    Alert.alert(
-      'Delete All Photos',
-      alsoDeleteFiles
-        ? 'Are you sure you want to delete all photos? This will also remove the photo files from phone storage. This action cannot be undone.'
-        : 'Are you sure you want to delete all photos? This action cannot be undone.',
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
-        {
-          text: 'Delete All',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              if (alsoDeleteFiles) {
-                // Best-effort delete of files stored in app document directory
-                for (const p of photos) {
-                  try {
-                    if (p?.uri && typeof p.uri === 'string' && p.uri.startsWith(FileSystem.documentDirectory)) {
-                      await FileSystem.deleteAsync(p.uri, { idempotent: true });
-                    }
-                  } catch (fileErr) {
-                    console.warn('⚠️ Failed deleting file:', p?.uri, fileErr?.message);
-                  }
-                }
-              }
-            } finally {
-              await deleteAllPhotos();
+  const handleDeleteAllConfirmed = async () => {
+    try {
+      if (deleteFromStorage) {
+        for (const p of photos) {
+          try {
+            if (p?.uri && typeof p.uri === 'string' && p.uri.startsWith(FileSystem.documentDirectory)) {
+              await FileSystem.deleteAsync(p.uri, { idempotent: true });
             }
-            Alert.alert('Success', 'All photos have been deleted');
+          } catch (fileErr) {
+            console.warn('⚠️ Failed deleting file:', p?.uri, fileErr?.message);
           }
         }
-      ]
-    );
+      }
+    } finally {
+      await deleteAllPhotos();
+    }
+    setConfirmDeleteVisible(false);
+    Alert.alert('Success', 'All photos have been deleted');
   };
 
   // Group photos by room and create photo sets
@@ -615,6 +621,86 @@ export default function AllPhotosScreen({ navigation }) {
         </View>
       </Modal>
 
+      {/* Confirm Save Modal */}
+      <Modal
+        visible={confirmSaveVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setConfirmSaveVisible(false)}
+      >
+        <View style={styles.uploadModalContainer}>
+          <View style={styles.uploadModalContent}>
+            <Text style={styles.uploadModalTitle}>Save Project</Text>
+            <Text style={styles.uploadModalProgress}>Edit project name before saving</Text>
+            <View style={{ width: '92%', marginTop: 8 }}>
+              <TextInput
+                style={{
+                  borderWidth: 1,
+                  borderColor: COLORS.BORDER,
+                  borderRadius: 8,
+                  padding: 12,
+                  fontSize: 16
+                }}
+                value={projectName}
+                onChangeText={setProjectName}
+                placeholder="Project name"
+                placeholderTextColor={COLORS.GRAY}
+              />
+            </View>
+            <View style={[styles.optionsActionsRow, { width: '92%' }]}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setConfirmSaveVisible(false)}>
+                <Text style={styles.actionBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]}
+                onPress={async () => {
+                  try {
+                    // Create a placeholder text file in app directory with project name
+                    const safeName = (projectName || 'Project').replace(/[^a-z0-9_\- ]/gi, '_');
+                    const fileUri = `${FileSystem.documentDirectory}${safeName}.txt`;
+                    await FileSystem.writeAsStringAsync(fileUri, `Project: ${safeName}\nSaved: ${new Date().toISOString()}`);
+                    Alert.alert('Saved', `Project saved as "${safeName}"`);
+                  } catch (e) {
+                    Alert.alert('Error', e?.message || 'Failed to save project');
+                  } finally {
+                    setConfirmSaveVisible(false);
+                  }
+                }}
+              >
+                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Upgrade Modal */}
+      <Modal
+        visible={upgradeVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setUpgradeVisible(false)}
+      >
+        <View style={styles.uploadModalContainer}>
+          <View style={styles.uploadModalContent}>
+            <Text style={styles.uploadModalTitle}>Upgrade required</Text>
+            <Text style={styles.uploadModalProgress}>Unlock more formats with Business</Text>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionPrimary, styles.actionFull]}
+              onPress={() => setUpgradeVisible(false)}
+            >
+              <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Upgrade to Business</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionCancel, styles.actionFull, { marginTop: 8 }]}
+              onPress={() => setUpgradeVisible(false)}
+            >
+              <Text style={styles.actionBtnText}>Not now</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* Upload Progress Modal */}
       <Modal
         visible={uploading}
@@ -675,43 +761,81 @@ export default function AllPhotosScreen({ navigation }) {
 
             {selectedTypes.combined && (
               <>
-                <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>Stacked formats</Text>
+                {/* Default: Square formats at top */}
+                <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>Square formats</Text>
                 <View style={styles.optionsChipsRow}>
-                  {Object.entries(TEMPLATE_CONFIGS)
-                    .filter(([, cfg]) => cfg.layout === 'stack')
-                    .map(([key, cfg]) => (
+                  {[TEMPLATE_TYPES.SQUARE_STACK, TEMPLATE_TYPES.SQUARE_SIDE]
+                    .map((key) => (
                       <TouchableOpacity
                         key={key}
                         style={[styles.chip, selectedFormats[key] && styles.chipActive]}
-                        onPress={() => setSelectedFormats(prev => ({ ...prev, [key]: !prev[key] }))}
+                        onPress={() => handleFormatToggle(key)}
                       >
-                        <Text style={[styles.chipText, selectedFormats[key] && styles.chipTextActive]}>{cfg.name}</Text>
+                        <Text style={[styles.chipText, selectedFormats[key] && styles.chipTextActive]}>
+                          {TEMPLATE_CONFIGS[key].name}
+                        </Text>
                       </TouchableOpacity>
                     ))}
                 </View>
 
-                <Text style={[styles.optionsSectionLabel, { marginTop: 12 }]}>Side-by-side formats</Text>
-                <View style={styles.optionsChipsRow}>
-                  {Object.entries(TEMPLATE_CONFIGS)
-                    .filter(([, cfg]) => cfg.layout === 'sidebyside')
-                    .map(([key, cfg]) => (
-                      <TouchableOpacity
-                        key={key}
-                        style={[styles.chip, selectedFormats[key] && styles.chipActive]}
-                        onPress={() => setSelectedFormats(prev => ({ ...prev, [key]: !prev[key] }))}
-                      >
-                        <Text style={[styles.chipText, selectedFormats[key] && styles.chipTextActive]}>{cfg.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                </View>
+                {/* Advanced toggle */}
+                {!showAdvancedFormats && (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionCancel, { marginTop: 12 }]}
+                    onPress={() => setShowAdvancedFormats(true)}
+                  >
+                    <Text style={styles.actionBtnText}>Show advanced formats</Text>
+                  </TouchableOpacity>
+                )}
+
+                {showAdvancedFormats && (
+                  <>
+                    <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>Stacked formats</Text>
+                    <View style={styles.optionsChipsRow}>
+                      {Object.entries(TEMPLATE_CONFIGS)
+                        .filter(([k, cfg]) => cfg.layout === 'stack' && k !== TEMPLATE_TYPES.SQUARE_STACK)
+                        .map(([key, cfg]) => (
+                          <TouchableOpacity
+                            key={key}
+                            style={[styles.chip, selectedFormats[key] && styles.chipActive]}
+                            onPress={() => handleFormatToggle(key)}
+                          >
+                            <Text style={[styles.chipText, selectedFormats[key] && styles.chipTextActive]}>{cfg.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <Text style={[styles.optionsSectionLabel, { marginTop: 12 }]}>Side-by-side formats</Text>
+                    <View style={styles.optionsChipsRow}>
+                      {Object.entries(TEMPLATE_CONFIGS)
+                        .filter(([k, cfg]) => cfg.layout === 'sidebyside' && k !== TEMPLATE_TYPES.SQUARE_SIDE)
+                        .map(([key, cfg]) => (
+                          <TouchableOpacity
+                            key={key}
+                            style={[styles.chip, selectedFormats[key] && styles.chipActive]}
+                            onPress={() => handleFormatToggle(key)}
+                          >
+                            <Text style={[styles.chipText, selectedFormats[key] && styles.chipTextActive]}>{cfg.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionCancel, { marginTop: 12 }]}
+                      onPress={() => setShowAdvancedFormats(false)}
+                    >
+                      <Text style={styles.actionBtnText}>Hide advanced formats</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </>
             )}
 
             <View style={styles.optionsActionsRow}>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel]} onPress={() => setOptionsVisible(false)}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setOptionsVisible(false)}>
                 <Text style={styles.actionBtnText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary]} onPress={startUploadWithOptions}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} onPress={startUploadWithOptions}>
                 <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Start Upload</Text>
               </TouchableOpacity>
             </View>
@@ -750,7 +874,8 @@ export default function AllPhotosScreen({ navigation }) {
                   style={[styles.actionBtn, styles.actionWide, styles.actionSave]}
                   onPress={() => {
                     setManageVisible(false);
-                    Alert.alert('Save', 'Coming soon');
+                    setProjectName(createAlbumName(userName, location));
+                    setConfirmSaveVisible(true);
                   }}
                 >
                   <Text style={[styles.actionBtnText, styles.actionSaveText]}>💾 Save</Text>
@@ -783,29 +908,52 @@ export default function AllPhotosScreen({ navigation }) {
                   style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
                   onPress={() => {
                     setManageVisible(false);
-                    handleDeleteAll(deleteFromStorage);
+                    setConfirmDeleteVisible(true);
                   }}
                 >
                   <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>🗑️ Delete All</Text>
                 </TouchableOpacity>
               </View>
 
-              {/* Switch label changed; thumb stays white */}
-              <View style={styles.checkboxRow}>
-                <Text style={styles.checkboxLabel}>Remove from phone</Text>
-                <Switch
-                  value={deleteFromStorage}
-                  onValueChange={setDeleteFromStorage}
-                  trackColor={{ false: COLORS.BORDER, true: '#CC0000' }}
-                  thumbColor={'white'}
-                />
-              </View>
+              {/* Switch moved to confirmation dialog */}
 
               <View style={styles.optionsActionsRowCenter}>
                 <TouchableOpacity style={[styles.actionBtn, styles.actionWide, styles.actionCancel]} onPress={() => setManageVisible(false)}>
                   <Text style={styles.actionBtnText}>Close</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Confirm Delete Modal */}
+      <Modal
+        visible={confirmDeleteVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setConfirmDeleteVisible(false)}
+      >
+        <View style={styles.uploadModalContainer}>
+          <View style={styles.uploadModalContent}>
+            <Text style={styles.uploadModalTitle}>Delete All Photos</Text>
+            <Text style={styles.uploadModalProgress}>This action cannot be undone.</Text>
+            <View style={[styles.checkboxRow, { width: '92%', marginTop: 8 }]}>
+              <Text style={styles.checkboxLabel}>Remove from phone</Text>
+              <Switch
+                value={deleteFromStorage}
+                onValueChange={setDeleteFromStorage}
+                trackColor={{ false: COLORS.BORDER, true: '#CC0000' }}
+                thumbColor={'white'}
+              />
+            </View>
+            <View style={[styles.optionsActionsRow, { width: '92%' }]}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setConfirmDeleteVisible(false)}>
+                <Text style={styles.actionBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionDestructive, styles.actionFlex]} onPress={handleDeleteAllConfirmed}>
+                <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>Delete</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
@@ -1175,6 +1323,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginTop: 16
   },
+  actionFlex: {
+    flex: 1
+  },
   actionsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -1227,6 +1378,9 @@ const styles = StyleSheet.create({
   },
   actionPrimaryFlat: {
     backgroundColor: COLORS.PRIMARY
+  },
+  actionFull: {
+    alignSelf: 'stretch'
   },
   actionGreen: {
     backgroundColor: '#22A45D'
