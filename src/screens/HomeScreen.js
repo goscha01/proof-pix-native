@@ -516,7 +516,7 @@ export default function HomeScreen({ navigation }) {
                     [
                       { text: 'Cancel', style: 'cancel' },
                       { text: 'Delete', style: 'destructive', onPress: async () => {
-                        await deleteProject(active.id);
+                        await deleteProject(active.id, { deleteFromStorage: true });
                         setActiveProject(null);
                       }}
                     ]

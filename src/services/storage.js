@@ -9,6 +9,7 @@ const USER_PREFS_KEY = 'user-preferences';
 const SETTINGS_KEY = 'app-settings';
 const PROJECTS_KEY = 'tracked-projects';
 const ACTIVE_PROJECT_ID_KEY = 'active-project-id';
+const ASSET_ID_MAP_KEY = 'asset-id-map';
 
 /**
  * Loads photo metadata from AsyncStorage
@@ -105,6 +106,20 @@ export const savePhotoToDevice = async (uri, filename) => {
           await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
         }
         console.log('📱 Photo saved to media library');
+
+        // Store a mapping from filename -> assetId for reliable deletion later
+        try {
+          const stored = await AsyncStorage.getItem(ASSET_ID_MAP_KEY);
+          const map = stored ? JSON.parse(stored) : {};
+          const justName = (finalFileUri.split('/').pop() || '').split('?')[0];
+          if (asset?.id && justName) {
+            map[justName] = asset.id;
+            await AsyncStorage.setItem(ASSET_ID_MAP_KEY, JSON.stringify(map));
+            console.log('🔗 Mapped asset ID for deletion', { filename: justName, assetId: asset.id });
+          }
+        } catch (mapErr) {
+          console.warn('⚠️ Failed to store asset map:', mapErr?.message);
+        }
       } catch (mlError) {
         console.warn('⚠️ Could not save to media library (Expo Go/permission):', mlError.message);
         // Android fallback: StorageAccessFramework prompt to save into user-selected folder (e.g., Pictures)
@@ -169,7 +184,7 @@ export const deletePhotoFromDevice = async (photo) => {
       console.warn('⚠️ Failed deleting file from app storage:', uri, fsErr?.message);
     }
 
-    // 2) Delete from media library (ProofPix album)
+    // 2) Delete from media library (first by stored assetId, then fallbacks)
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
@@ -177,36 +192,67 @@ export const deletePhotoFromDevice = async (photo) => {
         return;
       }
 
-      const album = await MediaLibrary.getAlbumAsync('ProofPix');
-      if (!album) return; // Nothing to remove
+      // Try direct assetId from stored mapping
+      try {
+        const stored = await AsyncStorage.getItem(ASSET_ID_MAP_KEY);
+        const map = stored ? JSON.parse(stored) : {};
+        const assetId = map[filename];
+        if (assetId) {
+          try {
+            await MediaLibrary.deleteAssetsAsync([assetId]);
+            console.log('🗑️ Deleted by assetId', { assetId, filename });
+            delete map[filename];
+            await AsyncStorage.setItem(ASSET_ID_MAP_KEY, JSON.stringify(map));
+            return; // deletion done
+          } catch (byIdErr) {
+            console.warn('⚠️ Delete by assetId failed, will fallback:', byIdErr?.message);
+          }
+        }
+      } catch (mapDelErr) {
+        console.warn('⚠️ Asset ID map read failed:', mapDelErr?.message);
+      }
 
-      // Fetch a generous number of assets from the album and locate by filename
-      const assets = await MediaLibrary.getAssetsAsync({
-        album,
-        first: 2000,
-        mediaType: [MediaLibrary.MediaType.photo]
-      });
-
-      const match = assets.assets.find((a) => {
+      const findMatch = (assetsArr) => assetsArr.find((a) => {
         if (!a) return false;
         if (a.filename && a.filename === filename) return true;
         if (a.uri && typeof a.uri === 'string' && filename && a.uri.endsWith(filename)) return true;
         return false;
       });
 
+      let match = null;
+      const album = await MediaLibrary.getAlbumAsync('ProofPix');
+      if (album) {
+        const assets = await MediaLibrary.getAssetsAsync({
+          album,
+          first: 2000,
+          mediaType: [MediaLibrary.MediaType.photo]
+        });
+        match = findMatch(assets.assets);
+      }
+
+      // Fallback: global scan if not found in album or album missing
+      if (!match) {
+        const global = await MediaLibrary.getAssetsAsync({ first: 2000, mediaType: [MediaLibrary.MediaType.photo] });
+        match = findMatch(global.assets);
+      }
+
       if (match) {
         try {
           await MediaLibrary.deleteAssetsAsync([match]);
           console.log('🗑️ Deleted from media library', { assetFilename: match.filename, id: match.id });
         } catch (delErr) {
-          console.warn('⚠️ Delete failed, trying album removal:', delErr?.message);
-          try {
-            await MediaLibrary.removeAssetsFromAlbumAsync([match], album, false);
-            console.log('🗑️ Removed from album only', { assetFilename: match.filename, id: match.id });
-          } catch (remErr) {
-            console.warn('⚠️ Album removal also failed:', remErr?.message);
+          console.warn('⚠️ Direct delete failed:', delErr?.message);
+          if (album) {
+            try {
+              await MediaLibrary.removeAssetsFromAlbumAsync([match], album, false);
+              console.log('🗑️ Removed from album only', { assetFilename: match.filename, id: match.id });
+            } catch (remErr) {
+              console.warn('⚠️ Album removal also failed:', remErr?.message);
+            }
           }
         }
+      } else {
+        console.log('ℹ️ No matching media asset found for filename', filename);
       }
     } catch (mlErr) {
       console.warn('⚠️ Media library delete failed:', mlErr?.message);

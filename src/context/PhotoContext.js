@@ -1,5 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice, loadProjects, saveProjects, createProject as storageCreateProject, deleteProjectEntry, loadActiveProjectId, saveActiveProjectId } from '../services/storage';
+import * as FileSystem from 'expo-file-system/legacy';
 import { PHOTO_MODES } from '../constants/rooms';
 
 const PhotoContext = createContext();
@@ -223,6 +224,27 @@ export const PhotoProvider = ({ children }) => {
         } catch (e) {
           console.warn('⚠️ deletePhotoFromDevice failed', { id: p.id, uri: p.uri, error: e?.message });
         }
+      }
+      // Extra cleanup: delete any orphan files in app dir that match this project's naming prefixes
+      try {
+        const dir = FileSystem.documentDirectory;
+        if (dir) {
+          const entries = await FileSystem.readDirectoryAsync(dir);
+          const prefixes = Array.from(new Set(related.map(p => `${p.room}_${p.name}_`)));
+          for (const name of entries) {
+            if (prefixes.some(pref => name.startsWith(pref))) {
+              const full = `${dir}${name}`;
+              console.log('🗑️ Deleting orphan project file', { name, full });
+              try {
+                await deletePhotoFromDevice({ uri: full });
+              } catch (orphanErr) {
+                console.warn('⚠️ Failed deleting orphan file', { full, error: orphanErr?.message });
+              }
+            }
+          }
+        }
+      } catch (fsErr) {
+        console.warn('⚠️ Orphan cleanup failed', fsErr?.message);
       }
     } else {
       console.log('ℹ️ Skipping device file deletion for project', projectId);
