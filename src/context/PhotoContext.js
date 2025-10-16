@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice, loadProjects, saveProjects, createProject as storageCreateProject, deleteProjectEntry, loadActiveProjectId, saveActiveProjectId } from '../services/storage';
+import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice, loadProjects, saveProjects, createProject as storageCreateProject, deleteProjectEntry, loadActiveProjectId, saveActiveProjectId, deleteAssetsByFilenames, deleteAssetsByPrefixes, deleteProjectAssets } from '../services/storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { PHOTO_MODES } from '../constants/rooms';
 
@@ -217,38 +217,41 @@ export const PhotoProvider = ({ children }) => {
     console.log('🗂️ deleteProject start', { projectId, deleteFromStorage, relatedCount: related.length });
     // Delete all photos for this project from device and metadata
     if (deleteFromStorage) {
+      // 1) Delete local files directly (no media calls here to avoid per-asset prompts)
+      const filenamesSet = new Set();
+      const filePaths = [];
       for (const p of related) {
-        try {
-          console.log('🗑️ Deleting device file for photo', { id: p.id, name: p.name, uri: p.uri });
-          await deletePhotoFromDevice(p);
-        } catch (e) {
-          console.warn('⚠️ deletePhotoFromDevice failed', { id: p.id, uri: p.uri, error: e?.message });
+        const uriStr = p?.uri;
+        if (typeof uriStr === 'string' && uriStr.startsWith('file')) {
+          filePaths.push(uriStr);
         }
+        const fname = (uriStr || '').split('/').pop();
+        if (fname) filenamesSet.add(fname);
       }
-      // Extra cleanup: delete any orphan files in app dir that match this project's naming prefixes
+
       try {
-        const dir = FileSystem.documentDirectory;
-        if (dir) {
-          const entries = await FileSystem.readDirectoryAsync(dir);
-          const prefixes = Array.from(new Set(related.map(p => `${p.room}_${p.name}_`)));
-          for (const name of entries) {
-            if (prefixes.some(pref => name.startsWith(pref))) {
-              const full = `${dir}${name}`;
-              console.log('🗑️ Deleting orphan project file', { name, full });
-              try {
-                await deletePhotoFromDevice({ uri: full });
-              } catch (orphanErr) {
-                console.warn('⚠️ Failed deleting orphan file', { full, error: orphanErr?.message });
-              }
-            }
+        for (const path of filePaths) {
+          try {
+            await FileSystem.deleteAsync(path, { idempotent: true });
+            console.log('🗑️ Deleted local file', { path });
+          } catch (e) {
+            console.warn('⚠️ Local file delete failed', { path, error: e?.message });
           }
         }
-      } catch (fsErr) {
-        console.warn('⚠️ Orphan cleanup failed', fsErr?.message);
+      } catch {}
+
+      // 2) Remove project-scoped derived files via asset map (handled below)
+
+      // 3) Project-scoped media+local deletion using asset map (prevents cross-project deletes)
+      try {
+        await deleteProjectAssets(projectId);
+      } catch (projErr) {
+        console.warn('⚠️ Project asset delete error:', projErr?.message);
       }
     } else {
       console.log('ℹ️ Skipping device file deletion for project', projectId);
     }
+    // Remove only metadata for this project's photos
     const remaining = photos.filter(p => p.projectId !== projectId);
     await savePhotos(remaining);
     console.log('🧹 Removed project photos from metadata', { projectId, remainingCount: remaining.length });

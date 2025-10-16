@@ -69,7 +69,7 @@ export const clearPhotos = async () => {
 /**
  * Saves a photo to device storage
  */
-export const savePhotoToDevice = async (uri, filename) => {
+export const savePhotoToDevice = async (uri, filename, projectId = null) => {
   try {
     console.log('📱 Saving photo to device:', filename);
 
@@ -113,9 +113,10 @@ export const savePhotoToDevice = async (uri, filename) => {
           const map = stored ? JSON.parse(stored) : {};
           const justName = (finalFileUri.split('/').pop() || '').split('?')[0];
           if (asset?.id && justName) {
-            map[justName] = asset.id;
+            const prev = map[justName];
+            map[justName] = typeof prev === 'string' ? { id: asset.id, projectId } : { id: asset.id, projectId: prev?.projectId ?? projectId };
             await AsyncStorage.setItem(ASSET_ID_MAP_KEY, JSON.stringify(map));
-            console.log('🔗 Mapped asset ID for deletion', { filename: justName, assetId: asset.id });
+            console.log('🔗 Mapped asset ID for deletion', { filename: justName, assetId: asset.id, projectId });
           }
         } catch (mapErr) {
           console.warn('⚠️ Failed to store asset map:', mapErr?.message);
@@ -196,7 +197,8 @@ export const deletePhotoFromDevice = async (photo) => {
       try {
         const stored = await AsyncStorage.getItem(ASSET_ID_MAP_KEY);
         const map = stored ? JSON.parse(stored) : {};
-        const assetId = map[filename];
+        const entry = map[filename];
+        const assetId = typeof entry === 'string' ? entry : entry?.id;
         if (assetId) {
           try {
             await MediaLibrary.deleteAssetsAsync([assetId]);
@@ -261,6 +263,204 @@ export const deletePhotoFromDevice = async (photo) => {
     console.error('Error deleting photo from device:', error);
   }
 };
+
+// Helper: get/set asset ID map
+export const getAssetIdMap = async () => {
+  try {
+    const stored = await AsyncStorage.getItem(ASSET_ID_MAP_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch {
+    return {};
+  }
+};
+
+const setAssetIdMap = async (map) => {
+  try {
+    await AsyncStorage.setItem(ASSET_ID_MAP_KEY, JSON.stringify(map));
+  } catch {}
+};
+
+// Sanitize filename for loose matching (remove spaces and non-alphanumerics, lowercase)
+const normalizeName = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+/**
+ * Batch delete media library assets by filenames. Reduces confirmation prompts on iOS.
+ */
+export const deleteAssetsByFilenames = async (filenames, projectIdFilter = null) => {
+  try {
+    if (!Array.isArray(filenames) || filenames.length === 0) return;
+    const uniqueNames = Array.from(new Set(filenames.filter(Boolean)));
+    console.log('🗑️ Batch media delete start', { count: uniqueNames.length });
+
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      console.warn('⚠️ Media library permission not granted; skipping batch delete');
+      return;
+    }
+
+    const map = await getAssetIdMap();
+    const wantedIds = new Set();
+    const remaining = [];
+    for (const name of uniqueNames) {
+      const entry = map[name];
+      const id = typeof entry === 'string' ? entry : entry?.id;
+      const pid = typeof entry === 'object' ? entry?.projectId : null;
+      if (id && (!projectIdFilter || (pid && pid === projectIdFilter))) {
+        wantedIds.add(id);
+      } else {
+        remaining.push(name);
+      }
+    }
+
+    const tryFindMatches = async (scope) => {
+      const res = await MediaLibrary.getAssetsAsync(scope);
+      const byNorm = new Map();
+      for (const a of res.assets) {
+        const norm = normalizeName(a.filename);
+        if (norm) byNorm.set(norm, a.id);
+      }
+      for (const name of [...remaining]) {
+        const found = byNorm.get(normalizeName(name));
+        if (found) {
+          wantedIds.add(found);
+        }
+      }
+    };
+
+    if (!projectIdFilter) {
+      const album = await MediaLibrary.getAlbumAsync('ProofPix');
+      if (album) {
+        await tryFindMatches({ album, first: 2000, mediaType: [MediaLibrary.MediaType.photo] });
+      }
+      await tryFindMatches({ first: 2000, mediaType: [MediaLibrary.MediaType.photo] });
+    }
+
+    const ids = Array.from(wantedIds);
+    if (ids.length > 0) {
+      try {
+        await MediaLibrary.deleteAssetsAsync(ids);
+        console.log('🗑️ Batch media deleted', { count: ids.length });
+        // Clean mapping
+        for (const name of uniqueNames) delete map[name];
+        await setAssetIdMap(map);
+      } catch (err) {
+        console.warn('⚠️ Batch media delete failed:', err?.message);
+      }
+    } else {
+      console.log('ℹ️ No media assets matched for batch delete');
+    }
+  } catch (e) {
+    console.warn('⚠️ deleteAssetsByFilenames error:', e?.message);
+  }
+};
+
+/**
+ * Batch delete media assets by filename prefixes using the assetId map.
+ * This reliably catches combined/base assets whose system filenames may not match.
+ */
+export const deleteAssetsByPrefixes = async (prefixes, projectIdFilter = null) => {
+  try {
+    if (!Array.isArray(prefixes) || prefixes.length === 0) return;
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      console.warn('⚠️ Media library permission not granted; skipping prefix batch delete');
+      return;
+    }
+    const map = await getAssetIdMap();
+    const ids = [];
+    const normPrefixes = prefixes.map(p => normalizeName(p));
+    const keyMatches = (key) => {
+      const nk = normalizeName(key);
+      return normPrefixes.some(np => nk.startsWith(np));
+    };
+    Object.keys(map).forEach((key) => {
+      if (!keyMatches(key)) return;
+      const entry = map[key];
+      const id = typeof entry === 'string' ? entry : entry?.id;
+      const pid = typeof entry === 'object' ? entry?.projectId : null;
+      if (id && (!projectIdFilter || (pid && pid === projectIdFilter))) ids.push(id);
+    });
+    if (ids.length === 0) {
+      console.log('ℹ️ No asset IDs matched for prefixes');
+      return;
+    }
+    try {
+      await MediaLibrary.deleteAssetsAsync(ids);
+      console.log('🗑️ Batch media deleted by prefixes', { count: ids.length });
+      // Clean mapping entries
+      for (const key of Object.keys(map)) {
+        if (!keyMatches(key)) continue;
+        const entry = map[key];
+        const pid = typeof entry === 'object' ? entry?.projectId : null;
+        if (!projectIdFilter || (pid && pid === projectIdFilter)) delete map[key];
+      }
+      await setAssetIdMap(map);
+    } catch (e) {
+      console.warn('⚠️ Prefix batch delete failed:', e?.message);
+    }
+  } catch (e) {
+    console.warn('⚠️ deleteAssetsByPrefixes error:', e?.message);
+  }
+};
+
+/**
+ * Delete all assets for a projectId using the assetId map only (no filename scanning).
+ * This prevents cross-project deletions when filenames collide.
+ */
+export const deleteProjectAssets = async (projectId) => {
+  try {
+    if (!projectId) return;
+    const map = await getAssetIdMap();
+    const filenames = [];
+    const assetIds = [];
+    for (const [name, entry] of Object.entries(map)) {
+      const pid = typeof entry === 'string' ? null : entry?.projectId;
+      const id = typeof entry === 'string' ? entry : entry?.id;
+      if (pid && pid === projectId) {
+        filenames.push(name);
+        if (id) assetIds.push(id);
+      }
+    }
+
+    // Delete media assets in a single batch
+    if (assetIds.length > 0) {
+      try {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status === 'granted') {
+          await MediaLibrary.deleteAssetsAsync(assetIds);
+          console.log('🗑️ Deleted media assets by project', { projectId, count: assetIds.length });
+        }
+      } catch (e) {
+        console.warn('⚠️ Project media batch delete failed:', e?.message);
+      }
+    }
+
+    // Delete local doc files by filename
+    try {
+      const dir = FileSystem.documentDirectory;
+      if (dir) {
+        for (const name of filenames) {
+          const full = `${dir}${name}`;
+          try {
+            await FileSystem.deleteAsync(full, { idempotent: true });
+            console.log('🗑️ Deleted project local file', { full });
+          } catch (e) {
+            // best-effort
+          }
+        }
+      }
+    } catch {}
+
+    // Clean the map
+    const newMap = { ...map };
+    for (const name of filenames) delete newMap[name];
+    await setAssetIdMap(newMap);
+  } catch (e) {
+    console.warn('⚠️ deleteProjectAssets error:', e?.message);
+  }
+};
+
+// (removed duplicate deleteProjectAssets)
 
 /**
  * Delete multiple photos from device/storage.

@@ -85,7 +85,7 @@ export default function CameraScreen({ route, navigation }) {
   const showEnlargedGalleryRef = useRef(showEnlargedGallery);
   const enlargedGalleryPhotoRef = useRef(enlargedGalleryPhoto);
   const isGalleryAnimatingRef = useRef(false);
-  const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom } = usePhotos();
+  const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom, activeProjectId } = usePhotos();
   const { showLabels } = useSettings();
   const labelViewRef = useRef(null);
   // Hidden vertical side-by-side base renderer
@@ -1099,7 +1099,7 @@ export default function CameraScreen({ route, navigation }) {
       const processedUri = await addLabelToPhoto(uri, 'BEFORE');
 
       // Save to device
-      const savedUri = await savePhotoToDevice(processedUri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`);
+      const savedUri = await savePhotoToDevice(processedUri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`, activeProjectId || null);
 
       // Capture device orientation (actual phone orientation)
       const currentOrientation = deviceOrientation;
@@ -1160,7 +1160,8 @@ export default function CameraScreen({ route, navigation }) {
       // Save to device
       const savedUri = await savePhotoToDevice(
         processedUri,
-        `${activeBeforePhoto.room}_${activeBeforePhoto.name}_AFTER_${Date.now()}.jpg`
+        `${activeBeforePhoto.room}_${activeBeforePhoto.name}_AFTER_${Date.now()}.jpg`,
+        activeProjectId || null
       );
 
       // Add after photo (use same aspect ratio, orientation, and camera view mode as before photo)
@@ -1261,7 +1262,8 @@ export default function CameraScreen({ route, navigation }) {
           const baseType = isLandscapePair ? 'STACK' : 'SIDE';
           const firstSaved = await savePhotoToDevice(
             capUri,
-            `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_${baseType}_${Date.now()}.jpg`
+            `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_${baseType}_${Date.now()}.jpg`,
+            activeProjectId || null
           );
           console.log(`✅ Base (${baseType}) saved to device:`, firstSaved);
 
@@ -1306,7 +1308,8 @@ export default function CameraScreen({ route, navigation }) {
                 });
                 const secondSaved = await savePhotoToDevice(
                   capUriLB,
-                  `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}.jpg`
+                  `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}.jpg`,
+                  activeProjectId || null
                 );
                 console.log('✅ Letterbox side-by-side base saved to device:', secondSaved);
               } else {
