@@ -7,6 +7,8 @@ import { Platform } from 'react-native';
 const PHOTOS_METADATA_KEY = 'cleaning-photos-metadata';
 const USER_PREFS_KEY = 'user-preferences';
 const SETTINGS_KEY = 'app-settings';
+const PROJECTS_KEY = 'tracked-projects';
+const ACTIVE_PROJECT_ID_KEY = 'active-project-id';
 
 /**
  * Loads photo metadata from AsyncStorage
@@ -41,7 +43,8 @@ export const savePhotosMetadata = async (photos) => {
       templateType: p.templateType,
       originalWidth: p.originalWidth,
       originalHeight: p.originalHeight,
-      uri: p.uri // File URI in device storage
+      uri: p.uri, // File URI in device storage
+      projectId: p.projectId || null
     }));
 
     await AsyncStorage.setItem(PHOTOS_METADATA_KEY, JSON.stringify(metadata));
@@ -150,14 +153,17 @@ export const deletePhotoFromDevice = async (photo) => {
 
     // Derive a filename for media library lookup
     const filename = (uri.split('/').pop() || '').split('?')[0];
+    console.log('🗑️ deletePhotoFromDevice start', { uri, filename });
 
     // 1) Delete from app documents directory (idempotent)
     try {
       if (uri.startsWith(FileSystem.documentDirectory)) {
         await FileSystem.deleteAsync(uri, { idempotent: true });
+        console.log('🗑️ Deleted from app storage', { uri });
       } else if (uri.startsWith('file://')) {
         // Try deleting other file:// targets as best-effort
         await FileSystem.deleteAsync(uri, { idempotent: true });
+        console.log('🗑️ Deleted file:// path', { uri });
       }
     } catch (fsErr) {
       console.warn('⚠️ Failed deleting file from app storage:', uri, fsErr?.message);
@@ -191,10 +197,12 @@ export const deletePhotoFromDevice = async (photo) => {
       if (match) {
         try {
           await MediaLibrary.deleteAssetsAsync([match]);
+          console.log('🗑️ Deleted from media library', { assetFilename: match.filename, id: match.id });
         } catch (delErr) {
           console.warn('⚠️ Delete failed, trying album removal:', delErr?.message);
           try {
             await MediaLibrary.removeAssetsFromAlbumAsync([match], album, false);
+            console.log('🗑️ Removed from album only', { assetFilename: match.filename, id: match.id });
           } catch (remErr) {
             console.warn('⚠️ Album removal also failed:', remErr?.message);
           }
@@ -286,6 +294,74 @@ export const purgeAllDevicePhotos = async () => {
     }
   } catch (mlErr) {
     console.warn('⚠️ Media library purge failed:', mlErr?.message);
+  }
+};
+
+// ===== Projects store =====
+
+/**
+ * Load tracked projects
+ * Shape: [{ id, name, createdAt }]
+ */
+export const loadProjects = async () => {
+  try {
+    const saved = await AsyncStorage.getItem(PROJECTS_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch (e) {
+    console.error('Error loading projects:', e);
+    return [];
+  }
+};
+
+/**
+ * Save tracked projects
+ */
+export const saveProjects = async (projects) => {
+  try {
+    await AsyncStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+  } catch (e) {
+    console.error('Error saving projects:', e);
+  }
+};
+
+/**
+ * Create a new project entry and return it
+ */
+export const createProject = async (name) => {
+  const list = await loadProjects();
+  const id = Date.now().toString();
+  const project = { id, name, createdAt: Date.now() };
+  await saveProjects([project, ...list]);
+  return project;
+};
+
+/**
+ * Delete a project entry (does not delete photos here)
+ */
+export const deleteProjectEntry = async (projectId) => {
+  const list = await loadProjects();
+  const filtered = list.filter(p => p.id !== projectId);
+  await saveProjects(filtered);
+};
+
+// Active project persistence
+export const loadActiveProjectId = async () => {
+  try {
+    return await AsyncStorage.getItem(ACTIVE_PROJECT_ID_KEY);
+  } catch (e) {
+    return null;
+  }
+};
+
+export const saveActiveProjectId = async (projectId) => {
+  try {
+    if (projectId == null) {
+      await AsyncStorage.removeItem(ACTIVE_PROJECT_ID_KEY);
+    } else {
+      await AsyncStorage.setItem(ACTIVE_PROJECT_ID_KEY, projectId);
+    }
+  } catch (e) {
+    // noop
   }
 };
 

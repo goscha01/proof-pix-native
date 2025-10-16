@@ -36,7 +36,7 @@ const AVAILABLE_WIDTH = width - SET_NAME_WIDTH - CONTAINER_PADDING - PHOTO_SPACI
 const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function AllPhotosScreen({ navigation, route }) {
-  const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos } = usePhotos();
+  const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject } = usePhotos();
   const { userName, location } = useSettings();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
@@ -336,15 +336,22 @@ export default function AllPhotosScreen({ navigation, route }) {
 
   const handleDeleteAllConfirmed = async () => {
     try {
-      if (deleteFromStorage) {
-        // Delete known photos and also purge any base/combined images saved by editor/capture
-        await deletePhotosFromDevice(photos);
-        await purgeAllDevicePhotos();
+      if (activeProjectId) {
+        // Delete only the active project and its photos
+        await deleteProject(activeProjectId, { deleteFromStorage });
+        setActiveProject(null);
+      } else {
+        // No active project: fall back to deleting everything
+        if (deleteFromStorage) {
+          // Delete known photos and also purge any base/combined images saved by editor/capture
+          await deletePhotosFromDevice(photos);
+          await purgeAllDevicePhotos();
+        }
+        await deleteAllPhotos();
       }
     } finally {
-      await deleteAllPhotos();
+      setConfirmDeleteVisible(false);
     }
-    setConfirmDeleteVisible(false);
   };
 
   // Group photos by room and create photo sets
@@ -664,10 +671,9 @@ export default function AllPhotosScreen({ navigation, route }) {
                 style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]}
                 onPress={async () => {
                   try {
-                    // Create a placeholder text file in app directory with project name
                     const safeName = (projectName || 'Project').replace(/[^a-z0-9_\- ]/gi, '_');
-                    const fileUri = `${FileSystem.documentDirectory}${safeName}.txt`;
-                    await FileSystem.writeAsStringAsync(fileUri, `Project: ${safeName}\nSaved: ${new Date().toISOString()}`);
+                    const proj = await createProject(safeName);
+                    await assignPhotosToProject(proj.id);
                     Alert.alert('Saved', `Project saved as "${safeName}"`);
                   } catch (e) {
                     Alert.alert('Error', e?.message || 'Failed to save project');

@@ -8,12 +8,18 @@ import {
   TouchableWithoutFeedback,
   Image,
   Dimensions,
-  PanResponder
+  PanResponder,
+  Modal,
+  Alert,
+  TextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
 import { ROOMS, COLORS, PHOTO_MODES } from '../constants/rooms';
 import { CroppedThumbnail } from '../components/CroppedThumbnail';
+import * as FileSystem from 'expo-file-system/legacy';
+import { useSettings } from '../context/SettingsContext';
+import { createAlbumName } from '../services/uploadService';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 60) / 2; // 2 columns with padding
@@ -29,6 +35,12 @@ export default function HomeScreen({ navigation }) {
 
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
+  const [openProjectVisible, setOpenProjectVisible] = useState(false);
+  const { projects, getPhotosByProject, deleteProject, setActiveProject, activeProjectId, createProject } = usePhotos();
+  const { userName, location } = useSettings();
+  const [newProjectVisible, setNewProjectVisible] = useState(false);
+  const [newProjectName, setNewProjectName] = useState('');
+  const [pendingCameraAfterCreate, setPendingCameraAfterCreate] = useState(false);
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
   const touchStartPos = useRef(null);
@@ -131,6 +143,35 @@ export default function HomeScreen({ navigation }) {
     })
   ).current;
 
+  useEffect(() => {
+    // No-op: projects come from context
+  }, [openProjectVisible]);
+
+  const openNewProjectModal = (navigateToCamera = false) => {
+    const defaultName = createAlbumName(userName, location) || `Project ${projects.length + 1}`;
+    setNewProjectName(defaultName);
+    setPendingCameraAfterCreate(navigateToCamera);
+    setNewProjectVisible(true);
+  };
+
+  const handleCreateProject = async () => {
+    try {
+      const safeName = (newProjectName || 'Project').replace(/[^a-z0-9_\- ]/gi, '_');
+      const proj = await createProject(safeName);
+      await setActiveProject(proj.id);
+      setNewProjectVisible(false);
+      if (pendingCameraAfterCreate) {
+        setPendingCameraAfterCreate(false);
+        navigation.navigate('Camera', {
+          mode: 'before',
+          room: currentRoom
+        });
+      }
+    } catch (e) {
+      Alert.alert('Error', e?.message || 'Failed to create project');
+    }
+  };
+
   const renderRoomTabs = () => (
     <View style={styles.roomTabsContainer}>
       {circularRooms.map((room, index) => {
@@ -182,12 +223,15 @@ export default function HomeScreen({ navigation }) {
             style={styles.addPhotoItem}
             delayPressIn={100}
             onPress={() => {
-              if (!isSwiping.current) {
-                navigation.navigate('Camera', {
-                  mode: 'before',
-                  room: currentRoom
-                });
+              if (isSwiping.current) return;
+              if (!activeProjectId) {
+                openNewProjectModal(true);
+                return;
               }
+              navigation.navigate('Camera', {
+                mode: 'before',
+                room: currentRoom
+              });
             }}
           >
             <Text style={styles.addPhotoIcon}>
@@ -318,12 +362,15 @@ export default function HomeScreen({ navigation }) {
         style={styles.addPhotoItem}
         delayPressIn={100}
         onPress={() => {
-          if (!isSwiping.current) {
-            navigation.navigate('Camera', {
-              mode: 'before',
-              room: currentRoom
-            });
+          if (isSwiping.current) return;
+          if (!activeProjectId) {
+            openNewProjectModal(true);
+            return;
           }
+          navigation.navigate('Camera', {
+            mode: 'before',
+            room: currentRoom
+          });
         }}
       >
         <Text style={styles.addPhotoIcon}>
@@ -364,12 +411,12 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.allPhotosButtonText}>📷 All Photos</Text>
       </TouchableOpacity>
 
-      {/* Manage Projects button under All Photos - always visible */}
+      {/* Open Project button under All Photos - always visible */}
       <TouchableOpacity
         style={[styles.allPhotosButtonBottom, { backgroundColor: '#22A45D' }]}
-        onPress={() => navigation.navigate('AllPhotos', { openManage: true })}
+        onPress={() => setOpenProjectVisible(true)}
       >
-        <Text style={[styles.allPhotosButtonText, { color: 'white' }]}>🗂️ Manage Projects</Text>
+        <Text style={[styles.allPhotosButtonText, { color: 'white' }]}>📂 Open Project</Text>
       </TouchableOpacity>
 
       {/* Full-screen photo view - single photo */}
@@ -413,6 +460,119 @@ export default function HomeScreen({ navigation }) {
           </View>
         </TouchableWithoutFeedback>
       )}
+
+      {/* Open Project Modal */}
+      <Modal
+        visible={openProjectVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setOpenProjectVisible(false)}
+      >
+        <View style={styles.optionsModalOverlay}>
+          <View style={styles.optionsModalContent}>
+            <Text style={styles.optionsTitle}>Open Project</Text>
+
+            <View style={styles.projectList}>
+              {projects.length === 0 ? (
+                <Text style={styles.projectItemText}>No saved projects found</Text>
+              ) : (
+                projects.map((proj) => (
+                  <TouchableOpacity
+                    key={proj.id}
+                    style={[
+                      styles.projectItem,
+                      activeProjectId === proj.id && { borderWidth: 2, borderColor: '#F2C31B' }
+                    ]}
+                    onPress={() => {
+                      setActiveProject(proj.id);
+                      setOpenProjectVisible(false);
+                    }}
+                  >
+                    <Text style={styles.projectItemText}>📁 {proj.name} {activeProjectId === proj.id ? '(active)' : ''}</Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionPrimary, { marginTop: 12 }]}
+              onPress={() => {
+                setOpenProjectVisible(false);
+                setTimeout(() => openNewProjectModal(false), 50);
+              }}
+            >
+              <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ New Project</Text>
+            </TouchableOpacity>
+
+            {projects.length > 0 && (
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#FFE6E6', marginTop: 8 }]}
+                onPress={() => {
+                  const active = projects.find(p => p.id === activeProjectId) || projects[0];
+                  if (!active) return;
+                  Alert.alert(
+                    'Delete Project',
+                    `Delete "${active.name}" and all its photos? This cannot be undone.`,
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      { text: 'Delete', style: 'destructive', onPress: async () => {
+                        await deleteProject(active.id);
+                        setActiveProject(null);
+                      }}
+                    ]
+                  );
+                }}
+              >
+                <Text style={[styles.actionBtnText, { color: '#CC0000' }]}>Delete Active Project</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: '#F2F2F2', marginTop: 8 }]}
+              onPress={() => setOpenProjectVisible(false)}
+            >
+              <Text style={styles.actionBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+      {/* New Project Naming Modal */}
+      <Modal
+        visible={newProjectVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setNewProjectVisible(false)}
+      >
+        <View style={styles.optionsModalOverlay}>
+          <View style={styles.optionsModalContent}>
+            <Text style={styles.optionsTitle}>New Project</Text>
+            <View style={{ width: '92%', marginTop: 8 }}>
+              <TextInput
+                style={{
+                  borderWidth: 1,
+                  borderColor: COLORS.BORDER,
+                  borderRadius: 8,
+                  padding: 12,
+                  fontSize: 16,
+                  backgroundColor: 'white'
+                }}
+                value={newProjectName}
+                onChangeText={setNewProjectName}
+                placeholder="Project name"
+                placeholderTextColor={COLORS.GRAY}
+              />
+            </View>
+            <View style={{ flexDirection: 'row', marginTop: 12 }}>
+              <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#F2F2F2', flex: 1, marginRight: 6 }]} onPress={() => setNewProjectVisible(false)}>
+                <Text style={styles.actionBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, { flex: 1, marginLeft: 6 }]} onPress={handleCreateProject}>
+                <Text style={[styles.actionBtnText, { color: 'white' }]}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -646,5 +806,54 @@ const styles = StyleSheet.create({
   fullScreenHalfImage: {
     width: '100%',
     height: '100%'
+  }
+  ,
+  // Open Project modal styles
+  optionsModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  optionsModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    width: '86%',
+    maxWidth: 380
+  },
+  optionsTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: COLORS.TEXT,
+    marginBottom: 12,
+    textAlign: 'center'
+  },
+  projectList: {
+    maxHeight: 280
+  },
+  projectItem: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    backgroundColor: '#F7F7F7',
+    marginBottom: 8
+  },
+  projectItemText: {
+    color: COLORS.TEXT,
+    fontSize: 16,
+    fontWeight: '500'
+  },
+  actionBtn: {
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center'
+  },
+  actionBtnText: {
+    color: COLORS.TEXT,
+    fontWeight: '600'
+  },
+  actionPrimary: {
+    backgroundColor: COLORS.PRIMARY
   }
 });

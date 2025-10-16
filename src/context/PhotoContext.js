@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice } from '../services/storage';
+import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice, loadProjects, saveProjects, createProject as storageCreateProject, deleteProjectEntry, loadActiveProjectId, saveActiveProjectId } from '../services/storage';
 import { PHOTO_MODES } from '../constants/rooms';
 
 const PhotoContext = createContext();
@@ -16,45 +16,53 @@ export const PhotoProvider = ({ children }) => {
   const [photos, setPhotos] = useState([]);
   const [currentRoom, setCurrentRoom] = useState('kitchen');
   const [loading, setLoading] = useState(true);
+  const [projects, setProjects] = useState([]);
+  const [activeProjectId, setActiveProjectId] = useState(null);
 
   // Load photos on mount
   useEffect(() => {
-    loadPhotos();
+    (async () => {
+      await loadPhotos();
+      await loadProjectsList();
+      const savedActive = await loadActiveProjectId();
+      if (savedActive) setActiveProjectId(savedActive);
+    })();
   }, []);
 
-  // Reassign photo names sequentially
+  // Reassign photo names sequentially per project and room
   const reassignPhotoNames = (photoList) => {
-    const rooms = {};
+    const groups = {};
 
-    // Group ONLY before photos by room and sort by timestamp
+    // Group ONLY before photos by projectId + room and sort by timestamp
     photoList.forEach(photo => {
       if (photo.mode === PHOTO_MODES.BEFORE) {
-        if (!rooms[photo.room]) {
-          rooms[photo.room] = [];
+        const key = `${photo.projectId || 'none'}::${photo.room}`;
+        if (!groups[key]) {
+          groups[key] = [];
         }
-        rooms[photo.room].push(photo);
+        groups[key].push(photo);
       }
     });
 
-    // Sort each room's before photos by timestamp
-    Object.keys(rooms).forEach(room => {
-      rooms[room].sort((a, b) => a.timestamp - b.timestamp);
+    // Sort each group's before photos by timestamp
+    Object.keys(groups).forEach(key => {
+      groups[key].sort((a, b) => a.timestamp - b.timestamp);
     });
 
     // Create a map of before photo ID to new name
     const nameMap = {};
-    Object.keys(rooms).forEach(room => {
-      rooms[room].forEach((photo, index) => {
+    Object.keys(groups).forEach(key => {
+      groups[key].forEach((photo, index) => {
         const roomName = photo.room.charAt(0).toUpperCase() + photo.room.slice(1);
         const sequentialName = `${roomName} ${index + 1}`;
         nameMap[photo.id] = sequentialName;
       });
     });
 
-    // Build a reverse map from old name to before photo ID
+    // Build a reverse map from old name to before photo ID (for combined)
     const nameToBeforeId = {};
-    Object.keys(rooms).forEach(room => {
-      rooms[room].forEach((photo) => {
+    Object.values(groups).forEach(arr => {
+      arr.forEach((photo) => {
         nameToBeforeId[photo.name] = photo.id;
       });
     });
@@ -131,6 +139,15 @@ export const PhotoProvider = ({ children }) => {
     }
   };
 
+  const loadProjectsList = async () => {
+    try {
+      const list = await loadProjects();
+      setProjects(list);
+    } catch (e) {
+      console.error('Error loading projects list:', e);
+    }
+  };
+
   const savePhotos = async (newPhotos) => {
     try {
       // Reassign names sequentially before saving
@@ -143,7 +160,7 @@ export const PhotoProvider = ({ children }) => {
   };
 
   const addPhoto = async (photo) => {
-    const newPhotos = [...photos, photo];
+    const newPhotos = [...photos, { ...photo, projectId: photo.projectId ?? activeProjectId ?? null }];
     await savePhotos(newPhotos);
   };
 
@@ -170,20 +187,69 @@ export const PhotoProvider = ({ children }) => {
     await savePhotos([]);
   };
 
+  // ===== Project operations =====
+  const createProject = async (name) => {
+    const project = await storageCreateProject(name);
+    setProjects(prev => [project, ...prev]);
+    // Auto-assign only unassigned photos to the new project
+    const unassigned = photos.filter(p => !p.projectId);
+    if (unassigned.length > 0) {
+      const updated = photos.map(p => (!p.projectId ? { ...p, projectId: project.id } : p));
+      await savePhotos(updated);
+    }
+    return project;
+  };
+
+  const assignPhotosToProject = async (projectId) => {
+    // Assign only unassigned photos to avoid moving between projects implicitly
+    const updated = photos.map(p => (!p.projectId ? { ...p, projectId } : p));
+    await savePhotos(updated);
+  };
+
+  const getPhotosByProject = (projectId) => {
+    return photos.filter(p => p.projectId === projectId);
+  };
+
+  const deleteProject = async (projectId, options = {}) => {
+    const { deleteFromStorage = true } = options;
+    const related = photos.filter(p => p.projectId === projectId);
+    console.log('🗂️ deleteProject start', { projectId, deleteFromStorage, relatedCount: related.length });
+    // Delete all photos for this project from device and metadata
+    if (deleteFromStorage) {
+      for (const p of related) {
+        try {
+          console.log('🗑️ Deleting device file for photo', { id: p.id, name: p.name, uri: p.uri });
+          await deletePhotoFromDevice(p);
+        } catch (e) {
+          console.warn('⚠️ deletePhotoFromDevice failed', { id: p.id, uri: p.uri, error: e?.message });
+        }
+      }
+    } else {
+      console.log('ℹ️ Skipping device file deletion for project', projectId);
+    }
+    const remaining = photos.filter(p => p.projectId !== projectId);
+    await savePhotos(remaining);
+    console.log('🧹 Removed project photos from metadata', { projectId, remainingCount: remaining.length });
+    await deleteProjectEntry(projectId);
+    console.log('✅ Project entry removed', { projectId });
+    await loadProjectsList();
+    console.log('🔄 Projects list reloaded');
+  };
+
   const getPhotosByRoom = (room) => {
-    return photos.filter(p => p.room === room);
+    return photos.filter(p => p.room === room && (activeProjectId ? p.projectId === activeProjectId : true));
   };
 
   const getBeforePhotos = (room) => {
-    return photos.filter(p => p.room === room && p.mode === PHOTO_MODES.BEFORE);
+    return photos.filter(p => p.room === room && p.mode === PHOTO_MODES.BEFORE && (activeProjectId ? p.projectId === activeProjectId : true));
   };
 
   const getAfterPhotos = (room) => {
-    return photos.filter(p => p.room === room && p.mode === PHOTO_MODES.AFTER);
+    return photos.filter(p => p.room === room && p.mode === PHOTO_MODES.AFTER && (activeProjectId ? p.projectId === activeProjectId : true));
   };
 
   const getCombinedPhotos = (room) => {
-    return photos.filter(p => p.room === room && p.mode === PHOTO_MODES.COMBINED);
+    return photos.filter(p => p.room === room && p.mode === PHOTO_MODES.COMBINED && (activeProjectId ? p.projectId === activeProjectId : true));
   };
 
   const getUnpairedBeforePhotos = (room) => {
@@ -197,6 +263,8 @@ export const PhotoProvider = ({ children }) => {
 
   const value = {
     photos,
+    projects,
+    activeProjectId,
     currentRoom,
     setCurrentRoom,
     loading,
@@ -204,6 +272,14 @@ export const PhotoProvider = ({ children }) => {
     updatePhoto,
     deletePhoto,
     deleteAllPhotos,
+    setActiveProject: async (projectId) => {
+      setActiveProjectId(projectId);
+      await saveActiveProjectId(projectId);
+    },
+    createProject,
+    assignPhotosToProject,
+    getPhotosByProject,
+    deleteProject,
     getPhotosByRoom,
     getBeforePhotos,
     getAfterPhotos,
