@@ -25,6 +25,7 @@ import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
 import { getLocationConfig } from '../config/locations';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
+import { deletePhotosFromDevice, purgeAllDevicePhotos } from '../services/storage';
 // Removed MediaLibrary (unused) and gesture-handler TextInput (use RN TextInput)
 
 const { width } = Dimensions.get('window');
@@ -44,7 +45,7 @@ export default function AllPhotosScreen({ navigation, route }) {
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [manageVisible, setManageVisible] = useState(false);
   const [deleteFromStorage, setDeleteFromStorage] = useState(true);
-  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false);
+  const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
   const [confirmSaveVisible, setConfirmSaveVisible] = useState(false);
   const [projectName, setProjectName] = useState('');
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: false });
@@ -336,21 +337,14 @@ export default function AllPhotosScreen({ navigation, route }) {
   const handleDeleteAllConfirmed = async () => {
     try {
       if (deleteFromStorage) {
-        for (const p of photos) {
-          try {
-            if (p?.uri && typeof p.uri === 'string' && p.uri.startsWith(FileSystem.documentDirectory)) {
-              await FileSystem.deleteAsync(p.uri, { idempotent: true });
-            }
-          } catch (fileErr) {
-            console.warn('⚠️ Failed deleting file:', p?.uri, fileErr?.message);
-          }
-        }
+        // Delete known photos and also purge any base/combined images saved by editor/capture
+        await deletePhotosFromDevice(photos);
+        await purgeAllDevicePhotos();
       }
     } finally {
       await deleteAllPhotos();
     }
     setConfirmDeleteVisible(false);
-    Alert.alert('Success', 'All photos have been deleted');
   };
 
   // Group photos by room and create photo sets
@@ -923,7 +917,8 @@ export default function AllPhotosScreen({ navigation, route }) {
                   style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
                   onPress={() => {
                     setManageVisible(false);
-                    setConfirmDeleteVisible(true);
+                    // Delete immediately without confirmation
+                    handleDeleteAllConfirmed();
                   }}
                 >
                   <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>🗑️ Delete All</Text>
@@ -942,37 +937,7 @@ export default function AllPhotosScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* Confirm Delete Modal */}
-      <Modal
-        visible={confirmDeleteVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setConfirmDeleteVisible(false)}
-      >
-        <View style={styles.uploadModalContainer}>
-          <View style={styles.uploadModalContent}>
-            <Text style={styles.uploadModalTitle}>Delete All Photos</Text>
-            <Text style={styles.uploadModalProgress}>This action cannot be undone.</Text>
-            <View style={[styles.checkboxRow, { width: '92%', marginTop: 8 }]}>
-              <Text style={styles.checkboxLabel}>Remove from phone</Text>
-              <Switch
-                value={deleteFromStorage}
-                onValueChange={setDeleteFromStorage}
-                trackColor={{ false: COLORS.BORDER, true: '#CC0000' }}
-                thumbColor={'white'}
-              />
-            </View>
-            <View style={[styles.optionsActionsRow, { width: '92%' }]}>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setConfirmDeleteVisible(false)}>
-                <Text style={styles.actionBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionDestructive, styles.actionFlex]} onPress={handleDeleteAllConfirmed}>
-                <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>Delete</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Confirm Delete Modal removed per user request */}
 
     </SafeAreaView>
   );

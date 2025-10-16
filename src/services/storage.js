@@ -139,6 +139,157 @@ export const savePhotoToDevice = async (uri, filename) => {
 };
 
 /**
+ * Delete a saved photo from the app's storage and the device media library
+ * Accepts a full photo object (expects at least { uri })
+ */
+export const deletePhotoFromDevice = async (photo) => {
+  try {
+    if (!photo) return;
+    const uri = photo.uri;
+    if (!uri || typeof uri !== 'string') return;
+
+    // Derive a filename for media library lookup
+    const filename = (uri.split('/').pop() || '').split('?')[0];
+
+    // 1) Delete from app documents directory (idempotent)
+    try {
+      if (uri.startsWith(FileSystem.documentDirectory)) {
+        await FileSystem.deleteAsync(uri, { idempotent: true });
+      } else if (uri.startsWith('file://')) {
+        // Try deleting other file:// targets as best-effort
+        await FileSystem.deleteAsync(uri, { idempotent: true });
+      }
+    } catch (fsErr) {
+      console.warn('⚠️ Failed deleting file from app storage:', uri, fsErr?.message);
+    }
+
+    // 2) Delete from media library (ProofPix album)
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        console.warn('⚠️ Media library permission not granted; skipping library delete');
+        return;
+      }
+
+      const album = await MediaLibrary.getAlbumAsync('ProofPix');
+      if (!album) return; // Nothing to remove
+
+      // Fetch a generous number of assets from the album and locate by filename
+      const assets = await MediaLibrary.getAssetsAsync({
+        album,
+        first: 2000,
+        mediaType: [MediaLibrary.MediaType.photo]
+      });
+
+      const match = assets.assets.find((a) => {
+        if (!a) return false;
+        if (a.filename && a.filename === filename) return true;
+        if (a.uri && typeof a.uri === 'string' && filename && a.uri.endsWith(filename)) return true;
+        return false;
+      });
+
+      if (match) {
+        try {
+          await MediaLibrary.deleteAssetsAsync([match]);
+        } catch (delErr) {
+          console.warn('⚠️ Delete failed, trying album removal:', delErr?.message);
+          try {
+            await MediaLibrary.removeAssetsFromAlbumAsync([match], album, false);
+          } catch (remErr) {
+            console.warn('⚠️ Album removal also failed:', remErr?.message);
+          }
+        }
+      }
+    } catch (mlErr) {
+      console.warn('⚠️ Media library delete failed:', mlErr?.message);
+    }
+  } catch (error) {
+    console.error('Error deleting photo from device:', error);
+  }
+};
+
+/**
+ * Delete multiple photos from device/storage.
+ */
+export const deletePhotosFromDevice = async (photos) => {
+  if (!Array.isArray(photos) || photos.length === 0) return;
+  for (const p of photos) {
+    await deletePhotoFromDevice(p);
+  }
+};
+
+/**
+ * Purge all images saved by the app from device storage and media library.
+ * - Deletes all .jpg/.jpeg/.png files in the app's document directory
+ * - Deletes all assets inside the 'ProofPix' album in the media library
+ */
+export const purgeAllDevicePhotos = async () => {
+  // 1) Delete all image files in app documents directory
+  try {
+    const dir = FileSystem.documentDirectory;
+    if (dir) {
+      const entries = await FileSystem.readDirectoryAsync(dir);
+      for (const name of entries) {
+        const lower = name.toLowerCase();
+        if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png')) {
+          const full = `${dir}${name}`;
+          try {
+            await FileSystem.deleteAsync(full, { idempotent: true });
+          } catch (delErr) {
+            console.warn('⚠️ Failed deleting file in app dir:', full, delErr?.message);
+          }
+        }
+      }
+    }
+  } catch (fsListErr) {
+    console.warn('⚠️ Failed listing app directory for purge:', fsListErr?.message);
+  }
+
+  // 2) Delete all assets inside the ProofPix album
+  try {
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      console.warn('⚠️ Media library permission denied; skipping album purge');
+      return;
+    }
+
+    const album = await MediaLibrary.getAlbumAsync('ProofPix');
+    if (!album) return;
+
+    // Paginate through all assets
+    let endCursor = undefined;
+    const pageSize = 1000;
+    const toDelete = [];
+    while (true) {
+      const page = await MediaLibrary.getAssetsAsync({
+        album,
+        first: pageSize,
+        after: endCursor,
+        mediaType: [MediaLibrary.MediaType.photo]
+      });
+      toDelete.push(...page.assets);
+      if (!page.hasNextPage) break;
+      endCursor = page.endCursor;
+    }
+
+    if (toDelete.length > 0) {
+      try {
+        await MediaLibrary.deleteAssetsAsync(toDelete);
+      } catch (mlChangeErr) {
+        console.warn('⚠️ Bulk delete failed, trying album removal:', mlChangeErr?.message);
+        try {
+          await MediaLibrary.removeAssetsFromAlbumAsync(toDelete, album, false);
+        } catch (remErr) {
+          console.warn('⚠️ Album removal failed:', remErr?.message);
+        }
+      }
+    }
+  } catch (mlErr) {
+    console.warn('⚠️ Media library purge failed:', mlErr?.message);
+  }
+};
+
+/**
  * Gets stored user data (cleaner name, location)
  */
 export const getStoredUserData = async () => {

@@ -18,22 +18,9 @@ export default function PhotoDetailScreen({ route, navigation }) {
   const { photo } = route.params;
   const { deletePhoto } = usePhotos();
 
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete Photo',
-      'Are you sure you want to delete this photo?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            await deletePhoto(photo.id);
-            navigation.goBack();
-          }
-        }
-      ]
-    );
+  const handleDelete = async () => {
+    await deletePhoto(photo.id);
+    navigation.goBack();
   };
 
   const renderPhoto = () => {

@@ -1795,37 +1795,20 @@ export default function CameraScreen({ route, navigation }) {
             {/* Delete button - top left */}
       <TouchableOpacity
               style={styles.enlargedGalleryDeleteButton}
-        onPress={() => {
+        onPress={async () => {
                 const currentPhoto = photos[enlargedGalleryIndex];
-                if (currentPhoto) {
-                  Alert.alert(
-                    'Delete Photo',
-                    `Are you sure you want to delete "${currentPhoto.name}"?`,
-                    [
-                      {
-                        text: 'Cancel',
-                        style: 'cancel'
-                      },
-                      {
-                        text: 'Delete',
-                        style: 'destructive',
-                        onPress: async () => {
-                          console.log('Deleting photo:', currentPhoto.name);
-                          await deletePhoto(currentPhoto.id);
-                          
-                          // Close enlarged gallery and refresh
-                          setEnlargedGalleryPhoto(null);
-                          setShowEnlargedGallery(false);
-                          
-                          // If no more photos, close gallery
-                          const remainingPhotos = mode === 'before' ? getBeforePhotos(room) : getUnpairedBeforePhotos(room);
-                          if (remainingPhotos.length === 0) {
-                            setShowGallery(false);
-                          }
-                        }
-                      }
-                    ]
-                  );
+                if (!currentPhoto) return;
+                console.log('Deleting photo:', currentPhoto.name);
+                await deletePhoto(currentPhoto.id);
+
+                // Close enlarged gallery and refresh
+                setEnlargedGalleryPhoto(null);
+                setShowEnlargedGallery(false);
+
+                // If no more photos, close gallery
+                const remainingPhotos = mode === 'before' ? getBeforePhotos(room) : getUnpairedBeforePhotos(room);
+                if (remainingPhotos.length === 0) {
+                  setShowGallery(false);
                 }
               }}
             >

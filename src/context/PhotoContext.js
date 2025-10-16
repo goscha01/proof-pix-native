@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { loadPhotosMetadata, savePhotosMetadata } from '../services/storage';
+import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice } from '../services/storage';
 import { PHOTO_MODES } from '../constants/rooms';
 
 const PhotoContext = createContext();
@@ -155,8 +155,15 @@ export const PhotoProvider = ({ children }) => {
   };
 
   const deletePhoto = async (photoId) => {
-    const newPhotos = photos.filter(p => p.id !== photoId);
-    await savePhotos(newPhotos);
+    try {
+      const target = photos.find(p => p.id === photoId);
+      if (target) {
+        await deletePhotoFromDevice(target);
+      }
+    } finally {
+      const newPhotos = photos.filter(p => p.id !== photoId);
+      await savePhotos(newPhotos);
+    }
   };
 
   const deleteAllPhotos = async () => {
