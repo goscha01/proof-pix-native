@@ -1,4 +1,5 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -33,7 +34,7 @@ const PHOTO_SPACING = 16; // 8px between each of the 2 gaps
 const AVAILABLE_WIDTH = width - SET_NAME_WIDTH - CONTAINER_PADDING - PHOTO_SPACING;
 const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
-export default function AllPhotosScreen({ navigation }) {
+export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos } = usePhotos();
   const { userName, location } = useSettings();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
@@ -478,6 +479,20 @@ export default function AllPhotosScreen({ navigation }) {
     );
   };
 
+  // Open Manage Projects modal only when this screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      if (route?.params?.openManage) {
+        const timer = setTimeout(() => {
+          setManageVisible(true);
+          navigation.setParams({ openManage: undefined });
+        }, 120);
+        return () => clearTimeout(timer);
+      }
+      return undefined;
+    }, [route?.params?.openManage])
+  );
+
   return (
     <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
       {/* Swipe down indicator */}
@@ -858,15 +873,15 @@ export default function AllPhotosScreen({ navigation }) {
               <View style={{ marginTop: 4 }} />
 
               <View style={styles.actionsList}>
-                {/* New (green) */}
+                {/* Load (green) */}
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.actionWide, styles.actionGreen]}
                   onPress={() => {
                     setManageVisible(false);
-                    Alert.alert('New', 'Coming soon');
+                    Alert.alert('Load', 'Coming soon');
                   }}
                 >
-                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>🆕 New</Text>
+                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>📂 Load</Text>
                 </TouchableOpacity>
 
                 {/* Save (amber) */}

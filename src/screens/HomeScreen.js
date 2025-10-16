@@ -364,6 +364,14 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.allPhotosButtonText}>📷 All Photos</Text>
       </TouchableOpacity>
 
+      {/* Manage Projects button under All Photos - always visible */}
+      <TouchableOpacity
+        style={[styles.allPhotosButtonBottom, { backgroundColor: '#22A45D' }]}
+        onPress={() => navigation.navigate('AllPhotos', { openManage: true })}
+      >
+        <Text style={[styles.allPhotosButtonText, { color: 'white' }]}>🗂️ Manage Projects</Text>
+      </TouchableOpacity>
+
       {/* Full-screen photo view - single photo */}
       {fullScreenPhoto && (
         <TouchableWithoutFeedback onPress={handleLongPressEnd}>
