@@ -236,7 +236,7 @@ export async function uploadPhotoBatch(photos, config) {
 
       return uploadPhoto({
         imageDataUrl: photo.uri,
-        filename: photo.filename || `${photo.name}_${format !== 'default' ? format : photoType}.jpg`,
+        filename: photo.filename || `${photo.name}_${format !== 'default' ? format : typeParam}.jpg`,
         albumName,
         room: photo.room || 'general',
         type: typeParam,
