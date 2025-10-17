@@ -8,14 +8,15 @@ import {
   Alert,
   ActivityIndicator,
   ScrollView,
-  PanResponder
+  PanResponder,
+  Share
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
-import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, TEMPLATE_CONFIGS } from '../constants/rooms';
+import { COLORS, TEMPLATE_TYPES, TEMPLATE_CONFIGS } from '../constants/rooms';
 
 export default function PhotoEditorScreen({ route, navigation }) {
   const { beforePhoto, afterPhoto } = route.params;
@@ -38,7 +39,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
   const combinedRef = useRef(null);
   const templateScrollRef = useRef(null);
-  const { addPhoto, getUnpairedBeforePhotos } = usePhotos();
+  const { getUnpairedBeforePhotos } = usePhotos();
   const { showLabels } = useSettings();
   const templateTypeRef = useRef(templateType);
   const [originalBaseUris, setOriginalBaseUris] = useState({ stack: null, side: null });
@@ -281,7 +282,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [originalBaseUris.stack, originalBaseUris.side]);
 
-  const saveCombinedPhoto = async () => {
+  const shareCombinedPhoto = async () => {
     try {
       setSaving(true);
 
@@ -291,42 +292,28 @@ export default function PhotoEditorScreen({ route, navigation }) {
         quality: 0.9
       });
 
-      // Save to device
-      const savedUri = await savePhotoToDevice(
-        uri,
-        `${beforePhoto.room}_${beforePhoto.name}_COMBINED_${templateType}_${Date.now()}.jpg`
-      );
+      // Create a temporary file for sharing
+      const tempFileName = `${beforePhoto.room}_${beforePhoto.name}_COMBINED_${templateType}_${Date.now()}.jpg`;
+      const tempUri = await savePhotoToDevice(uri, tempFileName);
 
-      // Add combined photo
-      const combinedPhoto = {
-        id: Date.now(),
-        uri: savedUri,
-        room: beforePhoto.room,
-        mode: PHOTO_MODES.COMBINED,
-        name: beforePhoto.name,
-        timestamp: Date.now(),
-        templateType,
-        orientation: beforePhoto.orientation || 'portrait',
-        cameraViewMode: beforePhoto.cameraViewMode || 'portrait'
+      // Share the image
+      const shareOptions = {
+        title: `Combined Photo - ${beforePhoto.name}`,
+        message: `Check out this before/after comparison from ${beforePhoto.room}!`,
+        url: tempUri,
+        type: 'image/jpeg'
       };
 
-      console.log('Saving combined photo:', combinedPhoto);
-      await addPhoto(combinedPhoto);
-
-      // Return to main grid after saving combined photo
-      Alert.alert(
-        'Success',
-        'Combined photo saved!',
-        [
-          {
-            text: 'OK',
-            onPress: () => navigation.navigate('Home')
-          }
-        ]
-      );
+      const result = await Share.share(shareOptions);
+      
+      if (result.action === Share.sharedAction) {
+        console.log('Photo shared successfully');
+      } else if (result.action === Share.dismissedAction) {
+        console.log('Share dialog dismissed');
+      }
     } catch (error) {
-      console.error('Error saving combined photo:', error);
-      Alert.alert('Error', 'Failed to save combined photo');
+      console.error('Error sharing combined photo:', error);
+      Alert.alert('Error', 'Failed to share combined photo');
     } finally {
       setSaving(false);
     }
@@ -511,14 +498,14 @@ export default function PhotoEditorScreen({ route, navigation }) {
       </View>
 
       <TouchableOpacity
-        style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-        onPress={saveCombinedPhoto}
+        style={[styles.shareButton, saving && styles.shareButtonDisabled]}
+        onPress={shareCombinedPhoto}
         disabled={saving}
       >
         {saving ? (
           <ActivityIndicator color={COLORS.TEXT} />
         ) : (
-          <Text style={styles.saveButtonText}>Save Combined Photo</Text>
+          <Text style={styles.shareButtonText}>Share</Text>
         )}
       </TouchableOpacity>
     </View>
@@ -671,17 +658,17 @@ const styles = StyleSheet.create({
   templateButtonTextActive: {
     color: COLORS.TEXT
   },
-  saveButton: {
+  shareButton: {
     margin: 20,
     backgroundColor: COLORS.PRIMARY,
     padding: 18,
     borderRadius: 12,
     alignItems: 'center'
   },
-  saveButtonDisabled: {
+  shareButtonDisabled: {
     opacity: 0.5
   },
-  saveButtonText: {
+  shareButtonText: {
     color: COLORS.TEXT,
     fontSize: 18,
     fontWeight: 'bold'
