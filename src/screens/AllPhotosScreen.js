@@ -37,7 +37,7 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
-  const { userName, location, isBusiness } = useSettings();
+  const { userName, location, isBusiness, useFolderStructure, enabledFolders } = useSettings();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
   const [uploading, setUploading] = useState(false);
@@ -50,7 +50,7 @@ export default function AllPhotosScreen({ navigation, route }) {
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
   const [confirmSaveVisible, setConfirmSaveVisible] = useState(false);
   const [projectName, setProjectName] = useState('');
-  const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: false });
+  const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
   const [selectedFormats, setSelectedFormats] = useState(() => {
     // Default: only square formats enabled by default
     const initial = {};
@@ -364,7 +364,12 @@ export default function AllPhotosScreen({ navigation, route }) {
         }
       }
 
-      const allItems = [...items, ...combinedItems];
+      // Apply folder switches: when folder structure ON, allow per-type filtering
+      // When folder structure OFF, we still upload all types but the server will place them in the project root
+      const filteredBefore = useFolderStructure && !enabledFolders.before ? [] : items.filter(i => i.mode === PHOTO_MODES.BEFORE);
+      const filteredAfter = useFolderStructure && !enabledFolders.after ? [] : items.filter(i => i.mode === PHOTO_MODES.AFTER);
+      const filteredCombined = useFolderStructure && !enabledFolders.combined ? [] : combinedItems;
+      const allItems = [...filteredBefore, ...filteredAfter, ...filteredCombined];
 
       if (allItems.length === 0) {
         Alert.alert('Nothing to Upload', 'Please select at least one photo type with available photos.');
@@ -381,6 +386,8 @@ export default function AllPhotosScreen({ navigation, route }) {
       uploadControllersRef.current = [];
       masterAbortRef.current = new AbortController();
 
+      // Pass flat mode to uploader via global toggle (used by form data)
+      globalThis.__UPLOAD_FLAT_MODE = !useFolderStructure;
       const result = await uploadPhotoBatch(allItems, {
         scriptUrl: config.scriptUrl,
         folderId: config.folderId,
@@ -389,6 +396,7 @@ export default function AllPhotosScreen({ navigation, route }) {
         cleanerName: userName,
         batchSize: 3,
         abortSignal: masterAbortRef.current.signal,
+        flat: !useFolderStructure,
         getAbortController: () => {
           const controller = new AbortController();
           uploadControllersRef.current.push(controller);

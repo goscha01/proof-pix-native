@@ -22,7 +22,11 @@ export default function SettingsScreen({ navigation }) {
     location,
     updateUserInfo,
     isBusiness,
-    toggleBusiness
+    toggleBusiness,
+    useFolderStructure,
+    toggleUseFolderStructure,
+    enabledFolders,
+    updateEnabledFolders
   } = useSettings();
 
   const [name, setName] = useState(userName);
@@ -174,6 +178,67 @@ export default function SettingsScreen({ navigation }) {
               thumbColor="white"
             />
           </View>
+        </View>
+
+        {/* Upload Structure */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Upload Structure</Text>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Use folder structure</Text>
+              <Text style={styles.settingDescription}>
+                If off, all photos go into the project folder
+              </Text>
+            </View>
+            <Switch
+              value={useFolderStructure}
+              onValueChange={toggleUseFolderStructure}
+              trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+              thumbColor="white"
+            />
+          </View>
+
+          {useFolderStructure && (
+            <>
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Before folder</Text>
+                  <Text style={styles.settingDescription}>Uploads to "before" subfolder</Text>
+                </View>
+                <Switch
+                  value={enabledFolders.before}
+                  onValueChange={(v) => updateEnabledFolders({ before: v })}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
+              </View>
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>After folder</Text>
+                  <Text style={styles.settingDescription}>Uploads to "after" subfolder</Text>
+                </View>
+                <Switch
+                  value={enabledFolders.after}
+                  onValueChange={(v) => updateEnabledFolders({ after: v })}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
+              </View>
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Combined folder</Text>
+                  <Text style={styles.settingDescription}>Uploads to "combined"/formats subfolders</Text>
+                </View>
+                <Switch
+                  value={enabledFolders.combined}
+                  onValueChange={(v) => updateEnabledFolders({ combined: v })}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
+              </View>
+            </>
+          )}
         </View>
       </ScrollView>
     </SafeAreaView>

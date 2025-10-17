@@ -18,6 +18,8 @@ export const SettingsProvider = ({ children }) => {
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('tampa'); // Default to Tampa
   const [isBusiness, setIsBusiness] = useState(false);
+  const [useFolderStructure, setUseFolderStructure] = useState(true);
+  const [enabledFolders, setEnabledFolders] = useState({ before: true, after: true, combined: true });
   const [loading, setLoading] = useState(true);
 
   // Load settings on mount
@@ -34,6 +36,8 @@ export const SettingsProvider = ({ children }) => {
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? 'tampa');
         setIsBusiness(settings.isBusiness ?? false);
+        setUseFolderStructure(settings.useFolderStructure ?? true);
+        setEnabledFolders(settings.enabledFolders ?? { before: true, after: true, combined: true });
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -49,6 +53,8 @@ export const SettingsProvider = ({ children }) => {
         userName,
         location,
         isBusiness,
+        useFolderStructure,
+        enabledFolders,
         ...newSettings
       };
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -75,6 +81,18 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ isBusiness: newValue });
   };
 
+  const toggleUseFolderStructure = async () => {
+    const newValue = !useFolderStructure;
+    setUseFolderStructure(newValue);
+    await saveSettings({ useFolderStructure: newValue });
+  };
+
+  const updateEnabledFolders = async (updates) => {
+    const next = { ...enabledFolders, ...updates };
+    setEnabledFolders(next);
+    await saveSettings({ enabledFolders: next });
+  };
+
   const value = {
     showLabels,
     toggleLabels,
@@ -83,6 +101,10 @@ export const SettingsProvider = ({ children }) => {
     updateUserInfo,
     isBusiness,
     toggleBusiness,
+    useFolderStructure,
+    toggleUseFolderStructure,
+    enabledFolders,
+    updateEnabledFolders,
     loading
   };
 

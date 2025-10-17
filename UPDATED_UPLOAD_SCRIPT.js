@@ -10,6 +10,7 @@ function doPost(e) {
     const room = e.parameter.room;
     const type = e.parameter.type;
     const format = e.parameter.format || 'default';
+    const flatMode = e.parameter.flat === 'true'; // when true, skip subfolder creation
     const timestamp = e.parameter.timestamp;
     const location = e.parameter.location;
     const imageData = e.parameter.image;
@@ -62,7 +63,7 @@ function doPost(e) {
       let albumFolder = getOrCreateFolder(mainFolder, sanitizedAlbumName);
 
       // Determine folder structure based on photo type and format
-      if (format !== 'default') {
+      if (!flatMode && format !== 'default') {
         // Create formats folder for multiple formats - SECOND LEVEL
         console.log('Creating/finding formats folder...');
         let formatsFolder = getOrCreateFolder(albumFolder, 'formats');
@@ -70,11 +71,15 @@ function doPost(e) {
         // Create specific format folder - THIRD LEVEL
         console.log('Creating/finding format folder:', format);
         targetFolder = getOrCreateFolder(formatsFolder, format);
-      } else {
+      } else if (!flatMode) {
         // For default format, create type folders directly under album - SECOND LEVEL
         const folderName = type === 'mix' ? 'combined' : type;
         console.log('Creating/finding type folder:', folderName);
         targetFolder = getOrCreateFolder(albumFolder, folderName);
+      } else {
+        // Flat mode: upload directly into the album root
+        console.log('Flat mode: uploading into album root');
+        targetFolder = albumFolder;
       }
 
       console.log('Target folder selected:', targetFolder.getName());
@@ -128,15 +133,17 @@ function doPost(e) {
 
     // Build folder path for response
     let folderPath = `${albumName}/`;
-    if (format !== 'default') {
-      folderPath += `formats/${format}/`;
-    } else {
-      folderPath += `${type === 'mix' ? 'combined' : type}/`;
+    if (!flatMode) {
+      if (format !== 'default') {
+        folderPath += `formats/${format}/`;
+      } else {
+        folderPath += `${type === 'mix' ? 'combined' : type}/`;
+      }
     }
 
     // Return success response
     console.log('Returning success response');
-    return ContentService
+      return ContentService
       .createTextOutput(JSON.stringify({
         success: true,
         fileId: file.getId(),
@@ -148,6 +155,7 @@ function doPost(e) {
         location: location,
         cleanerName: cleanerName,
         folderPath: folderPath,
+        flatMode: !!flatMode,
         message: 'Photo uploaded successfully'
       }))
       .setMimeType(ContentService.MimeType.JSON);

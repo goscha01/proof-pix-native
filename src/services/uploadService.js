@@ -103,7 +103,8 @@ export async function uploadPhoto({
   scriptUrl,
   folderId,
   onProgress,
-  abortSignal
+  abortSignal,
+  flat = false
 }) {
   try {
     console.log(`📤 Starting upload: ${filename}, type: ${type}, format: ${format}`);
@@ -142,6 +143,9 @@ export async function uploadPhoto({
     formData.append('room', room || 'general');
     formData.append('type', type);
     formData.append('format', format);
+    if (flat || (typeof globalThis.__UPLOAD_FLAT_MODE === 'boolean' && globalThis.__UPLOAD_FLAT_MODE)) {
+      formData.append('flat', 'true');
+    }
     formData.append('timestamp', Date.now().toString());
     formData.append('location', location);
     formData.append('cleanerName', cleanerName);
@@ -149,8 +153,12 @@ export async function uploadPhoto({
 
     console.log(`🚀 Uploading to Google Drive...`);
 
-    // Upload to Google Drive
-    const response = await fetch(scriptUrl, {
+    // Upload to Google Drive (ensure flat flag reaches GAS via URL as well)
+    const shouldFlat = flat || (typeof globalThis.__UPLOAD_FLAT_MODE === 'boolean' && globalThis.__UPLOAD_FLAT_MODE);
+    const targetUrl = shouldFlat
+      ? `${scriptUrl}${scriptUrl.includes('?') ? '&' : '?'}flat=true`
+      : scriptUrl;
+    const response = await fetch(targetUrl, {
       method: 'POST',
       body: formData,
       // Pass abort signal if provided to support cancellation
@@ -213,7 +221,8 @@ export async function uploadPhotoBatch(photos, config) {
     onProgress,
     onBatchComplete,
     getAbortController, // optional callback to retrieve/create AbortController per request
-    abortSignal // optional AbortSignal to stop scheduling further uploads
+    abortSignal, // optional AbortSignal to stop scheduling further uploads
+    flat = false // upload into project root (no subfolders)
   } = config;
 
   const successful = [];
@@ -266,7 +275,8 @@ export async function uploadPhotoBatch(photos, config) {
         cleanerName,
         scriptUrl,
         folderId,
-        abortSignal: controller ? controller.signal : (abortSignal || undefined)
+        abortSignal: controller ? controller.signal : (abortSignal || undefined),
+        flat
       })
         .then(result => ({ success: true, result, photo }))
         .catch(error => ({ success: false, error, photo }));
