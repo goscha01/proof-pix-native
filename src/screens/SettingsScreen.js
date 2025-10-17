@@ -20,7 +20,9 @@ export default function SettingsScreen({ navigation }) {
     toggleLabels,
     userName,
     location,
-    updateUserInfo
+    updateUserInfo,
+    isBusiness,
+    toggleBusiness
   } = useSettings();
 
   const [name, setName] = useState(userName);
@@ -157,6 +159,21 @@ export default function SettingsScreen({ navigation }) {
               thumbColor="white"
             />
           </View>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Business</Text>
+              <Text style={styles.settingDescription}>
+                Enable business mode features
+              </Text>
+            </View>
+            <Switch
+              value={isBusiness}
+              onValueChange={toggleBusiness}
+              trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+              thumbColor="white"
+            />
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -218,151 +235,96 @@ const styles = StyleSheet.create({
     marginBottom: 8
   },
   input: {
-    backgroundColor: COLORS.BACKGROUND,
+    backgroundColor: 'white',
     borderWidth: 1,
     borderColor: COLORS.BORDER,
-    borderRadius: 8,
     padding: 12,
-    fontSize: 16,
+    borderRadius: 8,
     color: COLORS.TEXT
   },
-  settingRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8
-  },
-  settingInfo: {
-    flex: 1,
-    marginRight: 16
-  },
-  settingLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.TEXT,
-    marginBottom: 4
-  },
-  settingDescription: {
-    fontSize: 13,
-    color: COLORS.GRAY,
-    lineHeight: 18
-  },
-  modeButtons: {
-    marginTop: 12,
-    gap: 12
-  },
-  modeButton: {
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: COLORS.BORDER,
-    backgroundColor: COLORS.BACKGROUND
-  },
-  modeButtonActive: {
-    borderColor: COLORS.PRIMARY,
-    backgroundColor: 'white'
-  },
-  modeButtonTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-    marginBottom: 6
-  },
-  modeButtonDescription: {
-    fontSize: 13,
-    color: COLORS.GRAY,
-    lineHeight: 18
-  },
   locationPicker: {
-    backgroundColor: COLORS.BACKGROUND,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     borderWidth: 1,
     borderColor: COLORS.BORDER,
-    borderRadius: 8,
     padding: 12,
-    fontSize: 16,
-    color: COLORS.TEXT,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    borderRadius: 8
   },
   locationPickerText: {
-    fontSize: 16,
     color: COLORS.TEXT,
-    flex: 1
+    fontWeight: '600'
   },
   locationPickerArrow: {
-    fontSize: 12,
-    color: COLORS.GRAY,
-    marginLeft: 8
+    color: COLORS.GRAY
   },
   locationDropdown: {
     marginTop: 8,
-    backgroundColor: 'white',
     borderWidth: 1,
     borderColor: COLORS.BORDER,
     borderRadius: 8,
     overflow: 'hidden'
   },
   locationOption: {
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center'
+    padding: 12,
+    backgroundColor: 'white'
   },
   locationOptionSelected: {
-    backgroundColor: COLORS.PRIMARY
+    backgroundColor: '#f7f7f7'
   },
   locationOptionText: {
-    fontSize: 16,
     color: COLORS.TEXT
   },
   locationOptionTextSelected: {
-    fontWeight: 'bold',
-    color: 'white'
+    fontWeight: '700'
   },
   locationOptionCheck: {
-    fontSize: 18,
-    color: 'white',
-    fontWeight: 'bold'
+    position: 'absolute',
+    right: 12,
+    top: 12,
+    color: COLORS.PRIMARY
   },
   sectionDescription: {
-    fontSize: 13,
     color: COLORS.GRAY,
-    marginBottom: 16,
-    lineHeight: 18
+    marginBottom: 12
   },
   configRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.BORDER,
-    marginBottom: 8
+    paddingVertical: 8
   },
   configLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.TEXT,
-    flex: 1
+    color: COLORS.GRAY
   },
   configValue: {
-    fontSize: 14,
-    color: COLORS.GRAY,
-    flex: 2,
-    textAlign: 'right'
+    color: COLORS.TEXT,
+    maxWidth: '70%'
   },
   warningBox: {
-    backgroundColor: '#FFF3CD',
+    marginTop: 12,
     padding: 12,
     borderRadius: 8,
-    marginTop: 8
+    backgroundColor: '#FFF8E1'
   },
   warningText: {
-    fontSize: 13,
-    color: '#856404',
-    lineHeight: 18
+    color: '#8A6D3B'
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12
+  },
+  settingInfo: {
+    flex: 1,
+    paddingRight: 16
+  },
+  settingLabel: {
+    color: COLORS.TEXT,
+    fontWeight: '600'
+  },
+  settingDescription: {
+    color: COLORS.GRAY,
+    fontSize: 12
   }
 });

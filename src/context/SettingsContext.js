@@ -17,6 +17,7 @@ export const SettingsProvider = ({ children }) => {
   const [showLabels, setShowLabels] = useState(true);
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('tampa'); // Default to Tampa
+  const [isBusiness, setIsBusiness] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // Load settings on mount
@@ -32,6 +33,7 @@ export const SettingsProvider = ({ children }) => {
         setShowLabels(settings.showLabels ?? true);
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? 'tampa');
+        setIsBusiness(settings.isBusiness ?? false);
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -46,6 +48,7 @@ export const SettingsProvider = ({ children }) => {
         showLabels,
         userName,
         location,
+        isBusiness,
         ...newSettings
       };
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -66,12 +69,20 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ userName: name, location: loc });
   };
 
+  const toggleBusiness = async () => {
+    const newValue = !isBusiness;
+    setIsBusiness(newValue);
+    await saveSettings({ isBusiness: newValue });
+  };
+
   const value = {
     showLabels,
     toggleLabels,
     userName,
     location,
     updateUserInfo,
+    isBusiness,
+    toggleBusiness,
     loading
   };
 
