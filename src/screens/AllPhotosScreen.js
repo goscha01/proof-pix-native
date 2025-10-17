@@ -37,7 +37,7 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
-  const { userName, location } = useSettings();
+  const { userName, location, isBusiness } = useSettings();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
   const [uploading, setUploading] = useState(false);
@@ -53,7 +53,8 @@ export default function AllPhotosScreen({ navigation, route }) {
     // Default: only square formats enabled by default
     const initial = {};
     Object.keys(TEMPLATE_CONFIGS).forEach((key) => {
-      initial[key] = (key === TEMPLATE_TYPES.SQUARE_STACK || key === TEMPLATE_TYPES.SQUARE_SIDE);
+      // All formats disabled by default; selection requires upgrade in advanced section
+      initial[key] = false;
     });
     return initial;
   });
@@ -67,13 +68,12 @@ export default function AllPhotosScreen({ navigation, route }) {
   const [currentRenderTemplate, setCurrentRenderTemplate] = useState(null);
   const renderViewRef = useRef(null);
 
-  const FREE_FORMATS = new Set([TEMPLATE_TYPES.SQUARE_STACK, TEMPLATE_TYPES.SQUARE_SIDE]);
+  const FREE_FORMATS = new Set([]);
   const handleFormatToggle = (key) => {
     try {
-      if (!FREE_FORMATS.has(key)) {
-        // Close options first, then show upgrade to avoid modal stacking issues
-        setOptionsVisible(false);
-        setTimeout(() => setUpgradeVisible(true), 120);
+      // Gate advanced formats by business flag
+      if (!isBusiness) {
+        setUpgradeVisible(true);
         return;
       }
       setSelectedFormats(prev => ({ ...prev, [key]: !prev[key] }));
@@ -647,6 +647,8 @@ export default function AllPhotosScreen({ navigation, route }) {
         </View>
       </Modal>
 
+      {/* Upgrade overlay is rendered inside the Upload Options modal for correct stacking */}
+
       {/* Confirm Save Modal */}
       <Modal
         visible={confirmSaveVisible}
@@ -710,27 +712,31 @@ export default function AllPhotosScreen({ navigation, route }) {
 
       {/* Upgrade Modal */}
       <Modal
-        visible={upgradeVisible}
+        visible={upgradeVisible && !optionsVisible}
         transparent={true}
         animationType="fade"
+        presentationStyle="overFullScreen"
+        statusBarTranslucent={true}
         onRequestClose={() => setUpgradeVisible(false)}
       >
-        <View style={styles.uploadModalContainer}>
-          <View style={styles.uploadModalContent}>
-            <Text style={styles.uploadModalTitle}>Upgrade required</Text>
-            <Text style={styles.uploadModalProgress}>Unlock more formats with Business</Text>
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionPrimary, styles.actionFull]}
-              onPress={() => setUpgradeVisible(false)}
-            >
-              <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Upgrade to Business</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionCancel, styles.actionFull, { marginTop: 8 }]}
-              onPress={() => setUpgradeVisible(false)}
-            >
-              <Text style={styles.actionBtnText}>Not now</Text>
-            </TouchableOpacity>
+        <View style={styles.optionsModalOverlay}>
+          <View style={styles.optionsModalContent}>
+            <Text style={styles.optionsTitle}>Upgrade required</Text>
+            <Text style={[styles.optionsSectionLabel, { marginBottom: 16 }]}>Unlock more formats with Business</Text>
+            <View style={[styles.optionsActionsRow, { marginTop: 0 }]}>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionPrimary, styles.actionHalf]}
+                onPress={() => setUpgradeVisible(false)}
+              >
+                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Upgrade</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionCancel, styles.actionHalf]}
+                onPress={() => setUpgradeVisible(false)}
+              >
+                <Text style={styles.actionBtnText}>Not now</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>
@@ -795,23 +801,6 @@ export default function AllPhotosScreen({ navigation, route }) {
 
             {selectedTypes.combined && (
               <>
-                {/* Default: Square formats at top */}
-                <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>Square formats</Text>
-                <View style={styles.optionsChipsRow}>
-                  {[TEMPLATE_TYPES.SQUARE_STACK, TEMPLATE_TYPES.SQUARE_SIDE]
-                    .map((key) => (
-                      <TouchableOpacity
-                        key={key}
-                        style={[styles.chip, selectedFormats[key] && styles.chipActive]}
-                        onPress={() => handleFormatToggle(key)}
-                      >
-                        <Text style={[styles.chipText, selectedFormats[key] && styles.chipTextActive]}>
-                          {TEMPLATE_CONFIGS[key].name}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                </View>
-
                 {/* Advanced toggle */}
                 {!showAdvancedFormats && (
                   <TouchableOpacity
@@ -827,7 +816,7 @@ export default function AllPhotosScreen({ navigation, route }) {
                     <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>Stacked formats</Text>
                     <View style={styles.optionsChipsRow}>
                       {Object.entries(TEMPLATE_CONFIGS)
-                        .filter(([k, cfg]) => cfg.layout === 'stack' && k !== TEMPLATE_TYPES.SQUARE_STACK)
+                        .filter(([k, cfg]) => cfg.layout === 'stack')
                         .map(([key, cfg]) => (
                           <TouchableOpacity
                             key={key}
@@ -842,7 +831,7 @@ export default function AllPhotosScreen({ navigation, route }) {
                     <Text style={[styles.optionsSectionLabel, { marginTop: 12 }]}>Side-by-side formats</Text>
                     <View style={styles.optionsChipsRow}>
                       {Object.entries(TEMPLATE_CONFIGS)
-                        .filter(([k, cfg]) => cfg.layout === 'sidebyside' && k !== TEMPLATE_TYPES.SQUARE_SIDE)
+                        .filter(([k, cfg]) => cfg.layout === 'sidebyside')
                         .map(([key, cfg]) => (
                           <TouchableOpacity
                             key={key}
@@ -873,6 +862,33 @@ export default function AllPhotosScreen({ navigation, route }) {
                 <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Start Upload</Text>
               </TouchableOpacity>
             </View>
+            {/* Inline upgrade overlay (absolute) to ensure it's above any content */}
+            {upgradeVisible && (
+              <View style={styles.inlineOverlay} pointerEvents="auto">
+                <View style={styles.inlineOverlayCard}>
+                  <Text style={styles.optionsTitle}>Upgrade required</Text>
+                  <Text style={[styles.optionsSectionLabel, { marginBottom: 16 }]}>Unlock more formats with Business</Text>
+                  <View style={[styles.optionsActionsRow, { marginTop: 0 }]}>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionPrimary, styles.actionHalf]}
+                      onPress={() => {
+                        setUpgradeVisible(false);
+                        setOptionsVisible(false);
+                        navigation.navigate('Settings');
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Upgrade</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionCancel, styles.actionHalf]}
+                      onPress={() => setUpgradeVisible(false)}
+                    >
+                      <Text style={styles.actionBtnText}>Not now</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            )}
           </View>
         </View>
       </Modal>
@@ -1297,6 +1313,23 @@ const styles = StyleSheet.create({
     alignItems: 'center'
   },
   optionsModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 20,
+    width: '86%',
+    maxWidth: 380
+  },
+  inlineOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  inlineOverlayCard: {
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 20,
