@@ -11,6 +11,7 @@ import {
   PanResponder
 } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
+import * as FileSystem from 'expo-file-system/legacy';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
@@ -26,15 +27,11 @@ export default function PhotoEditorScreen({ route, navigation }) {
     const phoneOrientation = beforePhoto.orientation || 'portrait';
     const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
     console.log('PhotoEditor - Phone orientation:', phoneOrientation, 'Camera view mode:', cameraViewMode);
-    
-    // Use stacked if EITHER phone is landscape OR camera view is landscape (letterbox)
+    // Prefer original layout first
     if (phoneOrientation === 'landscape' || cameraViewMode === 'landscape') {
-      // STACKED combined photos (horizontal split)
-      return TEMPLATE_TYPES.STACK_PORTRAIT;
-    } else {
-      // SIDE-BY-SIDE combined photos (vertical split)
-      return TEMPLATE_TYPES.SIDE_BY_SIDE_LANDSCAPE;
+      return 'original-stack';
     }
+    return 'original-side';
   };
 
   const [templateType, setTemplateType] = useState(getDefaultTemplate());
@@ -43,11 +40,37 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const { addPhoto, getUnpairedBeforePhotos } = usePhotos();
   const { showLabels } = useSettings();
   const templateTypeRef = useRef(templateType);
+  const [originalBaseUris, setOriginalBaseUris] = useState({ stack: null, side: null });
+  const [originalImageSize, setOriginalImageSize] = useState(null); // { width, height }
 
   // Update ref when templateType changes
   useEffect(() => {
     templateTypeRef.current = templateType;
   }, [templateType]);
+
+  // Locate saved original base images for this pair (if any)
+  useEffect(() => {
+    (async () => {
+      try {
+        const dir = FileSystem.documentDirectory;
+        if (!dir) return;
+        const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
+        const prefixStack = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
+        const prefixSide = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
+        const entries = await FileSystem.readDirectoryAsync(dir);
+        let stack = null;
+        let side = null;
+        for (const name of entries) {
+          if (!stack && name.startsWith(prefixStack)) stack = `${dir}${name}`;
+          if (!side && name.startsWith(prefixSide)) side = `${dir}${name}`;
+          if (stack && side) break;
+        }
+        setOriginalBaseUris({ stack, side });
+      } catch (e) {
+        // ignore
+      }
+    })();
+  }, [beforePhoto]);
 
   // PanResponder for swipe gestures
   const handleSwipeChangeTemplate = (direction) => {
@@ -106,31 +129,92 @@ export default function PhotoEditorScreen({ route, navigation }) {
   // Letterbox mode (landscape camera view) → ALL templates available
   // Landscape phone position → only stacked templates
   // Portrait phone position AND portrait camera view → only side-by-side templates
+  const getOriginalTemplateConfigs = () => {
+    const phoneOrientation = beforePhoto.orientation || 'portrait';
+    const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
+    const isLandscape = phoneOrientation === 'landscape' || cameraViewMode === 'landscape';
+    // Base sizes for preview (used only for container sizing when showing original image)
+    const portraitW = 1080;
+    const portraitH = 1620; // ~2:3
+    const landscapeW = 1920;
+    const landscapeH = 1080; // 16:9
+    const hasStack = !!originalBaseUris.stack;
+    const hasSide = !!originalBaseUris.side;
+    const showSide = !isLandscape || cameraViewMode === 'landscape'; // portrait: only side; letterbox: side too
+    const showStack = isLandscape; // landscape or letterbox: stack
+    const configs = {};
+    if (showStack && hasStack) configs['original-stack'] = { name: 'Original', width: landscapeW, height: landscapeH, layout: 'stack' };
+    if (showSide && hasSide) configs['original-side'] = { name: 'Original', width: portraitW, height: portraitH, layout: 'sidebyside' };
+    const preferredKey = isLandscape ? (hasStack ? 'original-stack' : (hasSide ? 'original-side' : null)) : (hasSide ? 'original-side' : (hasStack ? 'original-stack' : null));
+    return { ...configs, preferredKey };
+  };
+
+  const getTemplateConfig = (key) => {
+    const originals = getOriginalTemplateConfigs();
+    if (key === 'original-stack' || key === 'original-side') return originals[key];
+    return TEMPLATE_CONFIGS[key];
+  };
+
+  // Choose a safe default template key based on orientation
+  const getFallbackTemplateKey = () => {
+    const phoneOrientation = beforePhoto.orientation || 'portrait';
+    const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
+    const isLandscape = phoneOrientation === 'landscape' || cameraViewMode === 'landscape';
+    return isLandscape ? TEMPLATE_TYPES.STACK_PORTRAIT : TEMPLATE_TYPES.SIDE_BY_SIDE_LANDSCAPE;
+  };
+
   const getAvailableTemplates = () => {
     const phoneOrientation = beforePhoto.orientation || 'portrait';
     const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
     const allTemplates = Object.entries(TEMPLATE_CONFIGS);
-
+    const originals = getOriginalTemplateConfigs();
     console.log('Filtering templates - Phone:', phoneOrientation, 'Camera view:', cameraViewMode);
 
-    // LETTERBOX mode (landscape camera view) - show ALL templates
+    // Build base list filtered by layout
+    let filtered;
     if (cameraViewMode === 'landscape') {
-      console.log('Letterbox mode - showing ALL templates:', allTemplates.map(([k, c]) => c.name));
-      return allTemplates;
+      filtered = allTemplates;
+    } else if (phoneOrientation === 'landscape') {
+      filtered = allTemplates.filter(([key, config]) => config.layout === 'stack');
+    } else {
+      filtered = allTemplates.filter(([key, config]) => config.layout === 'sidebyside');
     }
-    
-    // Landscape phone position - only stacked
-    if (phoneOrientation === 'landscape') {
-      const filtered = allTemplates.filter(([key, config]) => config.layout === 'stack');
-      console.log('Landscape phone - filtered templates (stack only):', filtered.map(([k, c]) => c.name));
-      return filtered;
-    }
-    
-    // Portrait phone + portrait camera - only side-by-side
-    const filtered = allTemplates.filter(([key, config]) => config.layout === 'sidebyside');
-    console.log('Portrait mode - filtered templates (side-by-side only):', filtered.map(([k, c]) => c.name));
-    return filtered;
+    // Prepend available original templates (preferred first)
+    const originalEntries = Object.entries(originals).filter(([k]) => k !== 'preferredKey');
+    const preferred = originals.preferredKey;
+    originalEntries.sort((a, b) => (a[0] === preferred ? -1 : b[0] === preferred ? 1 : 0));
+    return [...originalEntries, ...filtered];
   };
+
+  // Normalize selected template when originals aren’t available yet
+  useEffect(() => {
+    const originals = getOriginalTemplateConfigs();
+    const isOriginalKey = templateType === 'original-stack' || templateType === 'original-side';
+    if (isOriginalKey && !originals[templateType]) {
+      // Prefer preferred original if it exists; otherwise use orientation fallback
+      if (originals.preferredKey && originals[originals.preferredKey]) {
+        setTemplateType(originals.preferredKey);
+      } else {
+        setTemplateType(getFallbackTemplateKey());
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [originalBaseUris.stack, originalBaseUris.side, beforePhoto?.id]);
+
+  // Measure selected original image size to preserve exact aspect without cropping
+  useEffect(() => {
+    const uri = templateType === 'original-stack' ? originalBaseUris.stack : templateType === 'original-side' ? originalBaseUris.side : null;
+    if (!uri) {
+      setOriginalImageSize(null);
+      return;
+    }
+    Image.getSize(
+      uri,
+      (w, h) => setOriginalImageSize({ width: w, height: h }),
+      () => setOriginalImageSize(null)
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateType, originalBaseUris.stack, originalBaseUris.side]);
 
   const saveCombinedPhoto = async () => {
     try {
@@ -184,7 +268,11 @@ export default function PhotoEditorScreen({ route, navigation }) {
   };
 
   const renderCombinedPreview = () => {
-    const config = TEMPLATE_CONFIGS[templateType];
+    let config = getTemplateConfig(templateType);
+    if (!config) {
+      // Guard against undefined (e.g., original not present yet)
+      config = TEMPLATE_CONFIGS[getFallbackTemplateKey()];
+    }
     const isStack = config.layout === 'stack';
     const isSideBySide = config.layout === 'sidebyside';
 
@@ -207,6 +295,32 @@ export default function PhotoEditorScreen({ route, navigation }) {
       // Portrait
       previewHeight = maxHeight;
       previewWidth = maxHeight * aspectRatio;
+    }
+
+    // If an original base is selected and available, display the saved image (no cropping)
+    if ((templateType === 'original-stack' && originalBaseUris.stack) || (templateType === 'original-side' && originalBaseUris.side)) {
+      const uri = templateType === 'original-stack' ? originalBaseUris.stack : originalBaseUris.side;
+      // Fit inside max box while preserving original aspect
+      const maxW = 350;
+      const maxH = 500;
+      let ow = originalImageSize?.width || maxW;
+      let oh = originalImageSize?.height || maxH;
+      let ratio = ow && oh ? ow / oh : 1;
+      let w = maxW;
+      let h = w / ratio;
+      if (h > maxH) {
+        h = maxH;
+        w = h * ratio;
+      }
+      return (
+        <View
+          ref={combinedRef}
+          style={[styles.combinedPreview, { width: w, height: h }]}
+          collapsable={false}
+        >
+          <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+        </View>
+      );
     }
 
     return (
