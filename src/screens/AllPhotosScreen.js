@@ -22,7 +22,6 @@ import { useSettings } from '../context/SettingsContext';
 import { COLORS, PHOTO_MODES, ROOMS, TEMPLATE_CONFIGS, TEMPLATE_TYPES } from '../constants/rooms';
 import { CroppedThumbnail } from '../components/CroppedThumbnail';
 import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
-import { getUniqueUploadAlbumName } from '../services/storage';
 import { getLocationConfig } from '../config/locations';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -181,8 +180,8 @@ export default function AllPhotosScreen({ navigation, route }) {
   const startUploadWithOptions = async () => {
     try {
       const config = getLocationConfig(location);
-      const baseAlbumName = createAlbumName(userName, location);
-      const albumName = await getUniqueUploadAlbumName(baseAlbumName);
+      // Use active project's exact name if available; otherwise fall back to date-based
+      const albumName = (projects?.find?.(p => p.id === activeProjectId)?.name) || createAlbumName(userName, location);
 
       // Build the list based on selected types (before/after)
       const items = photos.filter(p =>
@@ -512,6 +511,13 @@ export default function AllPhotosScreen({ navigation, route }) {
         </TouchableOpacity>
         <Text style={styles.title}>All Photos</Text>
         <View style={{ width: 40 }} />
+      </View>
+
+      {/* Active project name under the title */}
+      <View style={styles.projectNameContainer}>
+        <Text style={styles.projectNameText}>
+          {(projects?.find?.(p => p.id === activeProjectId)?.name) || 'No project selected'}
+        </Text>
       </View>
 
       <View style={styles.columnHeaders}>
@@ -1007,6 +1013,15 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
     color: COLORS.TEXT
+  },
+  projectNameContainer: {
+    paddingHorizontal: 20,
+    marginTop: -6,
+    marginBottom: 6
+  },
+  projectNameText: {
+    fontSize: 12,
+    color: COLORS.GRAY
   },
   uploadButton: {
     width: 40,

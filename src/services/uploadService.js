@@ -221,16 +221,16 @@ export async function uploadPhotoBatch(photos, config) {
 
     // Process all photos in the batch concurrently
     const batchPromises = batch.map(photo => {
-      // Map photo mode to upload type
-      const photoType = photo.mode || photo.type || 'mix';
+      // Map photo mode; server expects 'combined' (not 'mix') for combined photos
+      const rawType = photo.mode || photo.type || 'mix';
+      const isCombined = rawType === 'mix' || rawType === 'combined';
+      const typeParam = isCombined ? 'combined' : rawType;
 
-      // Determine the format based on photo type
+      // Determine the format
       let format = 'default';
-      if (photoType === 'mix' && photo.templateType) {
-        // Combined photos use their templateType as the format
+      if (isCombined && photo.templateType) {
         format = photo.templateType;
       } else if (photo.format) {
-        // Use explicit format if provided
         format = photo.format;
       }
 
@@ -239,7 +239,7 @@ export async function uploadPhotoBatch(photos, config) {
         filename: photo.filename || `${photo.name}_${format !== 'default' ? format : photoType}.jpg`,
         albumName,
         room: photo.room || 'general',
-        type: photoType,
+        type: typeParam,
         format: format,
         location,
         cleanerName,

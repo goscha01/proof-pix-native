@@ -406,6 +406,13 @@ export default function HomeScreen({ navigation }) {
         </TouchableOpacity>
       </View>
 
+      {/* Active project name (tiny line under header) */}
+      <View style={styles.projectNameContainer}>
+        <Text style={styles.projectNameText}>
+          {projects.find(p => p.id === activeProjectId)?.name || 'No project selected'}
+        </Text>
+      </View>
+
       {renderRoomTabs()}
 
       <View style={styles.content} {...panResponder.panHandlers}>
@@ -604,6 +611,15 @@ const styles = StyleSheet.create({
     fontSize: 28,
     fontWeight: 'bold',
     color: COLORS.TEXT
+  },
+  projectNameContainer: {
+    paddingHorizontal: 20,
+    marginTop: -6,
+    marginBottom: 6
+  },
+  projectNameText: {
+    fontSize: 12,
+    color: COLORS.GRAY
   },
   allPhotosButtonBottom: {
     backgroundColor: COLORS.PRIMARY,
