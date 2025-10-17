@@ -437,7 +437,12 @@ export default function PhotoEditorScreen({ route, navigation }) {
         >
           <Text style={styles.backButtonText}>‹ Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Create Combined Photo</Text>
+        
+        <View style={styles.titleContainer}>
+          <Text style={styles.title}>{beforePhoto.name}</Text>
+          <Text style={styles.subtitle}>COMBINED</Text>
+        </View>
+        
         <View style={{ width: 60 }} />
       </View>
 
@@ -549,6 +554,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.TEXT
+  },
+  titleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    marginHorizontal: 20
+  },
+  subtitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.PRIMARY,
+    marginTop: 2
   },
   previewContainer: {
     flex: 1,

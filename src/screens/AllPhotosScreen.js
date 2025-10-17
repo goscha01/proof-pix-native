@@ -14,7 +14,8 @@ import {
   Modal,
   ActivityIndicator,
   Switch,
-  TextInput
+  TextInput,
+  Share
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
@@ -25,7 +26,7 @@ import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
 import { getLocationConfig } from '../config/locations';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
-import { deletePhotosFromDevice, purgeAllDevicePhotos } from '../services/storage';
+import { deletePhotosFromDevice, purgeAllDevicePhotos, savePhotoToDevice } from '../services/storage';
 // Removed MediaLibrary (unused) and gesture-handler TextInput (use RN TextInput)
 
 const { width } = Dimensions.get('window');
@@ -40,6 +41,7 @@ export default function AllPhotosScreen({ navigation, route }) {
   const { userName, location, isBusiness, useFolderStructure, enabledFolders } = useSettings();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
+  const [sharing, setSharing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const uploadControllersRef = useRef([]); // AbortControllers for in-flight requests
@@ -94,7 +96,7 @@ export default function AllPhotosScreen({ navigation, route }) {
         // Show single photo
         setFullScreenPhoto(photo);
       }
-    }, 500); // 500ms for long press
+    }, 300);
   };
 
   const handleLongPressEnd = () => {
@@ -137,6 +139,38 @@ export default function AllPhotosScreen({ navigation, route }) {
       }
     })
   ).current;
+
+  // Share individual photo (before or after)
+  const shareIndividualPhoto = async (photo) => {
+    try {
+      setSharing(true);
+      
+      // Create a temporary file for sharing
+      const tempFileName = `${photo.room}_${photo.name}_${photo.mode}_${Date.now()}.jpg`;
+      const tempUri = await savePhotoToDevice(photo.uri, tempFileName);
+
+      // Share the image
+      const shareOptions = {
+        title: `${photo.mode === 'before' ? 'Before' : 'After'} Photo - ${photo.name}`,
+        message: `Check out this ${photo.mode} photo from ${photo.room}!`,
+        url: tempUri,
+        type: 'image/jpeg'
+      };
+
+      const result = await Share.share(shareOptions);
+      
+      if (result.action === Share.sharedAction) {
+        console.log('Photo shared successfully');
+      } else if (result.action === Share.dismissedAction) {
+        console.log('Share dialog dismissed');
+      }
+    } catch (error) {
+      console.error('Error sharing photo:', error);
+      Alert.alert('Error', 'Failed to share photo');
+    } finally {
+      setSharing(false);
+    }
+  };
 
   const handleUploadPhotos = async () => {
     // Get location-based configuration
@@ -508,8 +542,6 @@ export default function AllPhotosScreen({ navigation, route }) {
               afterPhoto: photoSet.after
             });
           }}
-          onPressIn={() => handleLongPressStart(null, photoSet)}
-          onPressOut={handleLongPressEnd}
         >
           <View style={[styles.combinedThumbnail, isLandscape ? styles.stackedThumbnail : styles.sideBySideThumbnail]}>
             <Image source={{ uri: photoSet.before.uri }} style={styles.halfImage} resizeMode="cover" />
@@ -531,7 +563,7 @@ export default function AllPhotosScreen({ navigation, route }) {
           afterPhoto: photoSet.after
         });
       } else {
-        // Before or After column - show individual photo detail
+        // Before or After column - navigate to PhotoDetailScreen with share button
         navigation.navigate('PhotoDetail', { photo });
       }
     };
@@ -541,8 +573,6 @@ export default function AllPhotosScreen({ navigation, route }) {
         key={photoType}
         style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast]}
         onPress={handlePress}
-        onPressIn={() => handleLongPressStart(photo, photoType === 'combined' ? photoSet : null)}
-        onPressOut={handleLongPressEnd}
       >
         <CroppedThumbnail
           imageUri={photo.uri}
@@ -660,6 +690,17 @@ export default function AllPhotosScreen({ navigation, route }) {
               style={styles.fullScreenPhoto}
               resizeMode="contain"
             />
+            <TouchableOpacity
+              style={styles.shareButton}
+              onPress={() => shareIndividualPhoto(fullScreenPhoto)}
+              disabled={sharing}
+            >
+              {sharing ? (
+                <ActivityIndicator color={COLORS.TEXT} />
+              ) : (
+                <Text style={styles.shareButtonText}>Share</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </TouchableWithoutFeedback>
       )}
@@ -1242,7 +1283,7 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.95)',
+    backgroundColor: 'white',
     justifyContent: 'center',
     alignItems: 'center',
     zIndex: 1000
@@ -1496,5 +1537,25 @@ const styles = StyleSheet.create({
   actionDestructiveText: {
     color: '#CC0000',
     fontWeight: '700'
+  },
+  shareButton: {
+    position: 'absolute',
+    bottom: 50,
+    left: 20,
+    right: 20,
+    backgroundColor: COLORS.PRIMARY,
+    padding: 18,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5
+  },
+  shareButtonText: {
+    color: COLORS.TEXT,
+    fontSize: 18,
+    fontWeight: 'bold'
   }
 });
