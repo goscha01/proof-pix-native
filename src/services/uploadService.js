@@ -306,3 +306,16 @@ export function createAlbumName(userName, location, date = new Date()) {
 
   return `${userName} - ${formattedLocation} - ${month} ${day}, ${year}`;
 }
+
+/**
+ * Ensure a unique project/album name by suffixing an incrementing number if needed.
+ * existingNames: array of strings (project names already present)
+ */
+export function ensureUniqueProjectName(baseName, existingNames) {
+  if (!Array.isArray(existingNames) || existingNames.length === 0) return baseName;
+  const set = new Set(existingNames);
+  if (!set.has(baseName)) return baseName;
+  let i = 2;
+  while (set.has(`${baseName} ${i}`)) i++;
+  return `${baseName} ${i}`;
+}

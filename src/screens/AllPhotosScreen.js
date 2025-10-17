@@ -22,6 +22,7 @@ import { useSettings } from '../context/SettingsContext';
 import { COLORS, PHOTO_MODES, ROOMS, TEMPLATE_CONFIGS, TEMPLATE_TYPES } from '../constants/rooms';
 import { CroppedThumbnail } from '../components/CroppedThumbnail';
 import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
+import { getUniqueUploadAlbumName } from '../services/storage';
 import { getLocationConfig } from '../config/locations';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -36,7 +37,7 @@ const AVAILABLE_WIDTH = width - SET_NAME_WIDTH - CONTAINER_PADDING - PHOTO_SPACI
 const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function AllPhotosScreen({ navigation, route }) {
-  const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject } = usePhotos();
+  const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
   const { userName, location } = useSettings();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
@@ -180,7 +181,8 @@ export default function AllPhotosScreen({ navigation, route }) {
   const startUploadWithOptions = async () => {
     try {
       const config = getLocationConfig(location);
-      const albumName = createAlbumName(userName, location);
+      const baseAlbumName = createAlbumName(userName, location);
+      const albumName = await getUniqueUploadAlbumName(baseAlbumName);
 
       // Build the list based on selected types (before/after)
       const items = photos.filter(p =>
@@ -671,7 +673,16 @@ export default function AllPhotosScreen({ navigation, route }) {
                 style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]}
                 onPress={async () => {
                   try {
-                    const safeName = (projectName || 'Project').replace(/[^a-z0-9_\- ]/gi, '_');
+                    // Ensure unique project name (no overwrite on same day)
+                    const existing = projects?.map?.(p => p.name) || [];
+                    const base = (projectName || 'Project').replace(/\s+/g, ' ').trim();
+                    let finalName = base;
+                    if (existing.includes(finalName)) {
+                      let i = 2;
+                      while (existing.includes(`${i} ${base}`)) i++;
+                      finalName = `${i} ${base}`;
+                    }
+                    const safeName = finalName.replace(/[^a-z0-9_\- ]/gi, '_');
                     const proj = await createProject(safeName);
                     await assignPhotosToProject(proj.id);
                     Alert.alert('Saved', `Project saved as "${safeName}"`);
@@ -889,7 +900,17 @@ export default function AllPhotosScreen({ navigation, route }) {
                   style={[styles.actionBtn, styles.actionWide, styles.actionSave]}
                   onPress={() => {
                     setManageVisible(false);
-                    setProjectName(createAlbumName(userName, location));
+                    const base = createAlbumName(userName, location);
+                    const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[^a-z0-9_\- ]/gi, '_');
+                    const existing = (projects?.map?.(p => p.name) || []);
+                    const existingNorm = new Set(existing.map(normalize));
+                    let suggested = base;
+                    if (existingNorm.has(normalize(suggested))) {
+                      let i = 2;
+                      while (existingNorm.has(normalize(`${i} ${base}`))) i++;
+                      suggested = `${i} ${base}`;
+                    }
+                    setProjectName(suggested);
                     setConfirmSaveVisible(true);
                   }}
                 >

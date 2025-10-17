@@ -148,7 +148,18 @@ export default function HomeScreen({ navigation }) {
   }, [openProjectVisible]);
 
   const openNewProjectModal = (navigateToCamera = false) => {
-    const defaultName = createAlbumName(userName, location) || `Project ${projects.length + 1}`;
+    const base = createAlbumName(userName, location) || `Project`;
+    const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[^a-z0-9_\- ]/gi, '_');
+    const existing = projects.map(p => p.name);
+    const existingNorm = new Set(existing.map(normalize));
+    let defaultName = base;
+    let candidate = defaultName;
+    if (existingNorm.has(normalize(defaultName))) {
+      let i = 2;
+      while (existingNorm.has(normalize(`${i} ${base}`))) i++;
+      candidate = `${i} ${base}`;
+    }
+    defaultName = candidate;
     setNewProjectName(defaultName);
     setPendingCameraAfterCreate(navigateToCamera);
     setNewProjectVisible(true);

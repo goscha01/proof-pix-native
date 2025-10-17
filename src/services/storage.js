@@ -10,6 +10,7 @@ const SETTINGS_KEY = 'app-settings';
 const PROJECTS_KEY = 'tracked-projects';
 const ACTIVE_PROJECT_ID_KEY = 'active-project-id';
 const ASSET_ID_MAP_KEY = 'asset-id-map';
+const UPLOAD_COUNTERS_KEY = 'upload-counters';
 
 /**
  * Loads photo metadata from AsyncStorage
@@ -669,5 +670,36 @@ export const saveSettings = async (settings) => {
     await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
   } catch (error) {
     console.error('Error saving settings:', error);
+  }
+};
+
+// ===== Upload album name uniqueness =====
+export const getUniqueUploadAlbumName = async (baseName) => {
+  try {
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    const dateKey = `${y}-${m}-${d}`;
+
+    const stored = await AsyncStorage.getItem(UPLOAD_COUNTERS_KEY);
+    const counters = stored ? JSON.parse(stored) : {};
+    const byDate = counters[dateKey] || {};
+    const current = byDate[baseName] || 0;
+
+    let albumName = baseName;
+    const next = current + 1;
+    if (current > 0) {
+      albumName = `${next} ${baseName}`; // left-prefixed number
+    }
+
+    byDate[baseName] = next;
+    counters[dateKey] = byDate;
+    await AsyncStorage.setItem(UPLOAD_COUNTERS_KEY, JSON.stringify(counters));
+
+    return albumName;
+  } catch (e) {
+    console.warn('⚠️ getUniqueUploadAlbumName failed, using base name:', e?.message);
+    return baseName;
   }
 };
