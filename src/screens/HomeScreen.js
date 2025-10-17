@@ -36,6 +36,8 @@ export default function HomeScreen({ navigation }) {
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
   const [openProjectVisible, setOpenProjectVisible] = useState(false);
+  const [selectedProjects, setSelectedProjects] = useState(new Set());
+  const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const { projects, getPhotosByProject, deleteProject, setActiveProject, activeProjectId, createProject } = usePhotos();
   const { userName, location } = useSettings();
   const [newProjectVisible, setNewProjectVisible] = useState(false);
@@ -181,6 +183,71 @@ export default function HomeScreen({ navigation }) {
     } catch (e) {
       Alert.alert('Error', e?.message || 'Failed to create project');
     }
+  };
+
+  // Multi-selection handlers
+  const handleProjectLongPress = (projectId) => {
+    setIsMultiSelectMode(true);
+    setSelectedProjects(new Set([projectId]));
+  };
+
+  const handleProjectPress = (projectId) => {
+    if (isMultiSelectMode) {
+      setSelectedProjects(prev => {
+        const newSet = new Set(prev);
+        if (newSet.has(projectId)) {
+          newSet.delete(projectId);
+        } else {
+          newSet.add(projectId);
+        }
+        return newSet;
+      });
+    } else {
+      // Allow switching between projects
+      setActiveProject(projectId);
+      setOpenProjectVisible(false);
+    }
+  };
+
+  const handleDeleteSelectedProjects = async () => {
+    if (selectedProjects.size === 0) return;
+    
+    const projectNames = Array.from(selectedProjects).map(id => 
+      projects.find(p => p.id === id)?.name
+    ).filter(Boolean);
+    
+    Alert.alert(
+      'Delete Projects',
+      `Delete ${selectedProjects.size} project(s) and all their photos? This cannot be undone.\n\n${projectNames.join(', ')}`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: async () => {
+          for (const projectId of selectedProjects) {
+            await deleteProject(projectId, { deleteFromStorage: true });
+          }
+          setSelectedProjects(new Set());
+          setIsMultiSelectMode(false);
+          if (selectedProjects.has(activeProjectId)) {
+            setActiveProject(null);
+          }
+        }}
+      ]
+    );
+  };
+
+  const exitMultiSelectMode = () => {
+    setIsMultiSelectMode(false);
+    setSelectedProjects(new Set());
+  };
+
+  const handleDisabledDeleteClick = () => {
+    Alert.alert(
+      'Select Projects to Delete',
+      'To delete projects, long press on project cards to enter selection mode, then select the projects you want to delete.',
+      [
+        { text: 'OK', style: 'default' }
+      ]
+    );
   };
 
   const renderRoomTabs = () => (
@@ -494,63 +561,116 @@ export default function HomeScreen({ navigation }) {
               {projects.length === 0 ? (
                 <Text style={styles.projectItemText}>No saved projects found</Text>
               ) : (
-                projects.map((proj) => (
-                  <TouchableOpacity
-                    key={proj.id}
-                    style={[
-                      styles.projectItem,
-                      activeProjectId === proj.id && { borderWidth: 2, borderColor: '#F2C31B' }
-                    ]}
-                    onPress={() => {
-                      setActiveProject(proj.id);
-                      setOpenProjectVisible(false);
-                    }}
-                  >
-                    <Text style={styles.projectItemText}>📁 {proj.name} {activeProjectId === proj.id ? '(active)' : ''}</Text>
-                  </TouchableOpacity>
-                ))
+                projects.map((proj) => {
+                  const isSelected = selectedProjects.has(proj.id);
+                  const isCurrent = activeProjectId === proj.id;
+                  
+                  return (
+                    <TouchableOpacity
+                      key={proj.id}
+                      style={[
+                        styles.projectItem,
+                        isCurrent && !isMultiSelectMode && { borderWidth: 2, borderColor: '#F2C31B' },
+                        isSelected && { borderWidth: 2, borderColor: '#FF0000' }
+                      ]}
+                      onPress={() => handleProjectPress(proj.id)}
+                      onLongPress={() => handleProjectLongPress(proj.id)}
+                      delayLongPress={500}
+                    >
+                      <View style={styles.projectItemContent}>
+                        {isMultiSelectMode && (
+                          <View style={[
+                            styles.checkbox,
+                            isSelected && styles.checkboxSelected
+                          ]}>
+                            {isSelected && <Text style={styles.checkmark}>✓</Text>}
+                          </View>
+                        )}
+                        <Text style={styles.projectItemText}>
+                          📁 {proj.name} {isCurrent && !isMultiSelectMode ? (
+                            <Text style={{ color: '#FFC107' }}> (current)</Text>
+                          ) : ''}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })
               )}
             </View>
 
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.actionPrimary, { marginTop: 12 }]}
-              onPress={() => {
-                setOpenProjectVisible(false);
-                setTimeout(() => openNewProjectModal(false), 50);
-              }}
-            >
-              <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ New Project</Text>
-            </TouchableOpacity>
-
-            {projects.length > 0 && (
-              <TouchableOpacity
-                style={[styles.actionBtn, { backgroundColor: '#FFE6E6', marginTop: 8 }]}
-                onPress={() => {
-                  const active = projects.find(p => p.id === activeProjectId) || projects[0];
-                  if (!active) return;
-                  Alert.alert(
-                    'Delete Project',
-                    `Delete "${active.name}" and all its photos? This cannot be undone.`,
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Delete', style: 'destructive', onPress: async () => {
-                        await deleteProject(active.id, { deleteFromStorage: true });
-                        setActiveProject(null);
-                      }}
-                    ]
-                  );
-                }}
-              >
-                <Text style={[styles.actionBtnText, { color: '#CC0000' }]}>Delete Active Project</Text>
-              </TouchableOpacity>
+            {isMultiSelectMode ? (
+              <>
+                <TouchableOpacity
+                  style={[
+                    styles.actionBtn, 
+                    { 
+                      backgroundColor: selectedProjects.size > 0 ? '#FFE6E6' : '#F2F2F2',
+                      marginTop: 20 
+                    }
+                  ]}
+                  onPress={handleDeleteSelectedProjects}
+                  disabled={selectedProjects.size === 0}
+                >
+                  <Text style={[
+                    styles.actionBtnText, 
+                    { color: selectedProjects.size > 0 ? '#CC0000' : '#999' }
+                  ]}>
+                    🗑️ Delete Selected ({selectedProjects.size})
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionPrimary, { marginTop: 8 }]}
+                  onPress={() => {
+                    setOpenProjectVisible(false);
+                    setTimeout(() => openNewProjectModal(false), 50);
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ New Project</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#F2F2F2', marginTop: 8 }]}
+                  onPress={exitMultiSelectMode}
+                >
+                  <Text style={styles.actionBtnText}>Cancel Selection</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={[
+                    styles.actionBtn, 
+                    { 
+                      backgroundColor: '#F2F2F2',
+                      marginTop: 20 
+                    }
+                  ]}
+                  onPress={handleDisabledDeleteClick}
+                >
+                  <Text style={[styles.actionBtnText, { color: '#999' }]}>
+                    🗑️ Delete Selected (0)
+                  </Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionPrimary, { marginTop: 8 }]}
+                  onPress={() => {
+                    setOpenProjectVisible(false);
+                    setTimeout(() => openNewProjectModal(false), 50);
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ New Project</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#F2F2F2', marginTop: 8 }]}
+                  onPress={() => setOpenProjectVisible(false)}
+                >
+                  <Text style={styles.actionBtnText}>Close</Text>
+                </TouchableOpacity>
+              </>
             )}
-
-            <TouchableOpacity
-              style={[styles.actionBtn, { backgroundColor: '#F2F2F2', marginTop: 8 }]}
-              onPress={() => setOpenProjectVisible(false)}
-            >
-              <Text style={styles.actionBtnText}>Close</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -865,6 +985,30 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: '#F7F7F7',
     marginBottom: 8
+  },
+  projectItemContent: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#DDD',
+    backgroundColor: 'white',
+    marginRight: 12,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  checkboxSelected: {
+    borderColor: '#FF0000',
+    backgroundColor: '#FFE6E6'
+  },
+  checkmark: {
+    color: '#FF0000',
+    fontSize: 14,
+    fontWeight: 'bold'
   },
   projectItemText: {
     color: COLORS.TEXT,
