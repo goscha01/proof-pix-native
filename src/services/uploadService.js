@@ -102,7 +102,8 @@ export async function uploadPhoto({
   cleanerName,
   scriptUrl,
   folderId,
-  onProgress
+  onProgress,
+  abortSignal
 }) {
   try {
     console.log(`📤 Starting upload: ${filename}, type: ${type}, format: ${format}`);
@@ -151,7 +152,9 @@ export async function uploadPhoto({
     // Upload to Google Drive
     const response = await fetch(scriptUrl, {
       method: 'POST',
-      body: formData
+      body: formData,
+      // Pass abort signal if provided to support cancellation
+      ...(abortSignal ? { signal: abortSignal } : {})
     });
 
     console.log(`📥 Response status: ${response.status}`);
@@ -173,7 +176,14 @@ export async function uploadPhoto({
       throw new Error(result.message || 'Upload failed');
     }
   } catch (error) {
-    console.error(`❌ Upload error for ${filename}:`, error);
+    const name = (error && error.name) || '';
+    const message = (error && error.message) || '';
+    const isAbort = `${name} ${message}`.toLowerCase().includes('abort');
+    if (isAbort) {
+      console.warn(`⏹️ Upload aborted: ${filename}`);
+    } else {
+      console.error(`❌ Upload error for ${filename}:`, error);
+    }
     throw error;
   }
 }
@@ -201,7 +211,9 @@ export async function uploadPhotoBatch(photos, config) {
     cleanerName,
     batchSize = 3,
     onProgress,
-    onBatchComplete
+    onBatchComplete,
+    getAbortController, // optional callback to retrieve/create AbortController per request
+    abortSignal // optional AbortSignal to stop scheduling further uploads
   } = config;
 
   const successful = [];
@@ -217,10 +229,17 @@ export async function uploadPhotoBatch(photos, config) {
 
   // Process each batch
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+    if (abortSignal?.aborted) {
+      console.warn('🔴 Upload cancelled before starting batch', batchIndex + 1);
+      break;
+    }
     const batch = batches[batchIndex];
 
     // Process all photos in the batch concurrently
     const batchPromises = batch.map(photo => {
+      if (abortSignal?.aborted) {
+        return Promise.reject(new Error('Aborted'));
+      }
       // Map photo mode; server expects 'combined' (not 'mix') for combined photos
       const rawType = photo.mode || photo.type || 'mix';
       const isCombined = rawType === 'mix' || rawType === 'combined';
@@ -234,6 +253,8 @@ export async function uploadPhotoBatch(photos, config) {
         format = photo.format;
       }
 
+      // Provide an AbortController per upload if supported
+      const controller = typeof getAbortController === 'function' ? getAbortController() : null;
       return uploadPhoto({
         imageDataUrl: photo.uri,
         filename: photo.filename || `${photo.name}_${format !== 'default' ? format : typeParam}.jpg`,
@@ -244,7 +265,8 @@ export async function uploadPhotoBatch(photos, config) {
         location,
         cleanerName,
         scriptUrl,
-        folderId
+        folderId,
+        abortSignal: controller ? controller.signal : (abortSignal || undefined)
       })
         .then(result => ({ success: true, result, photo }))
         .catch(error => ({ success: false, error, photo }));
@@ -261,12 +283,20 @@ export async function uploadPhotoBatch(photos, config) {
         console.log(`✅ Batch upload success: ${result.value.photo?.filename || 'unknown'}`);
         successful.push(result.value);
       } else {
-        const errorInfo = result.value || { error: 'Unknown error', photo: null };
-        console.error(`❌ Batch upload failed:`, {
-          filename: errorInfo.photo?.filename,
-          error: errorInfo.error?.message || errorInfo.error
-        });
-        failed.push(errorInfo);
+        const isRejected = result.status === 'rejected';
+        const errorInfo = isRejected ? { error: result.reason, photo: null } : (result.value || { error: 'Unknown error', photo: null });
+        const rawMsg = typeof errorInfo.error === 'string' ? errorInfo.error : (errorInfo.error?.message || '');
+        const isAbort = (rawMsg || '').toLowerCase().includes('abort');
+        if (isAbort) {
+          console.warn(`⏹️ Upload aborted${errorInfo.photo?.filename ? ` for: ${errorInfo.photo.filename}` : ''}`);
+          // Do not treat aborted uploads as failures in the results list
+        } else {
+          console.error(`❌ Batch upload failed:`, {
+            filename: errorInfo.photo?.filename,
+            error: rawMsg || errorInfo.error
+          });
+          failed.push(errorInfo);
+        }
       }
 
       // Call progress callback
@@ -278,6 +308,12 @@ export async function uploadPhotoBatch(photos, config) {
     // Call batch complete callback
     if (onBatchComplete) {
       onBatchComplete(batchIndex + 1, batches.length);
+    }
+
+    // If cancelled, stop scheduling further batches
+    if (abortSignal?.aborted) {
+      console.warn('🔴 Upload cancelled after batch', batchIndex + 1);
+      break;
     }
 
     // Small delay between batches to avoid overwhelming the server

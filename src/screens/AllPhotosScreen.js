@@ -42,6 +42,8 @@ export default function AllPhotosScreen({ navigation, route }) {
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
+  const uploadControllersRef = useRef([]); // AbortControllers for in-flight requests
+  const masterAbortRef = useRef(null); // single signal to stop scheduling
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [manageVisible, setManageVisible] = useState(false);
   const [deleteFromStorage, setDeleteFromStorage] = useState(true);
@@ -375,6 +377,10 @@ export default function AllPhotosScreen({ navigation, route }) {
       setUploading(true);
       setUploadProgress({ current: 0, total: allItems.length });
 
+      // Prepare abort controllers for cancellation
+      uploadControllersRef.current = [];
+      masterAbortRef.current = new AbortController();
+
       const result = await uploadPhotoBatch(allItems, {
         scriptUrl: config.scriptUrl,
         folderId: config.folderId,
@@ -382,6 +388,12 @@ export default function AllPhotosScreen({ navigation, route }) {
         location,
         cleanerName: userName,
         batchSize: 3,
+        abortSignal: masterAbortRef.current.signal,
+        getAbortController: () => {
+          const controller = new AbortController();
+          uploadControllersRef.current.push(controller);
+          return controller;
+        },
         onProgress: (current, total) => {
           setUploadProgress({ current, total });
         }
@@ -831,6 +843,27 @@ export default function AllPhotosScreen({ navigation, route }) {
                   { width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }
                 ]}
               />
+            </View>
+            <View style={[styles.optionsActionsRow, { marginTop: 16, width: '100%' }]}>
+              <TouchableOpacity
+                style={[styles.actionBtn, styles.actionCancel, { paddingVertical: 16, width: '100%' }]}
+                onPress={() => {
+                  try {
+                    // Abort in-flight requests
+                    for (const c of uploadControllersRef.current) {
+                      try { c.abort(); } catch {}
+                    }
+                    // Abort scheduling of further batches
+                    try { masterAbortRef.current?.abort(); } catch {}
+                  } finally {
+                    uploadControllersRef.current = [];
+                    masterAbortRef.current = null;
+                    setUploading(false);
+                  }
+                }}
+              >
+                <Text style={[styles.actionBtnText, { textTransform: 'none' }]}>Cancel upload</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
