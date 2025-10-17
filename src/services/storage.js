@@ -42,6 +42,9 @@ export const savePhotosMetadata = async (photos) => {
       timestamp: p.timestamp,
       beforePhotoId: p.beforePhotoId,
       aspectRatio: p.aspectRatio,
+      // Persist orientation and camera view mode to preserve layout after reloads
+      orientation: p.orientation,
+      cameraViewMode: p.cameraViewMode,
       templateType: p.templateType,
       originalWidth: p.originalWidth,
       originalHeight: p.originalHeight,
