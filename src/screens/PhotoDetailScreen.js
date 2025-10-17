@@ -78,7 +78,12 @@ export default function PhotoDetailScreen({ route, navigation }) {
 
         <View style={styles.titleContainer}>
           <Text style={styles.title}>{photo.name}</Text>
-          <Text style={styles.mode}>{photo.mode.toUpperCase()}</Text>
+          <Text style={[
+            styles.mode,
+            { color: photo.mode === 'before' ? '#4CAF50' : '#2196F3' }
+          ]}>
+            {photo.mode.toUpperCase()}
+          </Text>
         </View>
 
         <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>

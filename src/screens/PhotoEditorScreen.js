@@ -440,7 +440,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
         
         <View style={styles.titleContainer}>
           <Text style={styles.title}>{beforePhoto.name}</Text>
-          <Text style={styles.subtitle}>COMBINED</Text>
+          <Text style={[styles.subtitle, { color: '#FFC107' }]}>COMBINED</Text>
         </View>
         
         <View style={{ width: 60 }} />

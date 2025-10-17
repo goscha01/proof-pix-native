@@ -590,9 +590,9 @@ export default function AllPhotosScreen({ navigation, route }) {
         <Text style={styles.setName}>{set.name}</Text>
       </View>
       <View style={styles.threeColumnRow}>
-        {renderPhotoCard(set.before, '#F2C31B', 'before', set, false)}
-        {renderPhotoCard(set.after, '#4A90E2', 'after', set, false)}
-        {renderPhotoCard(set.combined, '#52C41A', 'combined', set, true)}
+        {renderPhotoCard(set.before, '#4CAF50', 'before', set, false)}
+        {renderPhotoCard(set.after, '#2196F3', 'after', set, false)}
+        {renderPhotoCard(set.combined, '#FFC107', 'combined', set, true)}
       </View>
     </View>
   );
@@ -653,9 +653,9 @@ export default function AllPhotosScreen({ navigation, route }) {
 
       <View style={styles.columnHeaders}>
         <View style={styles.setNamePlaceholder} />
-        <Text style={styles.columnHeader}>BEFORE</Text>
-        <Text style={styles.columnHeader}>AFTER</Text>
-        <Text style={[styles.columnHeader, { marginRight: 0 }]}>COMBINED</Text>
+        <Text style={[styles.columnHeader, { color: '#4CAF50' }]}>BEFORE</Text>
+        <Text style={[styles.columnHeader, { color: '#2196F3' }]}>AFTER</Text>
+        <Text style={[styles.columnHeader, { color: '#FFC107', marginRight: 0 }]}>COMBINED</Text>
       </View>
 
       {photos.length === 0 ? (
@@ -1103,12 +1103,16 @@ const styles = StyleSheet.create({
   },
   projectNameContainer: {
     paddingHorizontal: 20,
+    paddingVertical: 8,
     marginTop: -6,
-    marginBottom: 6
+    marginBottom: 6,
+    backgroundColor: 'white'
   },
   projectNameText: {
     fontSize: 12,
-    color: COLORS.GRAY
+    color: COLORS.TEXT,
+    opacity: 0.7,
+    fontWeight: '500'
   },
   uploadButton: {
     width: 40,
