@@ -195,10 +195,6 @@ export default function AllPhotosScreen({ navigation, route }) {
       const combinedItems = [];
       if (selectedTypes.combined) {
         const anyFormat = Object.keys(selectedFormats).some((k) => selectedFormats[k]);
-        if (!anyFormat) {
-          Alert.alert('Select a format', 'Please select at least one combined format.');
-          return;
-        }
 
         // Group photos by room to find pairs
         const byRoom = {};
@@ -219,80 +215,151 @@ export default function AllPhotosScreen({ navigation, route }) {
           });
         });
 
-        // Calculate total renders needed with per-pair filtering (match preview rules)
-        const selectedTemplateKeys = Object.keys(TEMPLATE_CONFIGS).filter(k => selectedFormats[k]);
+        if (!anyFormat) {
+          // Upload existing ORIGINAL combined images from device storage
+          try {
+            const dir = FileSystem.documentDirectory;
+            const entries = dir ? await FileSystem.readDirectoryAsync(dir) : [];
 
-        const getAllowedTemplatesForPair = (pair) => {
-          const before = pair.before;
-          const beforeOrientation = before.orientation || 'portrait';
-          const cameraVM = before.cameraViewMode || 'portrait';
-          const isLetterbox = (cameraVM === 'landscape' && beforeOrientation === 'portrait');
-          const isLandscape = beforeOrientation === 'landscape' || cameraVM === 'landscape';
+            const pickLatestByPrefix = (prefix) => {
+              const matches = entries.filter(name => name.startsWith(prefix));
+              if (matches.length === 0) return null;
+              // Filenames end with _<timestamp>.jpg; pick max timestamp
+              let best = null;
+              let bestTs = -1;
+              for (const name of matches) {
+                const m = name.match(/_(\d+)\.(jpg|jpeg|png)$/i);
+                const ts = m ? parseInt(m[1], 10) : 0;
+                if (ts > bestTs) { bestTs = ts; best = name; }
+              }
+              return best || matches[matches.length - 1];
+            };
 
-          return selectedTemplateKeys.filter((key) => {
-            const layout = TEMPLATE_CONFIGS[key]?.layout;
-            if (isLetterbox) return true; // both stack and side-by-side
-            if (isLandscape) return layout === 'stack';
-            return layout === 'sidebyside';
-          });
-        };
+            let foundCount = 0;
+            for (const pair of pairs) {
+              const safeName = (pair.before.name || 'Photo').replace(/\s+/g, '_');
+              const stackPrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_STACK_`;
+              const sidePrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_SIDE_`;
 
-        const totalRenders = pairs.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
+              const stackName = pickLatestByPrefix(stackPrefix);
+              const sideName = pickLatestByPrefix(sidePrefix);
 
-        if (totalRenders === 0) {
-          Alert.alert('Nothing to Upload', 'No before/after pairs available to create combined photos.');
-          return;
-        }
+              const beforeOrientation = pair.before.orientation || 'portrait';
+              const cameraVM = pair.before.cameraViewMode || 'portrait';
+              const isLetterbox = (cameraVM === 'landscape' && beforeOrientation === 'portrait');
+              const isLandscape = beforeOrientation === 'landscape' || cameraVM === 'landscape';
 
-        setOptionsVisible(false);
-        setRenderingCombined(true);
-        setRenderingProgress({ current: 0, total: totalRenders });
-
-        // Render each combination
-        let renderCount = 0;
-        for (const pair of pairs) {
-          const allowedKeys = getAllowedTemplatesForPair(pair);
-          for (const templateKey of allowedKeys) {
-            const cfg = TEMPLATE_CONFIGS[templateKey];
-
-            // Set the current render
-            setCurrentRenderPair(pair);
-            setCurrentRenderTemplate({ key: templateKey, config: cfg });
-
-            // Wait for render
-            await new Promise(resolve => setTimeout(resolve, 800));
-
-            // Capture the view
-            try {
-              const uri = await captureRef(renderViewRef, {
-                format: 'jpg',
-                quality: 0.9
-              });
-
-              console.log(`📸 Captured ${templateKey} for ${pair.before.name}, URI:`, uri?.substring(0, 60));
-
-              if (uri) {
+              const pushItem = (name, tag) => {
+                if (!dir || !name) return;
                 combinedItems.push({
-                  uri: uri,
-                  filename: `${pair.before.name}_${templateKey}.jpg`,
+                  uri: `${dir}${name}`,
+                  filename: `${pair.before.name}_original-${tag}.jpg`,
                   name: pair.before.name,
                   room: pair.room,
                   mode: PHOTO_MODES.COMBINED,
-                  format: templateKey
+                  format: `original-${tag}`
                 });
+                foundCount++;
+              };
+
+              if (isLetterbox) {
+                // Upload both if both exist
+                if (stackName) pushItem(stackName, 'stack');
+                if (sideName) pushItem(sideName, 'side');
+              } else if (isLandscape) {
+                if (stackName) pushItem(stackName, 'stack');
+                else if (sideName) pushItem(sideName, 'side');
+              } else {
+                if (sideName) pushItem(sideName, 'side');
+                else if (stackName) pushItem(stackName, 'stack');
               }
-            } catch (error) {
-              console.error(`❌ Failed to capture ${templateKey} for ${pair.before.name}:`, error);
             }
 
-            renderCount++;
-            setRenderingProgress({ current: renderCount, total: totalRenders });
+            if (foundCount === 0) {
+              Alert.alert('Nothing to Upload', 'No original combined images found.');
+              return;
+            }
+          } catch (e) {
+            console.warn('Original combined scan failed:', e?.message);
+            Alert.alert('Error', 'Failed to find original combined images');
+            return;
           }
-        }
+        } else {
+          // Advanced formats selected: render dynamic combined images
+          const selectedTemplateKeys = Object.keys(TEMPLATE_CONFIGS).filter(k => selectedFormats[k]);
 
-        setRenderingCombined(false);
-        setCurrentRenderPair(null);
-        setCurrentRenderTemplate(null);
+          const getAllowedTemplatesForPair = (pair) => {
+            const before = pair.before;
+            const beforeOrientation = before.orientation || 'portrait';
+            const cameraVM = before.cameraViewMode || 'portrait';
+            const isLetterbox = (cameraVM === 'landscape' && beforeOrientation === 'portrait');
+            const isLandscape = beforeOrientation === 'landscape' || cameraVM === 'landscape';
+
+            return selectedTemplateKeys.filter((key) => {
+              const layout = TEMPLATE_CONFIGS[key]?.layout;
+              if (isLetterbox) return true; // both stack and side-by-side
+              if (isLandscape) return layout === 'stack';
+              return layout === 'sidebyside';
+            });
+          };
+
+          const totalRenders = pairs.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
+
+          if (totalRenders === 0) {
+            Alert.alert('Nothing to Upload', 'No before/after pairs available to create combined photos.');
+            return;
+          }
+
+          setOptionsVisible(false);
+          setRenderingCombined(true);
+          setRenderingProgress({ current: 0, total: totalRenders });
+
+          // Render each combination
+          let renderCount = 0;
+          for (const pair of pairs) {
+            const allowedKeys = getAllowedTemplatesForPair(pair);
+            for (const templateKey of allowedKeys) {
+              const cfg = TEMPLATE_CONFIGS[templateKey];
+
+              // Set the current render
+              setCurrentRenderPair(pair);
+              setCurrentRenderTemplate({ key: templateKey, config: cfg });
+
+              // Wait for render
+              await new Promise(resolve => setTimeout(resolve, 800));
+
+              // Capture the view
+              try {
+                const uri = await captureRef(renderViewRef, {
+                  format: 'jpg',
+                  quality: 0.9
+                });
+
+                console.log(`📸 Captured ${templateKey} for ${pair.before.name}, URI:`, uri?.substring(0, 60));
+
+                if (uri) {
+                  combinedItems.push({
+                    uri: uri,
+                    filename: `${pair.before.name}_${templateKey}.jpg`,
+                    name: pair.before.name,
+                    room: pair.room,
+                    mode: PHOTO_MODES.COMBINED,
+                    format: templateKey
+                  });
+                }
+              } catch (error) {
+                console.error(`❌ Failed to capture ${templateKey} for ${pair.before.name}:`, error);
+              }
+
+              renderCount++;
+              setRenderingProgress({ current: renderCount, total: totalRenders });
+            }
+          }
+
+          setRenderingCombined(false);
+          setCurrentRenderPair(null);
+          setCurrentRenderTemplate(null);
+        }
       }
 
       const allItems = [...items, ...combinedItems];
@@ -302,6 +369,9 @@ export default function AllPhotosScreen({ navigation, route }) {
         return;
       }
 
+      // Close upload options and any upgrade overlay before showing progress
+      setOptionsVisible(false);
+      setUpgradeVisible(false);
       setUploading(true);
       setUploadProgress({ current: 0, total: allItems.length });
 
