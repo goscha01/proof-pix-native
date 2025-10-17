@@ -42,6 +42,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const templateTypeRef = useRef(templateType);
   const [originalBaseUris, setOriginalBaseUris] = useState({ stack: null, side: null });
   const [originalImageSize, setOriginalImageSize] = useState(null); // { width, height }
+  const originalInitRef = useRef(false);
 
   // Update ref when templateType changes
   useEffect(() => {
@@ -215,6 +216,18 @@ export default function PhotoEditorScreen({ route, navigation }) {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [templateType, originalBaseUris.stack, originalBaseUris.side]);
+
+  // On first load, if any original is available, make it active immediately
+  useEffect(() => {
+    if (originalInitRef.current) return;
+    const originals = getOriginalTemplateConfigs();
+    const pk = originals.preferredKey;
+    if (pk && originals[pk]) {
+      setTemplateType(pk);
+      originalInitRef.current = true;
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [originalBaseUris.stack, originalBaseUris.side]);
 
   const saveCombinedPhoto = async () => {
     try {
