@@ -366,9 +366,20 @@ export default function AllPhotosScreen({ navigation, route }) {
 
       // Apply folder switches: when folder structure ON, allow per-type filtering
       // When folder structure OFF, we still upload all types but the server will place them in the project root
-      const filteredBefore = useFolderStructure && !enabledFolders.before ? [] : items.filter(i => i.mode === PHOTO_MODES.BEFORE);
-      const filteredAfter = useFolderStructure && !enabledFolders.after ? [] : items.filter(i => i.mode === PHOTO_MODES.AFTER);
-      const filteredCombined = useFolderStructure && !enabledFolders.combined ? [] : combinedItems;
+      // If folder structure is on but a folder is disabled, upload those into the main folder by marking flat
+      const promoteToFlat = (arr) => arr.map(p => ({ ...p, flat: true }));
+
+      const filteredBefore = useFolderStructure
+        ? (enabledFolders.before ? items.filter(i => i.mode === PHOTO_MODES.BEFORE) : promoteToFlat(items.filter(i => i.mode === PHOTO_MODES.BEFORE)))
+        : items.filter(i => i.mode === PHOTO_MODES.BEFORE);
+
+      const filteredAfter = useFolderStructure
+        ? (enabledFolders.after ? items.filter(i => i.mode === PHOTO_MODES.AFTER) : promoteToFlat(items.filter(i => i.mode === PHOTO_MODES.AFTER)))
+        : items.filter(i => i.mode === PHOTO_MODES.AFTER);
+
+      const filteredCombined = useFolderStructure
+        ? (enabledFolders.combined ? combinedItems : promoteToFlat(combinedItems))
+        : combinedItems;
       const allItems = [...filteredBefore, ...filteredAfter, ...filteredCombined];
 
       if (allItems.length === 0) {

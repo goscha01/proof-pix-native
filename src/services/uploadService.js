@@ -264,6 +264,7 @@ export async function uploadPhotoBatch(photos, config) {
 
       // Provide an AbortController per upload if supported
       const controller = typeof getAbortController === 'function' ? getAbortController() : null;
+      const isFlat = !!(flat || photo.flat === true || photo.flatOverride === true);
       return uploadPhoto({
         imageDataUrl: photo.uri,
         filename: photo.filename || `${photo.name}_${format !== 'default' ? format : typeParam}.jpg`,
@@ -276,7 +277,7 @@ export async function uploadPhotoBatch(photos, config) {
         scriptUrl,
         folderId,
         abortSignal: controller ? controller.signal : (abortSignal || undefined),
-        flat
+        flat: isFlat
       })
         .then(result => ({ success: true, result, photo }))
         .catch(error => ({ success: false, error, photo }));
