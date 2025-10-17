@@ -182,9 +182,11 @@ export default function AllPhotosScreen({ navigation, route }) {
       const config = getLocationConfig(location);
       // Use active project's exact name if available; otherwise fall back to date-based
       const albumName = (projects?.find?.(p => p.id === activeProjectId)?.name) || createAlbumName(userName, location);
+      // Scope uploads to the active project if one is selected
+      const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
 
       // Build the list based on selected types (before/after)
-      const items = photos.filter(p =>
+      const items = sourcePhotos.filter(p =>
         (selectedTypes.before && p.mode === PHOTO_MODES.BEFORE) ||
         (selectedTypes.after && p.mode === PHOTO_MODES.AFTER)
       );
@@ -200,7 +202,7 @@ export default function AllPhotosScreen({ navigation, route }) {
 
         // Group photos by room to find pairs
         const byRoom = {};
-        photos.forEach(p => {
+        sourcePhotos.forEach(p => {
           if (!byRoom[p.room]) byRoom[p.room] = { before: [], after: [] };
           if (p.mode === PHOTO_MODES.BEFORE) byRoom[p.room].before.push(p);
           if (p.mode === PHOTO_MODES.AFTER) byRoom[p.room].after.push(p);
