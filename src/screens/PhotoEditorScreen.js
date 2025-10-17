@@ -144,8 +144,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
     const showSide = !isLandscape || cameraViewMode === 'landscape'; // portrait: only side; letterbox: side too
     const showStack = isLandscape; // landscape or letterbox: stack
     const configs = {};
-    if (showStack && hasStack) configs['original-stack'] = { name: 'Original', width: landscapeW, height: landscapeH, layout: 'stack' };
-    if (showSide && hasSide) configs['original-side'] = { name: 'Original', width: portraitW, height: portraitH, layout: 'sidebyside' };
+    if (showStack && hasStack) configs['original-stack'] = { name: 'Original (stack)', width: landscapeW, height: landscapeH, layout: 'stack' };
+    if (showSide && hasSide) configs['original-side'] = { name: 'Original (side)', width: portraitW, height: portraitH, layout: 'sidebyside' };
     const preferredKey = isLandscape ? (hasStack ? 'original-stack' : (hasSide ? 'original-side' : null)) : (hasSide ? 'original-side' : (hasStack ? 'original-stack' : null));
     return { ...configs, preferredKey };
   };
@@ -180,8 +180,23 @@ export default function PhotoEditorScreen({ route, navigation }) {
     } else {
       filtered = allTemplates.filter(([key, config]) => config.layout === 'sidebyside');
     }
-    // Prepend available original templates (preferred first)
+    // Prepend original templates (preferred first).
+    // Ensure originals are included even before their base files are detected so users can swipe back to them.
     const originalEntries = Object.entries(originals).filter(([k]) => k !== 'preferredKey');
+    const needSide = cameraViewMode === 'landscape' || phoneOrientation !== 'landscape'; // letterbox or portrait
+    const needStack = cameraViewMode === 'landscape' || phoneOrientation === 'landscape'; // letterbox or landscape
+    if (needSide && !originals['original-side']) {
+      originalEntries.unshift([
+        'original-side',
+        { name: 'Original (side)', width: 1080, height: 1620, layout: 'sidebyside' }
+      ]);
+    }
+    if (needStack && !originals['original-stack']) {
+      originalEntries.unshift([
+        'original-stack',
+        { name: 'Original (stack)', width: 1920, height: 1080, layout: 'stack' }
+      ]);
+    }
     const preferred = originals.preferredKey;
     originalEntries.sort((a, b) => (a[0] === preferred ? -1 : b[0] === preferred ? 1 : 0));
     return [...originalEntries, ...filtered];
