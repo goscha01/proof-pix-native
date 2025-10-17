@@ -48,8 +48,6 @@ export default function AllPhotosScreen({ navigation, route }) {
   const [manageVisible, setManageVisible] = useState(false);
   const [deleteFromStorage, setDeleteFromStorage] = useState(true);
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
-  const [confirmSaveVisible, setConfirmSaveVisible] = useState(false);
-  const [projectName, setProjectName] = useState('');
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
   const [selectedFormats, setSelectedFormats] = useState(() => {
     // Default: only square formats enabled by default
@@ -750,66 +748,7 @@ export default function AllPhotosScreen({ navigation, route }) {
 
       {/* Upgrade overlay is rendered inside the Upload Options modal for correct stacking */}
 
-      {/* Confirm Save Modal */}
-      <Modal
-        visible={confirmSaveVisible}
-        transparent={true}
-        animationType="fade"
-        onRequestClose={() => setConfirmSaveVisible(false)}
-      >
-        <View style={styles.uploadModalContainer}>
-          <View style={styles.uploadModalContent}>
-            <Text style={styles.uploadModalTitle}>Save Project</Text>
-            <Text style={styles.uploadModalProgress}>Edit project name before saving</Text>
-            <View style={{ width: '92%', marginTop: 8 }}>
-              <TextInput
-                style={{
-                  borderWidth: 1,
-                  borderColor: COLORS.BORDER,
-                  borderRadius: 8,
-                  padding: 12,
-                  fontSize: 16
-                }}
-                value={projectName}
-                onChangeText={setProjectName}
-                placeholder="Project name"
-                placeholderTextColor={COLORS.GRAY}
-              />
-            </View>
-            <View style={[styles.optionsActionsRow, { width: '92%' }]}>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setConfirmSaveVisible(false)}>
-                <Text style={styles.actionBtnText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]}
-                onPress={async () => {
-                  try {
-                    // Ensure unique project name (no overwrite on same day)
-                    const existing = projects?.map?.(p => p.name) || [];
-                    const base = (projectName || 'Project').replace(/\s+/g, ' ').trim();
-                    let finalName = base;
-                    if (existing.includes(finalName)) {
-                      let i = 2;
-                      while (existing.includes(`${i} ${base}`)) i++;
-                      finalName = `${i} ${base}`;
-                    }
-                    const safeName = finalName.replace(/[^a-z0-9_\- ]/gi, '_');
-                    const proj = await createProject(safeName);
-                    await assignPhotosToProject(proj.id);
-                    Alert.alert('Saved', `Project saved as "${safeName}"`);
-                  } catch (e) {
-                    Alert.alert('Error', e?.message || 'Failed to save project');
-                  } finally {
-                    setConfirmSaveVisible(false);
-                  }
-                }}
-              >
-                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Save</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Confirm Save Modal removed - Save button was removed from Manage Projects modal */}
 
       {/* Upgrade Modal */}
       <Modal
@@ -1030,39 +969,6 @@ export default function AllPhotosScreen({ navigation, route }) {
               <View style={{ marginTop: 4 }} />
 
               <View style={styles.actionsList}>
-                {/* Load (green) */}
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionWide, styles.actionGreen]}
-                  onPress={() => {
-                    setManageVisible(false);
-                    Alert.alert('Load', 'Coming soon');
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>📂 Load</Text>
-                </TouchableOpacity>
-
-                {/* Save (amber) */}
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionWide, styles.actionSave]}
-                  onPress={() => {
-                    setManageVisible(false);
-                    const base = createAlbumName(userName, location);
-                    const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[^a-z0-9_\- ]/gi, '_');
-                    const existing = (projects?.map?.(p => p.name) || []);
-                    const existingNorm = new Set(existing.map(normalize));
-                    let suggested = base;
-                    if (existingNorm.has(normalize(suggested))) {
-                      let i = 2;
-                      while (existingNorm.has(normalize(`${i} ${base}`))) i++;
-                      suggested = `${i} ${base}`;
-                    }
-                    setProjectName(suggested);
-                    setConfirmSaveVisible(true);
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, styles.actionSaveText]}>💾 Save</Text>
-                </TouchableOpacity>
-
                 {/* Upload (primary) */}
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}

@@ -60,7 +60,7 @@ export default function App() {
                 name="AllPhotos" 
                 component={AllPhotosScreen}
                 options={{
-                  presentation: 'modal',
+                  presentation: 'fullScreenModal',
                   animation: 'slide_from_bottom',
                   animationDuration: 300
                 }}

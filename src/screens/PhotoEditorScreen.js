@@ -37,6 +37,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const [templateType, setTemplateType] = useState(getDefaultTemplate());
   const [saving, setSaving] = useState(false);
   const combinedRef = useRef(null);
+  const templateScrollRef = useRef(null);
   const { addPhoto, getUnpairedBeforePhotos } = usePhotos();
   const { showLabels } = useSettings();
   const templateTypeRef = useRef(templateType);
@@ -47,6 +48,42 @@ export default function PhotoEditorScreen({ route, navigation }) {
   // Update ref when templateType changes
   useEffect(() => {
     templateTypeRef.current = templateType;
+  }, [templateType]);
+
+  // Scroll to active template when templateType changes
+  useEffect(() => {
+    if (templateScrollRef.current) {
+      const templates = getAvailableTemplates();
+      const currentIndex = templates.findIndex(([key]) => key === templateType);
+      
+      if (currentIndex >= 0) {
+        // Calculate scroll position to center the active template
+        const buttonWidth = 120; // minWidth from styles
+        const gap = 10; // Gap between buttons from styles
+        const screenWidth = 393; // Approximate screen width
+        const centerOffset = screenWidth / 2;
+        
+        // Calculate the position of the current button
+        const buttonPosition = currentIndex * (buttonWidth + gap);
+        const scrollPosition = Math.max(0, buttonPosition - centerOffset + (buttonWidth / 2));
+        
+        console.log('📱 Scroll Debug:', {
+          activeIndex: currentIndex,
+          templateType,
+          buttonPosition,
+          scrollPosition,
+          screenWidth,
+          centerOffset,
+          buttonWidth,
+          gap
+        });
+        
+        templateScrollRef.current.scrollTo({
+          x: scrollPosition,
+          animated: true
+        });
+      }
+    }
   }, [templateType]);
 
   // Locate saved original base images for this pair (if any)
@@ -446,6 +483,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
       <View style={styles.templateSelector}>
         <Text style={styles.selectorTitle}>Choose Template:</Text>
         <ScrollView
+          ref={templateScrollRef}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.templateScrollContent}
