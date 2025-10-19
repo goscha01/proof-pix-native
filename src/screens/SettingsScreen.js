@@ -47,7 +47,7 @@ export default function SettingsScreen({ navigation }) {
   const handleResetUserData = () => {
     Alert.alert(
       'Reset User Data',
-      'This will clear your name and location settings. You will need to set them up again on the next app launch. Continue?',
+      'This will clear your name and location settings. You will be taken to the setup screen to configure them again. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
@@ -55,7 +55,10 @@ export default function SettingsScreen({ navigation }) {
           style: 'destructive',
           onPress: async () => {
             await resetUserData();
-            Alert.alert('Reset Complete', 'User data has been reset. Please restart the app to set up again.');
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'FirstLoad' }],
+            });
           }
         }
       ]

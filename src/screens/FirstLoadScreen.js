@@ -14,18 +14,24 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
 import { LOCATIONS } from '../config/locations';
 import { COLORS } from '../constants/rooms';
+import { FONTS } from '../constants/fonts';
 
 const { width, height } = Dimensions.get('window');
 
 export default function FirstLoadScreen({ navigation }) {
   const { updateUserInfo } = useSettings();
   const [userName, setUserName] = useState('');
-  const [selectedLocation, setSelectedLocation] = useState('tampa');
+  const [selectedLocation, setSelectedLocation] = useState('');
   const [showLocationDropdown, setShowLocationDropdown] = useState(false);
 
   const handleContinue = async () => {
     if (!userName.trim()) {
       Alert.alert('Required Field', 'Please enter your name to continue.');
+      return;
+    }
+
+    if (!selectedLocation) {
+      Alert.alert('Required Field', 'Please select your city to continue.');
       return;
     }
 
@@ -38,6 +44,23 @@ export default function FirstLoadScreen({ navigation }) {
 
     return (
       <View style={styles.dropdownContainer}>
+        <TouchableOpacity
+          style={[
+            styles.dropdownItem,
+            !selectedLocation && styles.dropdownItemSelected
+          ]}
+          onPress={() => {
+            setSelectedLocation('');
+            setShowLocationDropdown(false);
+          }}
+        >
+          <Text style={[
+            styles.dropdownItemText,
+            !selectedLocation && styles.dropdownItemTextSelected
+          ]}>
+            Select your city
+          </Text>
+        </TouchableOpacity>
         {LOCATIONS.map((location) => (
           <TouchableOpacity
             key={location.id}
@@ -65,16 +88,6 @@ export default function FirstLoadScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.logoContainer}>
-          <Image
-            source={require('../../assets/icon.png')}
-            style={styles.logo}
-            resizeMode="contain"
-          />
-          <Text style={styles.appTitle}>ProofPix</Text>
-          <Text style={styles.appSubtitle}>Before & After Photo Management</Text>
-        </View>
-
         <View style={styles.formContainer}>
           <Text style={styles.welcomeText}>Welcome! Let's get you set up.</Text>
           
@@ -97,8 +110,14 @@ export default function FirstLoadScreen({ navigation }) {
               style={styles.dropdownButton}
               onPress={() => setShowLocationDropdown(!showLocationDropdown)}
             >
-              <Text style={styles.dropdownButtonText}>
-                {LOCATIONS.find(loc => loc.id === selectedLocation)?.name || 'Select Location'}
+              <Text style={[
+                styles.dropdownButtonText,
+                !selectedLocation && styles.dropdownButtonPlaceholder
+              ]}>
+                {selectedLocation ? 
+                  LOCATIONS.find(loc => loc.id === selectedLocation)?.name : 
+                  'Select your city'
+                }
               </Text>
               <Text style={styles.dropdownArrow}>
                 {showLocationDropdown ? '▲' : '▼'}
@@ -114,6 +133,16 @@ export default function FirstLoadScreen({ navigation }) {
             <Text style={styles.continueButtonText}>Continue</Text>
           </TouchableOpacity>
         </View>
+
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../assets/PP_logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.appTitle}>ProofPix</Text>
+          <Text style={styles.appSubtitle}>Before & After Photo Management</Text>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -122,32 +151,38 @@ export default function FirstLoadScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.BACKGROUND
+    backgroundColor: '#F2C31B'
   },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
-    paddingHorizontal: 30
+    justifyContent: 'flex-start',
+    paddingHorizontal: 30,
+    paddingTop: 50,
+    paddingBottom: 30
   },
   logoContainer: {
     alignItems: 'center',
-    marginBottom: 50
+    marginTop: 30,
+    marginBottom: 0
   },
   logo: {
-    width: 120,
-    height: 120,
-    marginBottom: 20
+    width: 180,
+    height: 180,
+    marginBottom: 0,
+    marginRight: 5
   },
   appTitle: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: COLORS.TEXT,
-    marginBottom: 8
+    fontSize: FONTS.XXXLARGE,
+    fontWeight: FONTS.BOLD,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+    color: '#000000',
+    marginBottom: 0
   },
   appSubtitle: {
     fontSize: 16,
-    color: COLORS.GRAY,
-    textAlign: 'center'
+    color: '#333333',
+    textAlign: 'center',
+    marginTop: 0
   },
   formContainer: {
     width: '100%'
@@ -155,7 +190,7 @@ const styles = StyleSheet.create({
   welcomeText: {
     fontSize: 20,
     fontWeight: '600',
-    color: COLORS.TEXT,
+    color: '#000000',
     textAlign: 'center',
     marginBottom: 30
   },
@@ -165,7 +200,7 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: COLORS.TEXT,
+    color: '#000000',
     marginBottom: 8
   },
   textInput: {
@@ -191,7 +226,10 @@ const styles = StyleSheet.create({
   },
   dropdownButtonText: {
     fontSize: 16,
-    color: COLORS.TEXT
+    color: '#000000'
+  },
+  dropdownButtonPlaceholder: {
+    color: '#999'
   },
   dropdownArrow: {
     fontSize: 12,
@@ -233,14 +271,14 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   continueButton: {
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: '#000000',
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 20
   },
   continueButtonText: {
-    color: COLORS.TEXT,
+    color: '#FFFFFF',
     fontSize: 18,
     fontWeight: 'bold'
   }

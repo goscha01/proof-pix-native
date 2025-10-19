@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
 import { ROOMS, COLORS, PHOTO_MODES } from '../constants/rooms';
+import { FONTS } from '../constants/fonts';
 import { CroppedThumbnail } from '../components/CroppedThumbnail';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSettings } from '../context/SettingsContext';
@@ -734,8 +735,9 @@ const styles = StyleSheet.create({
     paddingTop: 10
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
+    fontSize: FONTS.XXLARGE,
+    fontWeight: FONTS.BOLD,
+    fontFamily: FONTS.QUICKSAND_BOLD,
     color: COLORS.TEXT
   },
   projectNameContainer: {
