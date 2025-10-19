@@ -1095,11 +1095,8 @@ export default function CameraScreen({ route, navigation }) {
       const photoNumber = roomPhotos.length + 1;
       const photoName = `${room.charAt(0).toUpperCase() + room.slice(1)} ${photoNumber}`;
 
-      // Add label if enabled
-      const processedUri = await addLabelToPhoto(uri, 'BEFORE');
-
-      // Save to device
-      const savedUri = await savePhotoToDevice(processedUri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`, activeProjectId || null);
+      // Save original photo to device immediately (no label delay)
+      const savedUri = await savePhotoToDevice(uri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`, activeProjectId || null);
 
       // Capture device orientation (actual phone orientation)
       const currentOrientation = deviceOrientation;
@@ -1122,6 +1119,27 @@ export default function CameraScreen({ route, navigation }) {
 
       // Update selectedBeforePhoto so thumbnail shows immediately
       setSelectedBeforePhoto(newPhoto);
+
+      // Process label in background if enabled (non-blocking)
+      if (showLabels) {
+        (async () => {
+          try {
+            const labeledUri = await addLabelToPhoto(uri, 'BEFORE');
+            const labeledSavedUri = await savePhotoToDevice(labeledUri, `${room}_${photoName}_BEFORE_LABELED_${Date.now()}.jpg`, activeProjectId || null);
+            
+            // Update the photo with labeled version
+            const updatedPhoto = {
+              ...newPhoto,
+              uri: labeledSavedUri
+            };
+            await addPhoto(updatedPhoto);
+            setSelectedBeforePhoto(updatedPhoto);
+            console.log('✅ Labeled before photo saved in background');
+          } catch (error) {
+            console.warn('⚠️ Label processing failed:', error?.message);
+          }
+        })();
+      }
 
       // Stay in before mode to allow taking more photos
       // User can close camera to see photos in home grid
@@ -1154,12 +1172,9 @@ export default function CameraScreen({ route, navigation }) {
         await deletePhoto(existingCombinedPhoto.id);
       }
 
-      // Add label if enabled
-      const processedUri = await addLabelToPhoto(uri, 'AFTER');
-
-      // Save to device
+      // Save original photo to device immediately (no label delay)
       const savedUri = await savePhotoToDevice(
-        processedUri,
+        uri,
         `${activeBeforePhoto.room}_${activeBeforePhoto.name}_AFTER_${Date.now()}.jpg`,
         activeProjectId || null
       );
@@ -1181,155 +1196,177 @@ export default function CameraScreen({ route, navigation }) {
       console.log('Adding after photo with beforePhotoId:', beforePhotoId);
       await addPhoto(newAfterPhoto);
 
-      // Step 1: Create vertical side-by-side base combined (no crop, no padding, untransformed)
-      try {
-        // Measure original sizes
-        const getSize = (u) => new Promise((resolve) => {
-          Image.getSize(u, (w, h) => resolve({ w, h }), () => resolve({ w: 1080, h: 1920 }));
-        });
-        const aSize = await getSize(activeBeforePhoto.uri);
-        const bSize = await getSize(savedUri);
-        // Choose a relative total width: match device width in pixels for good fidelity
-        const logicalW = Dimensions.get('window').width;
-        const pixelScale = PixelRatio.get() || 2;
-        const totalW = Math.min(2160, Math.max(720, Math.round(logicalW * pixelScale))); // relative to device, capped
-
-        // Decide layout: landscape or letterbox -> STACK, else SIDE-BY-SIDE
-        const beforeOrientation = activeBeforePhoto.orientation || 'portrait';
-        const cameraVM = activeBeforePhoto.cameraViewMode || 'portrait';
-        const isLandscapePair = beforeOrientation === 'landscape' || cameraVM === 'landscape';
-        const isLetterbox = (beforeOrientation === 'portrait' && cameraVM === 'landscape');
-
-        let dimsLocal;
-        if (isLandscapePair) {
-          // STACK: heights sum based on width
-          const r1h = aSize.h / aSize.w; // height per unit width
-          const r2h = bSize.h / bSize.w;
-          const totalH = Math.max(400, Math.round(totalW * (r1h + r2h)));
-          const topH = Math.round(totalW * r1h);
-          const bottomH = totalH - topH;
-          dimsLocal = { width: totalW, height: totalH, topH, bottomH };
-          console.log('🟩 Stack base dims:', { totalW, totalH, topH, bottomH, r1h, r2h });
-        } else {
-          // SIDE-BY-SIDE: widths split based on height-normalized ratios
-          const r1w = aSize.w / aSize.h;
-          const r2w = bSize.w / bSize.h;
-          const denom = (r1w + r2w) || 1;
-          const totalH = Math.max(400, Math.round(totalW / denom));
-          const leftW = Math.round(totalW * (r1w / denom));
-          const rightW = totalW - leftW;
-          dimsLocal = { width: totalW, height: totalH, leftW, rightW };
-          console.log('🟩 Side base dims:', { totalW, totalH, leftW, rightW, r1w, r2w });
-        }
-
-        setSideBaseDims(dimsLocal);
-        setSideBasePair({ beforeUri: activeBeforePhoto.uri, afterUri: savedUri, isLandscapePair });
-
-        // Allow mount (short)
-        console.log('🟩 Side base waiting for mount...');
-        await new Promise((r) => setTimeout(r, 60));
-        console.log('🟩 Side base mount complete');
-
-        // Prefetch images to improve load reliability
-        try {
-          await Promise.all([
-            Image.prefetch(activeBeforePhoto.uri),
-            Image.prefetch(savedUri)
-          ]);
-          console.log('🟩 Side base images prefetched');
-        } catch (pfErr) {
-          console.warn('⚠️ Side base prefetch failed:', pfErr?.message);
-        }
-        // Brief wait for images to load; don't block long
-        const start = Date.now();
-        const maxWaitMs = 300; // keep UI snappy
-        while (!(sideLoadedA && sideLoadedB) && (Date.now() - start) < maxWaitMs) {
-          await new Promise((r) => setTimeout(r, 20));
-        }
-        console.log('🟩 Side base load flags:', { sideLoadedA, sideLoadedB, hasRef: !!sideBaseRef.current });
-
-        // Capture without altering proportions
-        if (sideBaseRef.current) {
-          console.log('📸 Side base capturing with size:', dimsLocal.width, 'x', dimsLocal.height);
-          const capUri = await captureRef(sideBaseRef, {
-            format: 'jpg',
-            quality: 0.95,
-            width: dimsLocal.width,
-            height: dimsLocal.height
-          });
-          console.log('📸 Side base captured URI:', capUri);
-          const safeName = (activeBeforePhoto.name || 'Photo').replace(/\s+/g, '_');
-          const baseType = isLandscapePair ? 'STACK' : 'SIDE';
-          const firstSaved = await savePhotoToDevice(
-            capUri,
-            `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_${baseType}_${Date.now()}.jpg`,
-            activeProjectId || null
-          );
-          console.log(`✅ Base (${baseType}) saved to device:`, firstSaved);
-
-          // In LETTERBOX, also save the SIDE-BY-SIDE variant in addition to STACK
-          if (isLetterbox) {
-            try {
-              // Prepare side-by-side dims based on existing sizes and totalW
-              const r1wLB = aSize.w / aSize.h;
-              const r2wLB = bSize.w / bSize.h;
-              const denomLB = (r1wLB + r2wLB) || 1;
-              const totalHLB = Math.max(400, Math.round(totalW / denomLB));
-              const leftWLB = Math.round(totalW * (r1wLB / denomLB));
-              const rightWLB = totalW - leftWLB;
-              const sideDimsLB = { width: totalW, height: totalHLB, leftW: leftWLB, rightW: rightWLB };
-              console.log('🟩 Letterbox extra side-by-side dims:', { totalW, totalHLB, leftWLB, rightWLB, r1wLB, r2wLB });
-
-              // Reset load flags and mount the side-by-side renderer
-              setSideLoadedA(false);
-              setSideLoadedB(false);
-              setSideBaseDims(sideDimsLB);
-              setSideBasePair({ beforeUri: activeBeforePhoto.uri, afterUri: savedUri, isLandscapePair: false });
-
-              console.log('🟩 Letterbox side-by-side waiting for mount...');
-              await new Promise((r) => setTimeout(r, 60));
-              console.log('🟩 Letterbox side-by-side mount complete');
-
-              // Brief wait for images to load
-              const startLB = Date.now();
-              const maxWaitMsLB = 300;
-              while (!(sideLoadedA && sideLoadedB) && (Date.now() - startLB) < maxWaitMsLB) {
-                await new Promise((r) => setTimeout(r, 20));
-              }
-              console.log('🟩 Letterbox side-by-side load flags:', { sideLoadedA, sideLoadedB, hasRef: !!sideBaseRef.current });
-
-              if (sideBaseRef.current) {
-                console.log('📸 Letterbox side-by-side capturing with size:', sideDimsLB.width, 'x', sideDimsLB.height);
-                const capUriLB = await captureRef(sideBaseRef, {
-                  format: 'jpg',
-                  quality: 0.95,
-                  width: sideDimsLB.width,
-                  height: sideDimsLB.height
-                });
-                const secondSaved = await savePhotoToDevice(
-                  capUriLB,
-                  `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}.jpg`,
-                  activeProjectId || null
-                );
-                console.log('✅ Letterbox side-by-side base saved to device:', secondSaved);
-              } else {
-                console.warn('⚠️ Letterbox side-by-side capture skipped: missing ref');
-              }
-            } catch (eLB) {
-              console.warn('⚠️ Letterbox side-by-side base save failed:', eLB?.message);
-            }
+      // Process label in background if enabled (non-blocking)
+      if (showLabels) {
+        (async () => {
+          try {
+            const labeledUri = await addLabelToPhoto(uri, 'AFTER');
+            const labeledSavedUri = await savePhotoToDevice(labeledUri, `${activeBeforePhoto.room}_${activeBeforePhoto.name}_AFTER_LABELED_${Date.now()}.jpg`, activeProjectId || null);
+            
+            // Update the after photo with labeled version
+            const updatedAfterPhoto = {
+              ...newAfterPhoto,
+              uri: labeledSavedUri
+            };
+            await addPhoto(updatedAfterPhoto);
+            console.log('✅ Labeled after photo saved in background');
+          } catch (error) {
+            console.warn('⚠️ Label processing failed:', error?.message);
           }
-        } else {
-          console.warn('⚠️ Side base capture skipped: missing ref');
-        }
-      } catch (e) {
-        console.warn('⚠️ Side-by-side base save failed:', e?.message);
-      } finally {
-        setSideBasePair(null);
-        setSideBaseDims(null);
-        setSideLoadedA(false);
-        setSideLoadedB(false);
+        })();
       }
+
+      // Create combined photo in background (non-blocking)
+      (async () => {
+        try {
+          // Measure original sizes
+          const getSize = (u) => new Promise((resolve) => {
+            Image.getSize(u, (w, h) => resolve({ w, h }), () => resolve({ w: 1080, h: 1920 }));
+          });
+          const aSize = await getSize(activeBeforePhoto.uri);
+          const bSize = await getSize(savedUri);
+          // Choose a relative total width: match device width in pixels for good fidelity
+          const logicalW = Dimensions.get('window').width;
+          const pixelScale = PixelRatio.get() || 2;
+          const totalW = Math.min(2160, Math.max(720, Math.round(logicalW * pixelScale))); // relative to device, capped
+
+          // Decide layout: landscape or letterbox -> STACK, else SIDE-BY-SIDE
+          const beforeOrientation = activeBeforePhoto.orientation || 'portrait';
+          const cameraVM = activeBeforePhoto.cameraViewMode || 'portrait';
+          const isLandscapePair = beforeOrientation === 'landscape' || cameraVM === 'landscape';
+          const isLetterbox = (beforeOrientation === 'portrait' && cameraVM === 'landscape');
+
+          let dimsLocal;
+          if (isLandscapePair) {
+            // STACK: heights sum based on width
+            const r1h = aSize.h / aSize.w; // height per unit width
+            const r2h = bSize.h / bSize.w;
+            const totalH = Math.max(400, Math.round(totalW * (r1h + r2h)));
+            const topH = Math.round(totalW * r1h);
+            const bottomH = totalH - topH;
+            dimsLocal = { width: totalW, height: totalH, topH, bottomH };
+            console.log('🟩 Stack base dims:', { totalW, totalH, topH, bottomH, r1h, r2h });
+          } else {
+            // SIDE-BY-SIDE: widths split based on height-normalized ratios
+            const r1w = aSize.w / aSize.h;
+            const r2w = bSize.w / bSize.h;
+            const denom = (r1w + r2w) || 1;
+            const totalH = Math.max(400, Math.round(totalW / denom));
+            const leftW = Math.round(totalW * (r1w / denom));
+            const rightW = totalW - leftW;
+            dimsLocal = { width: totalW, height: totalH, leftW, rightW };
+            console.log('🟩 Side base dims:', { totalW, totalH, leftW, rightW, r1w, r2w });
+          }
+
+          setSideBaseDims(dimsLocal);
+          setSideBasePair({ beforeUri: activeBeforePhoto.uri, afterUri: savedUri, isLandscapePair });
+
+          // Allow mount (short)
+          console.log('🟩 Side base waiting for mount...');
+          await new Promise((r) => setTimeout(r, 60));
+          console.log('🟩 Side base mount complete');
+
+          // Prefetch images to improve load reliability
+          try {
+            await Promise.all([
+              Image.prefetch(activeBeforePhoto.uri),
+              Image.prefetch(savedUri)
+            ]);
+            console.log('🟩 Side base images prefetched');
+          } catch (pfErr) {
+            console.warn('⚠️ Side base prefetch failed:', pfErr?.message);
+          }
+          // Brief wait for images to load; don't block long
+          const start = Date.now();
+          const maxWaitMs = 300; // keep UI snappy
+          while (!(sideLoadedA && sideLoadedB) && (Date.now() - start) < maxWaitMs) {
+            await new Promise((r) => setTimeout(r, 20));
+          }
+          console.log('🟩 Side base load flags:', { sideLoadedA, sideLoadedB, hasRef: !!sideBaseRef.current });
+
+          // Capture without altering proportions
+          if (sideBaseRef.current) {
+            console.log('📸 Side base capturing with size:', dimsLocal.width, 'x', dimsLocal.height);
+            const capUri = await captureRef(sideBaseRef, {
+              format: 'jpg',
+              quality: 0.95,
+              width: dimsLocal.width,
+              height: dimsLocal.height
+            });
+            console.log('📸 Side base captured URI:', capUri);
+            const safeName = (activeBeforePhoto.name || 'Photo').replace(/\s+/g, '_');
+            const baseType = isLandscapePair ? 'STACK' : 'SIDE';
+            const firstSaved = await savePhotoToDevice(
+              capUri,
+              `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_${baseType}_${Date.now()}.jpg`,
+              activeProjectId || null
+            );
+            console.log(`✅ Base (${baseType}) saved to device:`, firstSaved);
+
+            // In LETTERBOX, also save the SIDE-BY-SIDE variant in addition to STACK
+            if (isLetterbox) {
+              try {
+                // Prepare side-by-side dims based on existing sizes and totalW
+                const r1wLB = aSize.w / aSize.h;
+                const r2wLB = bSize.w / bSize.h;
+                const denomLB = (r1wLB + r2wLB) || 1;
+                const totalHLB = Math.max(400, Math.round(totalW / denomLB));
+                const leftWLB = Math.round(totalW * (r1wLB / denomLB));
+                const rightWLB = totalW - leftWLB;
+                const sideDimsLB = { width: totalW, height: totalHLB, leftW: leftWLB, rightW: rightWLB };
+                console.log('🟩 Letterbox extra side-by-side dims:', { totalW, totalHLB, leftWLB, rightWLB, r1wLB, r2wLB });
+
+                // Reset load flags and mount the side-by-side renderer
+                setSideLoadedA(false);
+                setSideLoadedB(false);
+                setSideBaseDims(sideDimsLB);
+                setSideBasePair({ beforeUri: activeBeforePhoto.uri, afterUri: savedUri, isLandscapePair: false });
+
+                console.log('🟩 Letterbox side-by-side waiting for mount...');
+                await new Promise((r) => setTimeout(r, 60));
+                console.log('🟩 Letterbox side-by-side mount complete');
+
+                // Brief wait for images to load
+                const startLB = Date.now();
+                const maxWaitMsLB = 300;
+                while (!(sideLoadedA && sideLoadedB) && (Date.now() - startLB) < maxWaitMsLB) {
+                  await new Promise((r) => setTimeout(r, 20));
+                }
+                console.log('🟩 Letterbox side-by-side load flags:', { sideLoadedA, sideLoadedB, hasRef: !!sideBaseRef.current });
+
+                if (sideBaseRef.current) {
+                  console.log('📸 Letterbox side-by-side capturing with size:', sideDimsLB.width, 'x', sideDimsLB.height);
+                  const capUriLB = await captureRef(sideBaseRef, {
+                    format: 'jpg',
+                    quality: 0.95,
+                    width: sideDimsLB.width,
+                    height: sideDimsLB.height
+                  });
+                  const secondSaved = await savePhotoToDevice(
+                    capUriLB,
+                    `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}.jpg`,
+                    activeProjectId || null
+                  );
+                  console.log('✅ Letterbox side-by-side base saved to device:', secondSaved);
+                } else {
+                  console.warn('⚠️ Letterbox side-by-side capture skipped: missing ref');
+                }
+              } catch (eLB) {
+                console.warn('⚠️ Letterbox side-by-side base save failed:', eLB?.message);
+              }
+            }
+          } else {
+            console.warn('⚠️ Side base capture skipped: missing ref');
+          }
+        } catch (e) {
+          console.warn('⚠️ Side-by-side base save failed:', e?.message);
+        } finally {
+          setSideBasePair(null);
+          setSideBaseDims(null);
+          setSideLoadedA(false);
+          setSideLoadedB(false);
+        }
+      })();
 
       // If we're replacing an existing combined photo, navigate to PhotoEditor to recreate it
       if (existingCombinedPhoto) {
@@ -1341,40 +1378,37 @@ export default function CameraScreen({ route, navigation }) {
         return;
       }
 
-      // Wait a moment for state to update
-      setTimeout(() => {
-        // Auto-advance to next unpaired photo
-        const remainingUnpaired = getUnpairedBeforePhotos(activeBeforePhoto.room);
-        console.log('Remaining unpaired photos:', remainingUnpaired.length);
+      // Auto-advance to next unpaired photo (immediate)
+      const remainingUnpaired = getUnpairedBeforePhotos(activeBeforePhoto.room);
+      console.log('Remaining unpaired photos:', remainingUnpaired.length);
 
-        // Filter out the photo we just paired to ensure we don't count it
-        const nextUnpaired = remainingUnpaired.filter(p => p.id !== beforePhotoId);
-        console.log('Next unpaired after filtering:', nextUnpaired.length);
+      // Filter out the photo we just paired to ensure we don't count it
+      const nextUnpaired = remainingUnpaired.filter(p => p.id !== beforePhotoId);
+      console.log('Next unpaired after filtering:', nextUnpaired.length);
 
-        if (nextUnpaired.length > 0) {
-          // Select the next unpaired photo
-          console.log('Moving to next photo:', nextUnpaired[0].name);
-          setSelectedBeforePhoto(nextUnpaired[0]);
-        } else {
-          // All photos paired, go back to main grid
-          Alert.alert(
-            'All Photos Taken',
-            'All after photos have been captured!',
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  if (navigation.canGoBack()) {
-                    navigation.goBack();
-                  } else {
-                    navigation.navigate('Home');
-                  }
+      if (nextUnpaired.length > 0) {
+        // Select the next unpaired photo
+        console.log('Moving to next photo:', nextUnpaired[0].name);
+        setSelectedBeforePhoto(nextUnpaired[0]);
+      } else {
+        // All photos paired, go back to main grid
+        Alert.alert(
+          'All Photos Taken',
+          'All after photos have been captured!',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                if (navigation.canGoBack()) {
+                  navigation.goBack();
+                } else {
+                  navigation.navigate('Home');
                 }
               }
-            ]
-          );
-        }
-      }, 500);
+            }
+          ]
+        );
+      }
     } catch (error) {
       console.error('Error saving after photo:', error);
       Alert.alert('Error', 'Failed to save photo');
