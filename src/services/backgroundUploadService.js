@@ -1,4 +1,5 @@
 import { uploadPhotoBatch } from './uploadService';
+import { markPhotosAsUploaded } from './uploadTracker';
 
 class BackgroundUploadService {
   constructor() {
@@ -98,6 +99,12 @@ class BackgroundUploadService {
 
       // Perform upload
       const result = await uploadPhotoBatch(upload.items, uploadOptions);
+      
+      // Mark photos as uploaded in tracker (only successful ones)
+      if (result.successful && result.successful.length > 0) {
+        const successfulPhotos = result.successful.map(item => item.photo);
+        await markPhotosAsUploaded(successfulPhotos, upload.albumName);
+      }
       
       // Mark as completed
       upload.status = 'completed';

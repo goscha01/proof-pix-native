@@ -30,6 +30,7 @@ import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
 import { UploadDetailsModal } from '../components/BackgroundUploadStatus';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import UploadCompletionModal from '../components/UploadCompletionModal';
+import { filterNewPhotos, markPhotosAsUploaded } from '../services/uploadTracker';
 
 const { width } = Dimensions.get('window');
 const SET_NAME_WIDTH = 80;
@@ -445,13 +446,49 @@ export default function AllPhotosScreen({ navigation, route }) {
         return;
       }
 
+      // Filter out photos that have already been uploaded
+      const newItems = await filterNewPhotos(allItems, albumName);
+      
+      if (newItems.length === 0) {
+        Alert.alert(
+          'No New Photos', 
+          'All selected photos have already been uploaded to this album. No new photos to upload.',
+          [{ text: 'OK', style: 'default' }]
+        );
+        return;
+      }
+
+      if (newItems.length < allItems.length) {
+        const skippedCount = allItems.length - newItems.length;
+        Alert.alert(
+          'Some Photos Already Uploaded',
+          `${skippedCount} photo(s) were skipped because they were already uploaded to this album. ${newItems.length} new photo(s) will be uploaded.`,
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Continue Upload', onPress: () => proceedWithUpload(newItems, albumName) }
+          ]
+        );
+        return;
+      }
+
+      // All photos are new, proceed with upload
+      await proceedWithUpload(newItems, albumName);
+    } catch (error) {
+      Alert.alert('Upload Failed', error.message || 'An error occurred while preparing upload');
+    }
+  };
+
+  const proceedWithUpload = async (items, albumName) => {
+    try {
+      const config = getLocationConfig(location);
+
       // Close upload options and any upgrade overlay before starting background upload
       setOptionsVisible(false);
       setUpgradeVisible(false);
 
       // Start background upload
       const uploadId = startBackgroundUpload({
-        items: allItems,
+        items,
         config,
         albumName,
         location,

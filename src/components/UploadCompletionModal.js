@@ -46,14 +46,10 @@ const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearComp
     >
       <View style={styles.modalOverlay}>
         <View style={styles.modalContent}>
-          <View style={[styles.header, { backgroundColor: COLORS.PRIMARY }]}>
-            <Text style={styles.icon}>{getStatusIcon()}</Text>
-            <Text style={[styles.title, { color: 'white' }]}>
+          <View style={styles.body}>
+            <Text style={styles.title}>
               {failed.length === 0 ? 'Upload Complete!' : 'Upload Partially Complete'}
             </Text>
-          </View>
-
-          <View style={styles.body}>
             <Text style={styles.message}>{getCompletionMessage()}</Text>
             
             {successful.length > 0 && (
@@ -148,6 +144,7 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: 24,
+    paddingTop: 24,
     paddingBottom: 16,
   },
   message: {
