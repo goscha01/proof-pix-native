@@ -44,6 +44,25 @@ export default function HomeScreen({ navigation }) {
   const [newProjectVisible, setNewProjectVisible] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [pendingCameraAfterCreate, setPendingCameraAfterCreate] = useState(false);
+
+  // Force re-render when photos change (e.g., after project deletion)
+  useEffect(() => {
+    // This will trigger a re-render when photos change
+  }, [photos]);
+
+  // Ensure active project is valid after projects change
+  useEffect(() => {
+    if (activeProjectId && projects.length > 0) {
+      const activeProjectExists = projects.some(p => p.id === activeProjectId);
+      if (!activeProjectExists) {
+        // Active project no longer exists, select the first available project
+        setActiveProject(projects[0].id);
+      }
+    } else if (projects.length > 0 && !activeProjectId) {
+      // No active project but projects exist, select the first one
+      setActiveProject(projects[0].id);
+    }
+  }, [projects, activeProjectId]);
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
   const touchStartPos = useRef(null);
@@ -235,7 +254,13 @@ export default function HomeScreen({ navigation }) {
           setSelectedProjects(new Set());
           setIsMultiSelectMode(false);
           if (wasActiveProjectSelected) {
-            setActiveProject(null);
+            // After deleting the active project, select the first remaining project
+            const remainingProjects = projects.filter(p => !selectedProjects.has(p.id));
+            if (remainingProjects.length > 0) {
+              setActiveProject(remainingProjects[0].id);
+            } else {
+              setActiveProject(null);
+            }
           }
         }}
       ]

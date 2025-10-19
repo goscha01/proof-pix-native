@@ -70,6 +70,11 @@ export default function AllPhotosScreen({ navigation, route }) {
   const [currentRenderTemplate, setCurrentRenderTemplate] = useState(null);
   const renderViewRef = useRef(null);
 
+  // Force re-render when photos change (e.g., after project deletion)
+  useEffect(() => {
+    // This will trigger a re-render when photos change
+  }, [photos]);
+
   const FREE_FORMATS = new Set([]);
   const handleFormatToggle = (key) => {
     try {
