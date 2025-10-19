@@ -28,7 +28,8 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
         width,
         uploadProgress: upload.progress,
         hasActiveUploads,
-        activeUploadsLength: activeUploads.length
+        activeUploadsLength: activeUploads.length,
+        widthString: `${width}%`
       });
       return width;
     }
@@ -38,10 +39,11 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
 
   // Debug logging
   useEffect(() => {
+    const progressWidth = getProgressWidth();
     console.log('📊 UploadIndicatorLine: Progress update', {
       current: hasActiveUploads ? activeUploads[0].progress.current : 0,
       total: hasActiveUploads ? activeUploads[0].progress.total : 0,
-      progressWidth: getProgressWidth()
+      progressWidth
     });
   }, [hasActiveUploads, activeUploads, uploadStatus]);
 
@@ -148,7 +150,10 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
         }}
       >
         <View 
-          style={styles.progressLineContainer}
+          style={[
+            styles.progressLineContainer,
+            { backgroundColor: '#E0E0E0' } // Ensure background is visible
+          ]}
           onLayout={(event) => {
             console.log('🔍 PROGRESS LINE CONTAINER LAYOUT:', {
               layout: event.nativeEvent.layout,
@@ -157,16 +162,17 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
             });
           }}
         >
-          {/* Remove animated background - it covers the progress fill */}
+          {/* Progress fill */}
           {hasActiveUploads && (
             <View 
               key={`progress-fill-${activeUploads[0]?.progress?.current}-${activeUploads[0]?.progress?.total}`}
               style={[
                 styles.progressFill,
                 { 
+                  backgroundColor: '#F2C31B', // Use the primary color directly
+                  height: '100%',
                   width: `${getProgressWidth()}%`,
-                  backgroundColor: getIndicatorColor(),
-                  height: '100%'
+                  minWidth: getProgressWidth() > 0 ? '2px' : '0px' // Ensure minimum visibility
                 }
               ]} 
               onLayout={(event) => {
@@ -181,7 +187,7 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
           )}
           {/* Debug: Show progress width */}
           {hasActiveUploads && (
-            <Text style={{ position: 'absolute', top: -20, left: 0, fontSize: 10, color: 'red' }}>
+            <Text style={{ position: 'absolute', top: -20, left: 0, fontSize: 10, color: 'red', zIndex: 1000 }}>
               {getProgressWidth()}%
             </Text>
           )}
@@ -206,9 +212,9 @@ const styles = StyleSheet.create({
   },
   progressLineContainer: {
     flex: 0.9, // 90% of screen width
-    height: 4,
+    height: 6, // Increased height for better visibility
     backgroundColor: '#E0E0E0',
-    borderRadius: 2,
+    borderRadius: 3,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -225,7 +231,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     bottom: 0,
-    borderRadius: 2,
+    borderRadius: 3,
     opacity: 1.0, // Make it fully visible
   },
   countContainer: {

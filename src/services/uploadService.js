@@ -158,6 +158,7 @@ export async function uploadPhoto({
     const targetUrl = shouldFlat
       ? `${scriptUrl}${scriptUrl.includes('?') ? '&' : '?'}flat=true`
       : scriptUrl;
+    
     const response = await fetch(targetUrl, {
       method: 'POST',
       body: formData,
@@ -205,7 +206,7 @@ export async function uploadPhoto({
  * @param {string} config.albumName - Album name
  * @param {string} config.location - Location/city
  * @param {string} config.cleanerName - Cleaner's name
- * @param {number} config.batchSize - Number of concurrent uploads (default: 3)
+ * @param {number} config.batchSize - Number of concurrent uploads (default: all photos in parallel)
  * @param {Function} config.onProgress - Progress callback (current, total)
  * @param {Function} config.onBatchComplete - Callback after each batch
  * @returns {Promise<Object>} - Upload results { successful: [], failed: [] }
@@ -217,7 +218,7 @@ export async function uploadPhotoBatch(photos, config) {
     albumName,
     location,
     cleanerName,
-    batchSize = 3,
+    batchSize = photos.length, // Upload all photos in parallel by default
     onProgress,
     onBatchComplete,
     getAbortController, // optional callback to retrieve/create AbortController per request
@@ -236,6 +237,14 @@ export async function uploadPhotoBatch(photos, config) {
     batches.push(photos.slice(i, i + batchSize));
   }
 
+  // Report initial progress
+  if (onProgress) {
+    onProgress(0, total);
+  }
+
+  // Track individual upload progress
+  let completedUploads = 0;
+
   // Process each batch
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
     if (abortSignal?.aborted) {
@@ -245,7 +254,7 @@ export async function uploadPhotoBatch(photos, config) {
     const batch = batches[batchIndex];
 
     // Process all photos in the batch concurrently
-    const batchPromises = batch.map(photo => {
+    const batchPromises = batch.map((photo, index) => {
       if (abortSignal?.aborted) {
         return Promise.reject(new Error('Aborted'));
       }
@@ -265,7 +274,9 @@ export async function uploadPhotoBatch(photos, config) {
       // Provide an AbortController per upload if supported
       const controller = typeof getAbortController === 'function' ? getAbortController() : null;
       const isFlat = !!(flat || photo.flat === true || photo.flatOverride === true);
-      return uploadPhoto({
+      
+      // Create a promise that reports progress during upload
+      const uploadPromise = uploadPhoto({
         imageDataUrl: photo.uri,
         filename: photo.filename || `${photo.name}_${format !== 'default' ? format : typeParam}.jpg`,
         albumName,
@@ -277,10 +288,30 @@ export async function uploadPhotoBatch(photos, config) {
         scriptUrl,
         folderId,
         abortSignal: controller ? controller.signal : (abortSignal || undefined),
-        flat: isFlat
-      })
-        .then(result => ({ success: true, result, photo }))
-        .catch(error => ({ success: false, error, photo }));
+        flat: isFlat,
+        // Remove intermediate progress reporting for cleaner parallel upload tracking
+      });
+
+      // Add progress tracking for parallel uploads
+      return uploadPromise
+        .then(result => {
+          // Report progress when this upload completes
+          if (onProgress) {
+            completedUploads++;
+            console.log(`📊 Progress update: ${completedUploads}/${total} (${Math.round((completedUploads/total)*100)}%)`);
+            onProgress(completedUploads, total);
+          }
+          return { success: true, result, photo };
+        })
+        .catch(error => {
+          // Still report progress even on failure
+          if (onProgress) {
+            completedUploads++;
+            console.log(`📊 Progress update (error): ${completedUploads}/${total} (${Math.round((completedUploads/total)*100)}%)`);
+            onProgress(completedUploads, total);
+          }
+          return { success: false, error, photo };
+        });
     });
 
     // Wait for batch to complete
@@ -288,8 +319,6 @@ export async function uploadPhotoBatch(photos, config) {
 
     // Process results
     results.forEach((result) => {
-      completed++;
-
       if (result.status === 'fulfilled' && result.value.success) {
         console.log(`✅ Batch upload success: ${result.value.photo?.filename || 'unknown'}`);
         successful.push(result.value);
@@ -309,11 +338,6 @@ export async function uploadPhotoBatch(photos, config) {
           failed.push(errorInfo);
         }
       }
-
-      // Call progress callback
-      if (onProgress) {
-        onProgress(completed, total);
-      }
     });
 
     // Call batch complete callback
@@ -327,10 +351,8 @@ export async function uploadPhotoBatch(photos, config) {
       break;
     }
 
-    // Small delay between batches to avoid overwhelming the server
-    if (batchIndex < batches.length - 1) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-    }
+    // No delay between batches for faster uploads
+    // Removed delay to upload all photos in parallel
   }
 
   return { successful, failed };

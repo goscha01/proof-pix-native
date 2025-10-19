@@ -452,8 +452,18 @@ export default function AllPhotosScreen({ navigation, route }) {
       if (newItems.length === 0) {
         Alert.alert(
           'No New Photos', 
-          'All selected photos have already been uploaded to this album. No new photos to upload.',
-          [{ text: 'OK', style: 'default' }]
+          'All selected photos have already been uploaded to this album. Would you like to upload them again anyway?',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { 
+              text: 'Upload Anyway', 
+              style: 'default',
+              onPress: () => {
+                // Force re-upload of all photos by using allItems instead of filtered newItems
+                proceedWithUpload(allItems, albumName);
+              }
+            }
+          ]
         );
         return;
       }
@@ -465,7 +475,19 @@ export default function AllPhotosScreen({ navigation, route }) {
           `${skippedCount} photo(s) were skipped because they were already uploaded to this album. ${newItems.length} new photo(s) will be uploaded.`,
           [
             { text: 'Cancel', style: 'cancel' },
-            { text: 'Continue Upload', onPress: () => proceedWithUpload(newItems, albumName) }
+            { 
+              text: 'Upload New Only', 
+              style: 'default',
+              onPress: () => proceedWithUpload(newItems, albumName) 
+            },
+            { 
+              text: 'Upload All', 
+              style: 'default',
+              onPress: () => {
+                // Force re-upload of all photos including already uploaded ones
+                proceedWithUpload(allItems, albumName);
+              }
+            }
           ]
         );
         return;

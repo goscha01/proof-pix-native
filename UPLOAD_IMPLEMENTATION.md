@@ -56,11 +56,11 @@ Created a comprehensive upload service:
   - Prepares FormData and sends POST request to Google Apps Script
   - Returns upload result
 
-- **`uploadPhotoBatch()`** - Uploads multiple photos in batches
-  - Processes photos in configurable batch sizes (default: 3 concurrent uploads)
+- **`uploadPhotoBatch()`** - Uploads multiple photos in parallel
+  - Processes all photos simultaneously for maximum speed (default: all photos in parallel)
   - Provides progress callbacks
   - Returns successful and failed uploads separately
-  - Includes delay between batches to avoid overwhelming the server
+  - No delays between uploads for faster processing
 
 - **`createAlbumName()`** - Creates formatted album names
   - Format: "John - Tampa - Dec 21, 2024"
@@ -216,4 +216,4 @@ The upload service expects the same Google Apps Script endpoint from the origina
 - All configuration is loaded from environment variables at build time
 - Settings are persisted using AsyncStorage and remembered between app sessions
 - Album names are auto-generated using the same format as the original JS app
-- Photos are uploaded in batches of 3 to balance speed and server load
+- Photos are uploaded in parallel for maximum speed without delays

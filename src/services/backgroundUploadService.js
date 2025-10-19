@@ -89,7 +89,7 @@ class BackgroundUploadService {
         albumName: upload.albumName,
         location: upload.location,
         cleanerName: upload.userName,
-        batchSize: 3,
+        batchSize: upload.items.length, // Upload all photos in parallel
         flat: upload.flat,
         onProgress: (current, total) => {
           upload.progress = { current, total };
