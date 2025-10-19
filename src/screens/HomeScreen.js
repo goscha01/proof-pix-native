@@ -21,6 +21,8 @@ import { CroppedThumbnail } from '../components/CroppedThumbnail';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useSettings } from '../context/SettingsContext';
 import { createAlbumName } from '../services/uploadService';
+import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
+import UploadIndicatorLine from '../components/UploadIndicatorLine';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 60) / 2; // 2 columns with padding
@@ -41,6 +43,7 @@ export default function HomeScreen({ navigation }) {
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const { projects, getPhotosByProject, deleteProject, setActiveProject, activeProjectId, createProject, photos } = usePhotos();
   const { userName, location } = useSettings();
+  const { uploadStatus, cancelUpload, cancelAllUploads } = useBackgroundUpload();
   const [newProjectVisible, setNewProjectVisible] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
   const [pendingCameraAfterCreate, setPendingCameraAfterCreate] = useState(false);
@@ -495,6 +498,8 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Background Upload Status - Removed old indicator */}
+
       <View style={styles.header}>
         <Text style={styles.title}>ProofPix</Text>
         <TouchableOpacity
@@ -510,6 +515,13 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.projectNameText}>
           {projects.find(p => p.id === activeProjectId)?.name || 'No project selected'}
         </Text>
+        <UploadIndicatorLine 
+          uploadStatus={uploadStatus}
+          onPress={() => {
+            // Navigate to AllPhotosScreen to show upload details
+            navigation.navigate('AllPhotos', { showUploadDetails: true });
+          }}
+        />
       </View>
 
       {renderRoomTabs()}

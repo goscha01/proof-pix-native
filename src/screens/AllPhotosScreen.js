@@ -26,8 +26,10 @@ import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
 import { getLocationConfig } from '../config/locations';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
-import { deletePhotosFromDevice, purgeAllDevicePhotos, savePhotoToDevice } from '../services/storage';
-// Removed MediaLibrary (unused) and gesture-handler TextInput (use RN TextInput)
+import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
+import { UploadDetailsModal } from '../components/BackgroundUploadStatus';
+import UploadIndicatorLine from '../components/UploadIndicatorLine';
+import UploadCompletionModal from '../components/UploadCompletionModal';
 
 const { width } = Dimensions.get('window');
 const SET_NAME_WIDTH = 80;
@@ -39,6 +41,7 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
   const { userName, location, isBusiness, useFolderStructure, enabledFolders } = useSettings();
+  const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
   const [sharing, setSharing] = useState(false);
@@ -69,11 +72,29 @@ export default function AllPhotosScreen({ navigation, route }) {
   const [currentRenderPair, setCurrentRenderPair] = useState(null);
   const [currentRenderTemplate, setCurrentRenderTemplate] = useState(null);
   const renderViewRef = useRef(null);
+  const [showUploadDetails, setShowUploadDetails] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
+
+  // Handle navigation parameter to show upload details
+  useEffect(() => {
+    if (route?.params?.showUploadDetails) {
+      setShowUploadDetails(true);
+      // Clear the parameter to prevent showing again on subsequent navigations
+      navigation.setParams({ showUploadDetails: undefined });
+    }
+  }, [route?.params?.showUploadDetails, navigation]);
 
   // Force re-render when photos change (e.g., after project deletion)
   useEffect(() => {
     // This will trigger a re-render when photos change
   }, [photos]);
+
+  // Show completion modal when uploads are completed
+  useEffect(() => {
+    if (uploadStatus.completedUploads && uploadStatus.completedUploads.length > 0) {
+      setShowCompletionModal(true);
+    }
+  }, [uploadStatus.completedUploads]);
 
   const FREE_FORMATS = new Set([]);
   const handleFormatToggle = (key) => {
@@ -424,54 +445,24 @@ export default function AllPhotosScreen({ navigation, route }) {
         return;
       }
 
-      // Close upload options and any upgrade overlay before showing progress
+      // Close upload options and any upgrade overlay before starting background upload
       setOptionsVisible(false);
       setUpgradeVisible(false);
-      setUploading(true);
-      setUploadProgress({ current: 0, total: allItems.length });
 
-      // Prepare abort controllers for cancellation
-      uploadControllersRef.current = [];
-      masterAbortRef.current = new AbortController();
-
-      // Pass flat mode to uploader via global toggle (used by form data)
-      globalThis.__UPLOAD_FLAT_MODE = !useFolderStructure;
-      const result = await uploadPhotoBatch(allItems, {
-        scriptUrl: config.scriptUrl,
-        folderId: config.folderId,
+      // Start background upload
+      const uploadId = startBackgroundUpload({
+        items: allItems,
+        config,
         albumName,
         location,
-        cleanerName: userName,
-        batchSize: 3,
-        abortSignal: masterAbortRef.current.signal,
-        flat: !useFolderStructure,
-        getAbortController: () => {
-          const controller = new AbortController();
-          uploadControllersRef.current.push(controller);
-          return controller;
-        },
-        onProgress: (current, total) => {
-          setUploadProgress({ current, total });
-        }
+        userName,
+        flat: !useFolderStructure
       });
 
-      setUploading(false);
-
-      const { successful, failed } = result;
-      if (failed.length === 0) {
-        Alert.alert(
-          'Upload Complete',
-          `Successfully uploaded ${successful.length} photo${successful.length > 1 ? 's' : ''} to "${albumName}"`
-        );
-      } else {
-        Alert.alert(
-          'Upload Partially Complete',
-          `Uploaded ${successful.length} photo${successful.length > 1 ? 's' : ''}, ${failed.length} failed. Please try again.`
-        );
-      }
+      // Show upload modal immediately
+      setShowUploadDetails(true);
     } catch (error) {
-      setUploading(false);
-      Alert.alert('Upload Failed', error.message || 'An error occurred while uploading');
+      Alert.alert('Upload Failed', error.message || 'An error occurred while preparing upload');
     }
   };
 
@@ -632,7 +623,9 @@ export default function AllPhotosScreen({ navigation, route }) {
   );
 
   return (
-    <SafeAreaView style={styles.container} {...panResponder.panHandlers}>
+    <View style={styles.container} {...panResponder.panHandlers}>
+      {/* Background Upload Status - Removed old indicator */}
+
       {/* Swipe down indicator */}
       <View style={styles.swipeIndicator}>
         <View style={styles.swipeHandle} />
@@ -654,6 +647,10 @@ export default function AllPhotosScreen({ navigation, route }) {
         <Text style={styles.projectNameText}>
           {(projects?.find?.(p => p.id === activeProjectId)?.name) || 'No project selected'}
         </Text>
+        <UploadIndicatorLine 
+          uploadStatus={uploadStatus}
+          onPress={() => setShowUploadDetails(true)}
+        />
       </View>
 
       <View style={styles.columnHeaders}>
@@ -1062,16 +1059,35 @@ export default function AllPhotosScreen({ navigation, route }) {
         </View>
       </Modal>
 
+      {/* Upload Completion Modal */}
+      <UploadCompletionModal
+        visible={showCompletionModal}
+        completedUploads={uploadStatus.completedUploads}
+        onClose={() => setShowCompletionModal(false)}
+        onClearCompleted={clearCompletedUploads}
+        onDeleteProject={handleDeleteAllConfirmed}
+      />
+
+      {/* Upload Details Modal */}
+      <UploadDetailsModal
+        visible={showUploadDetails}
+        uploadStatus={uploadStatus}
+        onClose={() => setShowUploadDetails(false)}
+        onCancelUpload={cancelUpload}
+        onMinimize={() => setShowUploadDetails(false)}
+      />
+
       {/* Confirm Delete Modal removed per user request */}
 
-    </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.BACKGROUND
+    backgroundColor: COLORS.BACKGROUND,
+    paddingTop: 50 // Add padding to avoid status bar overlap
   },
   swipeIndicator: {
     alignItems: 'center',
