@@ -38,7 +38,7 @@ export default function HomeScreen({ navigation }) {
   const [openProjectVisible, setOpenProjectVisible] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
-  const { projects, getPhotosByProject, deleteProject, setActiveProject, activeProjectId, createProject } = usePhotos();
+  const { projects, getPhotosByProject, deleteProject, setActiveProject, activeProjectId, createProject, photos } = usePhotos();
   const { userName, location } = useSettings();
   const [newProjectVisible, setNewProjectVisible] = useState(false);
   const [newProjectName, setNewProjectName] = useState('');
@@ -51,6 +51,11 @@ export default function HomeScreen({ navigation }) {
   const beforePhotos = getBeforePhotos(currentRoom);
   const afterPhotos = getAfterPhotos(currentRoom);
   const currentRoomRef = useRef(currentRoom);
+
+  // Force re-render when photos change
+  useEffect(() => {
+    // This will trigger a re-render when photos change
+  }, [photos]);
 
   // Get circular room order with current room in center
   const getCircularRooms = () => {
@@ -222,12 +227,13 @@ export default function HomeScreen({ navigation }) {
       [
         { text: 'Cancel', style: 'cancel' },
         { text: 'Delete', style: 'destructive', onPress: async () => {
+          const wasActiveProjectSelected = selectedProjects.has(activeProjectId);
           for (const projectId of selectedProjects) {
             await deleteProject(projectId, { deleteFromStorage: true });
           }
           setSelectedProjects(new Set());
           setIsMultiSelectMode(false);
-          if (selectedProjects.has(activeProjectId)) {
+          if (wasActiveProjectSelected) {
             setActiveProject(null);
           }
         }}
@@ -738,8 +744,9 @@ const styles = StyleSheet.create({
     marginBottom: 6
   },
   projectNameText: {
-    fontSize: 12,
-    color: COLORS.GRAY
+    fontSize: 16,
+    color: COLORS.TEXT,
+    fontWeight: '500'
   },
   allPhotosButtonBottom: {
     backgroundColor: COLORS.PRIMARY,

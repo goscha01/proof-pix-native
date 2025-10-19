@@ -26,7 +26,8 @@ export default function SettingsScreen({ navigation }) {
     useFolderStructure,
     toggleUseFolderStructure,
     enabledFolders,
-    updateEnabledFolders
+    updateEnabledFolders,
+    resetUserData
   } = useSettings();
 
   const [name, setName] = useState(userName);
@@ -41,6 +42,24 @@ export default function SettingsScreen({ navigation }) {
     setSelectedLocation(locationId);
     setShowLocationPicker(false);
     updateUserInfo(name, locationId);
+  };
+
+  const handleResetUserData = () => {
+    Alert.alert(
+      'Reset User Data',
+      'This will clear your name and location settings. You will need to set them up again on the next app launch. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Reset', 
+          style: 'destructive',
+          onPress: async () => {
+            await resetUserData();
+            Alert.alert('Reset Complete', 'User data has been reset. Please restart the app to set up again.');
+          }
+        }
+      ]
+    );
   };
 
   const selectedLocationObj = LOCATIONS.find(loc => loc.id === selectedLocation) || LOCATIONS[0];
@@ -113,6 +132,13 @@ export default function SettingsScreen({ navigation }) {
               </View>
             )}
           </View>
+
+          <TouchableOpacity
+            style={styles.resetButton}
+            onPress={handleResetUserData}
+          >
+            <Text style={styles.resetButtonText}>Reset User Data</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Google Drive Configuration (Read-only) */}
@@ -391,5 +417,18 @@ const styles = StyleSheet.create({
   settingDescription: {
     color: COLORS.GRAY,
     fontSize: 12
+  },
+  resetButton: {
+    backgroundColor: '#FFE6E6',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    marginTop: 8
+  },
+  resetButtonText: {
+    color: '#CC0000',
+    fontSize: 16,
+    fontWeight: '600'
   }
 });

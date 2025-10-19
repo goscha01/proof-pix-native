@@ -93,6 +93,20 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ enabledFolders: next });
   };
 
+  const resetUserData = async () => {
+    try {
+      await AsyncStorage.removeItem(SETTINGS_KEY);
+      setUserName('');
+      setLocation('tampa');
+      setShowLabels(true);
+      setIsBusiness(false);
+      setUseFolderStructure(true);
+      setEnabledFolders({ before: true, after: true, combined: true });
+    } catch (error) {
+      console.error('Error resetting user data:', error);
+    }
+  };
+
   const value = {
     showLabels,
     toggleLabels,
@@ -105,6 +119,7 @@ export const SettingsProvider = ({ children }) => {
     toggleUseFolderStructure,
     enabledFolders,
     updateEnabledFolders,
+    resetUserData,
     loading
   };
 
