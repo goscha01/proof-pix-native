@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -38,6 +38,8 @@ export default function HomeScreen({ navigation }) {
 
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
+  const [fullScreenIndex, setFullScreenIndex] = useState(0); // Index for swipe navigation
+  const [fullScreenPhotos, setFullScreenPhotos] = useState([]); // All photos for swipe navigation
   const [openProjectVisible, setOpenProjectVisible] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
@@ -70,6 +72,9 @@ export default function HomeScreen({ navigation }) {
   const longPressTriggered = useRef(false);
   const touchStartPos = useRef(null);
   const isSwiping = useRef(false);
+  const lastTap = useRef(null);
+  const swipeStartX = useRef(null);
+  const tapCount = useRef(0);
   
   const beforePhotos = getBeforePhotos(currentRoom);
   const afterPhotos = getAfterPhotos(currentRoom);
@@ -136,6 +141,129 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  // Handle double tap - show full screen with swipe navigation
+  const handleDoubleTap = (photo, beforePhoto = null, afterPhoto = null) => {
+    console.log('🔄 Double tap detected!');
+    // Double tap detected - show full screen with swipe navigation
+    const allPhotos = [];
+    
+    // Get all photos for the current room
+    const beforePhotos = getBeforePhotos(currentRoom);
+    const afterPhotos = getAfterPhotos(currentRoom);
+    const combinedPhotos = getCombinedPhotos(currentRoom);
+    
+    console.log('🔄 Room photos:', {
+      beforePhotos: beforePhotos.length,
+      afterPhotos: afterPhotos.length,
+      combinedPhotos: combinedPhotos.length
+    });
+    
+    // Create a map of before photos to their corresponding after photos
+    const beforeToAfterMap = new Map();
+    afterPhotos.forEach(afterPhoto => {
+      if (afterPhoto.beforePhotoId) {
+        beforeToAfterMap.set(afterPhoto.beforePhotoId, afterPhoto);
+      }
+    });
+    
+    // Add photos in the order they appear on the main screen
+    beforePhotos.forEach(beforePhoto => {
+      const afterPhoto = beforeToAfterMap.get(beforePhoto.id);
+      
+      if (afterPhoto) {
+        // Check if there's a combined photo for this pair
+        const combinedPhoto = combinedPhotos.find(p => p.name === beforePhoto.name);
+        
+        if (combinedPhoto) {
+          // Show combined photo
+          allPhotos.push({ ...combinedPhoto, type: 'combined', beforePhoto, afterPhoto });
+        } else {
+          // Show split preview (before + after)
+          allPhotos.push({ ...beforePhoto, type: 'split', beforePhoto, afterPhoto });
+        }
+      } else {
+        // Show before-only photo
+        allPhotos.push({ ...beforePhoto, type: 'before' });
+      }
+    });
+    
+    console.log('🔄 All photos array:', {
+      totalPhotos: allPhotos.length,
+      photos: allPhotos.map(p => ({ id: p.id, name: p.name, type: p.type }))
+    });
+    
+    // Find the index of the tapped photo
+    let photoIndex = 0;
+    if (photo) {
+      photoIndex = allPhotos.findIndex(p => p.id === photo.id);
+    } else if (beforePhoto) {
+      photoIndex = allPhotos.findIndex(p => p.id === beforePhoto.id);
+    }
+    
+    console.log('🔄 Photo index:', {
+      photoIndex,
+      tappedPhoto: photo ? photo.name : beforePhoto?.name
+    });
+    
+    if (photoIndex >= 0) {
+      setFullScreenPhotos(allPhotos);
+      setFullScreenIndex(photoIndex);
+      if (beforePhoto && afterPhoto) {
+        setFullScreenPhotoSet({ before: beforePhoto, after: afterPhoto });
+      } else {
+        setFullScreenPhoto(allPhotos[photoIndex]);
+      }
+    }
+  };
+
+  // Handle swipe navigation in full screen
+  const handleSwipeNavigation = (direction) => {
+    console.log('🔄 handleSwipeNavigation called:', {
+      direction,
+      fullScreenPhotosLength: fullScreenPhotos.length,
+      currentIndex: fullScreenIndex
+    });
+    
+    if (fullScreenPhotos.length === 0) {
+      console.log('🔄 No photos to navigate');
+      return;
+    }
+    
+    let newIndex = fullScreenIndex;
+    if (direction === 'left') {
+      newIndex = (fullScreenIndex + 1) % fullScreenPhotos.length;
+    } else if (direction === 'right') {
+      newIndex = fullScreenIndex === 0 ? fullScreenPhotos.length - 1 : fullScreenIndex - 1;
+    }
+    
+    console.log('🔄 Navigation:', {
+      from: fullScreenIndex,
+      to: newIndex,
+      direction
+    });
+    
+    setFullScreenIndex(newIndex);
+    const newPhoto = fullScreenPhotos[newIndex];
+    
+    console.log('🔄 New photo for navigation:', {
+      type: newPhoto.type,
+      name: newPhoto.name,
+      hasBeforePhoto: !!newPhoto.beforePhoto,
+      hasAfterPhoto: !!newPhoto.afterPhoto
+    });
+    
+    // Set the appropriate view based on photo type
+    if (newPhoto.type === 'combined' || newPhoto.type === 'split') {
+      console.log('🔄 Setting combined/split photo view');
+      setFullScreenPhotoSet({ before: newPhoto.beforePhoto, after: newPhoto.afterPhoto });
+      setFullScreenPhoto(null);
+    } else {
+      console.log('🔄 Setting single photo view');
+      setFullScreenPhoto(newPhoto);
+      setFullScreenPhotoSet(null);
+    }
+  };
+
   // PanResponder for room switching
   const panResponder = useRef(
     PanResponder.create({
@@ -172,6 +300,72 @@ export default function HomeScreen({ navigation }) {
       }
     })
   ).current;
+
+  // PanResponder for full screen swipe navigation
+  const fullScreenPanResponder = useMemo(() => {
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => {
+        console.log('🔄 Full screen PanResponder: onStartShouldSetPanResponder');
+        swipeStartX.current = null;
+        return false;
+      },
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        // Only activate if we're in full screen mode
+        if (fullScreenPhoto || fullScreenPhotoSet) {
+          const isHorizontalSwipe = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 30;
+          const isVerticalSwipe = Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 30;
+          
+          console.log('🔄 Full screen swipe detection:', {
+            dx: gestureState.dx,
+            dy: gestureState.dy,
+            isHorizontalSwipe,
+            isVerticalSwipe,
+            fullScreenPhotosLength: fullScreenPhotos.length,
+            hasPhotos: fullScreenPhotos.length > 1
+          });
+          
+          if (isHorizontalSwipe && fullScreenPhotos.length > 1 && !swipeStartX.current) {
+            swipeStartX.current = gestureState.dx;
+          }
+          
+          // Activate for both horizontal (carousel) and vertical (close) swipes
+          const shouldActivate = isHorizontalSwipe || isVerticalSwipe;
+          console.log('🔄 Should activate PanResponder:', shouldActivate);
+          return shouldActivate;
+        }
+        return false;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const swipeThreshold = 50;
+        
+        console.log('🔄 Full screen PanResponder release:', {
+          dx: gestureState.dx,
+          dy: gestureState.dy,
+          fullScreenPhotosLength: fullScreenPhotos.length
+        });
+        
+        // Check for horizontal swipes (carousel navigation)
+        if (gestureState.dx > swipeThreshold && fullScreenPhotos.length > 1) {
+          console.log('🔄 Swipe right detected - going to previous photo');
+          handleSwipeNavigation('right');
+        } else if (gestureState.dx < -swipeThreshold && fullScreenPhotos.length > 1) {
+          console.log('🔄 Swipe left detected - going to next photo');
+          handleSwipeNavigation('left');
+        }
+        
+        // Check for vertical swipes (close preview)
+        if (Math.abs(gestureState.dy) > swipeThreshold) {
+          console.log('🔄 Vertical swipe detected - closing preview');
+          handleLongPressEnd();
+        }
+        
+        swipeStartX.current = null;
+      }
+    });
+  }, [fullScreenPhoto, fullScreenPhotoSet, fullScreenPhotos.length, handleSwipeNavigation, handleLongPressEnd]);
+
+  // Debug: Log when PanResponder is created
+  console.log('🔄 Full screen PanResponder created:', fullScreenPanResponder);
 
   useEffect(() => {
     // No-op: projects come from context
@@ -334,7 +528,7 @@ export default function HomeScreen({ navigation }) {
         <View style={styles.emptyStateContainer}>
           <TouchableOpacity
             style={styles.addPhotoItem}
-            delayPressIn={100}
+            delayPressIn={50}
             onPress={() => {
               if (isSwiping.current) return;
               if (!activeProjectId) {
@@ -374,16 +568,43 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity
               key={combinedPhoto.id}
               style={styles.photoItem}
-              delayPressIn={100}
+              delayPressIn={50}
               onPress={() => {
                 if (!longPressTriggered.current && !isSwiping.current) {
-                  navigation.navigate('Camera', {
-                    mode: 'after',
-                    beforePhoto,
-                    afterPhoto,
-                    combinedPhoto,
-                    room: currentRoom
+                  tapCount.current += 1;
+                  const now = Date.now();
+                  
+                  console.log('🔄 Tap detected:', {
+                    tapCount: tapCount.current,
+                    now,
+                    lastTap: lastTap.current
                   });
+                  
+                  if (tapCount.current === 1) {
+                    // First tap - wait for potential second tap
+                    lastTap.current = now;
+                    setTimeout(() => {
+                      if (tapCount.current === 1 && lastTap.current) {
+                        // Single tap confirmed
+                        console.log('🔄 Single tap confirmed - navigating to camera');
+                        navigation.navigate('Camera', {
+                          mode: 'after',
+                          beforePhoto,
+                          afterPhoto,
+                          combinedPhoto,
+                          room: currentRoom
+                        });
+                      }
+                      tapCount.current = 0;
+                      lastTap.current = null;
+                    }, 300);
+                  } else if (tapCount.current === 2) {
+                    // Double tap confirmed
+                    console.log('🔄 Double tap confirmed!');
+                    handleDoubleTap(combinedPhoto, beforePhoto, afterPhoto);
+                    tapCount.current = 0;
+                    lastTap.current = null;
+                  }
                 }
               }}
               onPressIn={() => handleLongPressStart(combinedPhoto)}
@@ -411,15 +632,42 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity
               key={beforePhoto.id}
               style={styles.photoItem}
-              delayPressIn={100}
+              delayPressIn={50}
               onPress={() => {
                 if (!longPressTriggered.current && !isSwiping.current) {
-                  navigation.navigate('Camera', {
-                    mode: 'after',
-                    beforePhoto,
-                    afterPhoto,
-                    room: currentRoom
+                  tapCount.current += 1;
+                  const now = Date.now();
+                  
+                  console.log('🔄 Split tap detected:', {
+                    tapCount: tapCount.current,
+                    now,
+                    lastTap: lastTap.current
                   });
+                  
+                  if (tapCount.current === 1) {
+                    // First tap - wait for potential second tap
+                    lastTap.current = now;
+                    setTimeout(() => {
+                      if (tapCount.current === 1 && lastTap.current) {
+                        // Single tap confirmed
+                        console.log('🔄 Single tap confirmed on split - navigating to camera');
+                        navigation.navigate('Camera', {
+                          mode: 'after',
+                          beforePhoto,
+                          afterPhoto,
+                          room: currentRoom
+                        });
+                      }
+                      tapCount.current = 0;
+                      lastTap.current = null;
+                    }, 300);
+                  } else if (tapCount.current === 2) {
+                    // Double tap confirmed
+                    console.log('🔄 Double tap confirmed on split!');
+                    handleDoubleTap(null, beforePhoto, afterPhoto);
+                    tapCount.current = 0;
+                    lastTap.current = null;
+                  }
                 }
               }}
               onPressIn={() => handleLongPressStart(null, beforePhoto, afterPhoto)}
@@ -441,14 +689,41 @@ export default function HomeScreen({ navigation }) {
           <TouchableOpacity
             key={beforePhoto.id}
             style={[styles.photoItem, styles.photoItemPending]}
-            delayPressIn={100}
+            delayPressIn={50}
             onPress={() => {
               if (!longPressTriggered.current && !isSwiping.current) {
-                navigation.navigate('Camera', {
-                  mode: 'after',
-                  beforePhoto,
-                  room: currentRoom
+                tapCount.current += 1;
+                const now = Date.now();
+                
+                console.log('🔄 Before-only tap detected:', {
+                  tapCount: tapCount.current,
+                  now,
+                  lastTap: lastTap.current
                 });
+                
+                if (tapCount.current === 1) {
+                  // First tap - wait for potential second tap
+                  lastTap.current = now;
+                  setTimeout(() => {
+                    if (tapCount.current === 1 && lastTap.current) {
+                      // Single tap confirmed
+                      console.log('🔄 Single tap confirmed on before-only - navigating to camera');
+                      navigation.navigate('Camera', {
+                        mode: 'after',
+                        beforePhoto,
+                        room: currentRoom
+                      });
+                    }
+                    tapCount.current = 0;
+                    lastTap.current = null;
+                  }, 300);
+                } else if (tapCount.current === 2) {
+                  // Double tap confirmed
+                  console.log('🔄 Double tap confirmed on before-only!');
+                  handleDoubleTap(beforePhoto);
+                  tapCount.current = 0;
+                  lastTap.current = null;
+                }
               }
             }}
             onPressIn={() => handleLongPressStart(beforePhoto)}
@@ -550,21 +825,37 @@ export default function HomeScreen({ navigation }) {
 
       {/* Full-screen photo view - single photo */}
       {fullScreenPhoto && (
-        <TouchableWithoutFeedback onPress={handleLongPressEnd}>
-          <View style={styles.fullScreenPhotoContainer}>
+        <View style={styles.fullScreenPhotoContainer} {...fullScreenPanResponder.panHandlers}>
+          <TouchableWithoutFeedback onPress={handleLongPressEnd}>
             <Image
               source={{ uri: fullScreenPhoto.uri }}
               style={styles.fullScreenPhoto}
               resizeMode="contain"
             />
-          </View>
-        </TouchableWithoutFeedback>
+          </TouchableWithoutFeedback>
+          {fullScreenPhotos.length > 1 ? (
+            <View style={styles.fullScreenNavigation}>
+              <Text style={styles.fullScreenCounter}>
+                {fullScreenIndex + 1} / {fullScreenPhotos.length}
+              </Text>
+              <Text style={styles.fullScreenHint}>
+                ← → Navigate • ↑ ↓ Close
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.fullScreenNavigation}>
+              <Text style={styles.fullScreenHint}>
+                ↑ ↓ Close
+              </Text>
+            </View>
+          )}
+        </View>
       )}
 
       {/* Full-screen combined photo view - 1:1 square with before/after */}
       {fullScreenPhotoSet && (
-        <TouchableWithoutFeedback onPress={handleLongPressEnd}>
-          <View style={styles.fullScreenPhotoContainer}>
+        <View style={styles.fullScreenPhotoContainer} {...fullScreenPanResponder.panHandlers}>
+          <TouchableWithoutFeedback onPress={handleLongPressEnd}>
             <View style={[
               styles.fullScreenCombinedPreview,
               (fullScreenPhotoSet.before.orientation === 'landscape' || fullScreenPhotoSet.before.cameraViewMode === 'landscape')
@@ -586,8 +877,24 @@ export default function HomeScreen({ navigation }) {
                 />
               </View>
             </View>
-          </View>
-        </TouchableWithoutFeedback>
+          </TouchableWithoutFeedback>
+          {fullScreenPhotos.length > 1 ? (
+            <View style={styles.fullScreenNavigation}>
+              <Text style={styles.fullScreenCounter}>
+                {fullScreenIndex + 1} / {fullScreenPhotos.length}
+              </Text>
+              <Text style={styles.fullScreenHint}>
+                ← → Navigate • ↑ ↓ Close
+              </Text>
+            </View>
+          ) : (
+            <View style={styles.fullScreenNavigation}>
+              <Text style={styles.fullScreenHint}>
+                ↑ ↓ Close
+              </Text>
+            </View>
+          )}
+        </View>
       )}
 
       {/* Open Project Modal */}
@@ -999,8 +1306,39 @@ const styles = StyleSheet.create({
   fullScreenHalfImage: {
     width: '100%',
     height: '100%'
-  }
-  ,
+  },
+  fullScreenNavigation: {
+    position: 'absolute',
+    top: 60,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 1001
+  },
+  fullScreenCounter: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 20,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4
+  },
+  fullScreenHint: {
+    color: 'white',
+    fontSize: 12,
+    marginTop: 4,
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    textShadowColor: 'rgba(0, 0, 0, 0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4
+  },
   // Open Project modal styles
   optionsModalOverlay: {
     flex: 1,
