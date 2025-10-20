@@ -31,6 +31,7 @@ import { UploadDetailsModal } from '../components/BackgroundUploadStatus';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import UploadCompletionModal from '../components/UploadCompletionModal';
 import { filterNewPhotos, markPhotosAsUploaded } from '../services/uploadTracker';
+import JSZip from 'jszip';
 
 const { width } = Dimensions.get('window');
 const SET_NAME_WIDTH = 80;
@@ -52,9 +53,11 @@ export default function AllPhotosScreen({ navigation, route }) {
   const masterAbortRef = useRef(null); // single signal to stop scheduling
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [manageVisible, setManageVisible] = useState(false);
+  const [shareOptionsVisible, setShareOptionsVisible] = useState(false);
   const [deleteFromStorage, setDeleteFromStorage] = useState(true);
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
+  const [selectedShareTypes, setSelectedShareTypes] = useState({ before: true, after: true, combined: true });
   const [selectedFormats, setSelectedFormats] = useState(() => {
     // Default: only square formats enabled by default
     const initial = {};
@@ -197,6 +200,70 @@ export default function AllPhotosScreen({ navigation, route }) {
     } finally {
       setSharing(false);
     }
+  };
+
+  const startSharingWithOptions = async () => {
+    try {
+        setSharing(true);
+        const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+
+        if (sourcePhotos.length === 0) {
+            Alert.alert('No Photos', 'There are no photos in this project to share.');
+            return;
+        }
+
+        const itemsToShare = sourcePhotos.filter(p =>
+            (selectedShareTypes.before && p.mode === PHOTO_MODES.BEFORE) ||
+            (selectedShareTypes.after && p.mode === PHOTO_MODES.AFTER)
+        );
+
+        if (itemsToShare.length === 0) {
+            Alert.alert('No Photos Selected', 'Please select at least one photo type to share.');
+            return;
+        }
+        
+        const projectName = projects.find(p => p.id === activeProjectId)?.name || 'Shared-Photos';
+        const zipFileName = `${projectName.replace(/\s+/g, '_')}_${Date.now()}.zip`;
+        const zipPath = FileSystem.cacheDirectory + zipFileName;
+
+        const zip = new JSZip();
+
+        for (const item of itemsToShare) {
+            const filename = item.uri.split('/').pop();
+            const content = await FileSystem.readAsStringAsync(item.uri, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            zip.file(filename, content, { base64: true });
+        }
+
+        const zipBase64 = await zip.generateAsync({ type: 'base64' });
+
+        await FileSystem.writeAsStringAsync(zipPath, zipBase64, {
+            encoding: FileSystem.EncodingType.Base64,
+        });
+
+        await Share.share({
+            url: zipPath,
+            title: `Share ${projectName} Photos`,
+            message: `Here are the photos from the project: ${projectName}`,
+            type: 'application/zip',
+        });
+
+    } catch (error) {
+        console.error('Sharing error:', error);
+        Alert.alert('Error', 'Failed to prepare photos for sharing.');
+    } finally {
+        setSharing(false);
+    }
+  };
+
+  const handleShareProject = async () => {
+    const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+    if (sourcePhotos.length === 0) {
+      Alert.alert('No Photos', 'There are no photos in the active project to share.');
+      return;
+    }
+    setShareOptionsVisible(true);
   };
 
   const handleUploadPhotos = async () => {
@@ -1087,10 +1154,10 @@ export default function AllPhotosScreen({ navigation, route }) {
                   style={[styles.actionBtn, styles.actionWide, styles.actionInfo]}
                   onPress={() => {
                     setManageVisible(false);
-                    Alert.alert('Share to', 'Coming soon');
+                    handleShareProject();
                   }}
                 >
-                  <Text style={[styles.actionBtnText, styles.actionInfoText]}>🔗 Share to</Text>
+                  <Text style={[styles.actionBtnText, styles.actionInfoText]}>🔗 Share</Text>
                 </TouchableOpacity>
 
                 {/* Delete All (red) */}
@@ -1113,6 +1180,54 @@ export default function AllPhotosScreen({ navigation, route }) {
                   <Text style={styles.actionBtnText}>Close</Text>
                 </TouchableOpacity>
               </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Share Project Modal */}
+      <Modal
+        visible={shareOptionsVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShareOptionsVisible(false)}
+      >
+        <View style={styles.optionsModalOverlay}>
+          <View style={styles.optionsModalContent}>
+            <Text style={styles.optionsTitle}>What would you like to share?</Text>
+
+            <Text style={styles.optionsSectionLabel}>Photo types</Text>
+            <View style={styles.optionsChipsRow}>
+              <TouchableOpacity
+                style={[styles.chip, selectedShareTypes.before && styles.chipActive]}
+                onPress={() => setSelectedShareTypes(prev => ({ ...prev, before: !prev.before }))}
+              >
+                <Text style={[styles.chipText, selectedShareTypes.before && styles.chipTextActive]}>Before</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.chip, selectedShareTypes.after && styles.chipActive]}
+                onPress={() => setSelectedShareTypes(prev => ({ ...prev, after: !prev.after }))}
+              >
+                <Text style={[styles.chipText, selectedShareTypes.after && styles.chipTextActive]}>After</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.chip, selectedShareTypes.combined && styles.chipActive]}
+                onPress={() => setSelectedShareTypes(prev => ({ ...prev, combined: !prev.combined }))}
+              >
+                <Text style={[styles.chipText, selectedShareTypes.combined && styles.chipTextActive]}>Combined</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.optionsActionsRow}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setShareOptionsVisible(false)}>
+                <Text style={styles.actionBtnText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} onPress={() => {
+                  setShareOptionsVisible(false);
+                  startSharingWithOptions();
+              }}>
+                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Prepare to Share</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </View>
