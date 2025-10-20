@@ -23,6 +23,7 @@ import { useSettings } from '../context/SettingsContext';
 import { createAlbumName } from '../services/uploadService';
 import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
+import analyticsService from '../services/analyticsService';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 60) / 2; // 2 columns with padding
@@ -126,6 +127,7 @@ export default function HomeScreen({ navigation }) {
             style: 'destructive', 
             onPress: () => {
               deletePhotoSet(photoSet.id);
+              analyticsService.logEvent('PhotoSet_Delete', { photoName: photoSet.name, from: 'HomeScreen' });
               longPressTriggered.current = false;
             }
           }

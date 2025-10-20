@@ -21,6 +21,7 @@ import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
 import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS } from '../constants/rooms';
+import analyticsService from '../services/analyticsService';
 
 const initialDimensions = Dimensions.get('window');
 const initialWidth = initialDimensions.width;
@@ -979,20 +980,20 @@ export default function CameraScreen({ route, navigation }) {
     }
   }, [showCarousel]);
 
-  if (!permission) {
-    return <View style={styles.container} />;
-  }
+  useEffect(() => {
+    if (route.params?.beforePhoto) {
+      setSelectedBeforePhoto(route.params.beforePhoto);
+    }
+    analyticsService.logEvent('CameraScreen_Open', { mode: route.params?.mode || 'before' });
+  }, [route.params]);
 
-  if (!permission.granted) {
-    return (
-      <View style={styles.container}>
-        <Text style={styles.message}>We need your permission to show the camera</Text>
-        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
-          <Text style={styles.permissionButtonText}>Grant Permission</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
+  useEffect(() => {
+    const getPermissions = async () => {
+      if (!permission || permission.granted) return;
+      requestPermission();
+    };
+    getPermissions();
+  }, [permission, requestPermission]);
 
   const takePicture = async () => {
     if (!cameraRef.current || isCapturing) return;

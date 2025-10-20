@@ -32,6 +32,7 @@ import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import UploadCompletionModal from '../components/UploadCompletionModal';
 import { filterNewPhotos, markPhotosAsUploaded } from '../services/uploadTracker';
 import JSZip from 'jszip';
+import analyticsService from '../services/analyticsService';
 
 const { width } = Dimensions.get('window');
 const SET_NAME_WIDTH = 80;
@@ -247,6 +248,12 @@ export default function AllPhotosScreen({ navigation, route }) {
             title: `Share ${projectName} Photos`,
             message: `Here are the photos from the project: ${projectName}`,
             type: 'application/zip',
+        });
+        
+        analyticsService.logEvent('Project_Shared', { 
+          projectName, 
+          photoCount: itemsToShare.length,
+          sharedTypes: Object.keys(selectedShareTypes).filter(k => selectedShareTypes[k]),
         });
 
     } catch (error) {

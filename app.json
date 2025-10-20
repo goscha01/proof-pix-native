@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "ProofPix",
+    "name": "proof-pix-native",
     "slug": "proof-pix-native",
     "version": "1.0.0",
     "orientation": "default",
@@ -53,6 +53,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "@react-native-firebase/app",
       [
         "expo-camera",
         {

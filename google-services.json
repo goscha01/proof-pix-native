@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "219286146191",
+    "project_id": "proofpix-d87f0",
+    "storage_bucket": "proofpix-d87f0.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:219286146191:android:256e2f76a82a109dfcf4fa",
+        "android_client_info": {
+          "package_name": "com.proofpix.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB4c5XgtwZ2sMfGHqvTbOcWeMobD5MWkc0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
