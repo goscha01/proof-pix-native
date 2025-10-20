@@ -1,5 +1,5 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice, loadProjects, saveProjects, createProject as storageCreateProject, deleteProjectEntry, loadActiveProjectId, saveActiveProjectId, deleteAssetsByFilenames, deleteAssetsByPrefixes, deleteProjectAssets } from '../services/storage';
+import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice, loadProjects, saveProjects, createProject as storageCreateProject, deleteProjectEntry, loadActiveProjectId, saveActiveProjectId, deleteAssetsByFilenames, deleteAssetsByPrefixes, deleteProjectAssets, getAssetIdMap, deleteAssetsBatch } from '../services/storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { PHOTO_MODES } from '../constants/rooms';
 
@@ -184,6 +184,63 @@ export const PhotoProvider = ({ children }) => {
     }
   };
 
+  const deletePhotoSet = async (beforePhotoId) => {
+    try {
+        const beforePhoto = photos.find(p => p.id === beforePhotoId && p.mode === PHOTO_MODES.BEFORE);
+        if (!beforePhoto) {
+            console.warn('Delete Photo Set: Before photo not found', beforePhotoId);
+            return;
+        }
+
+        const photosToDelete = [beforePhoto];
+
+        const afterPhoto = photos.find(p => p.beforePhotoId === beforePhotoId);
+        if (afterPhoto) {
+            photosToDelete.push(afterPhoto);
+        }
+
+        const combinedPhotos = photos.filter(p => p.name === beforePhoto.name && p.room === beforePhoto.room && p.mode === PHOTO_MODES.COMBINED);
+        photosToDelete.push(...combinedPhotos);
+        
+        // --- Deletion Logic ---
+
+        // 1. Collect local file URIs to delete silently
+        const localFileUris = photosToDelete
+            .map(p => p.uri)
+            .filter(uri => uri && uri.startsWith(FileSystem.documentDirectory));
+        
+        for (const uri of localFileUris) {
+            try {
+                await FileSystem.deleteAsync(uri, { idempotent: true });
+            } catch (e) {
+                console.warn(`Failed to delete local file: ${uri}`, e);
+            }
+        }
+
+        // 2. Collect filenames for media library and prefixes for derived images
+        const mediaLibraryFilenames = photosToDelete
+            .map(p => (p.uri || '').split('/').pop())
+            .filter(Boolean);
+
+        const safeName = (beforePhoto.name || '').replace(/\s+/g, '_');
+        const prefixes = [
+            `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`,
+            `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`
+        ];
+
+        // 3. Perform a single, unified deletion for all media assets
+        await deleteAssetsBatch({ filenames: mediaLibraryFilenames, prefixes });
+
+        // 4. Remove from metadata
+        const photoIdsToDelete = new Set(photosToDelete.map(p => p.id));
+        const newPhotos = photos.filter(p => !photoIdsToDelete.has(p.id));
+        await savePhotos(newPhotos);
+
+    } catch (error) {
+        console.error('Error deleting photo set:', error);
+    }
+  };
+
   const deleteAllPhotos = async () => {
     await savePhotos([]);
   };
@@ -305,6 +362,7 @@ export const PhotoProvider = ({ children }) => {
     addPhoto,
     updatePhoto,
     deletePhoto,
+    deletePhotoSet,
     deleteAllPhotos,
     setActiveProject: async (projectId) => {
       setActiveProjectId(projectId);

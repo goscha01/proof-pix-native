@@ -165,7 +165,7 @@ export const savePhotoToDevice = async (uri, filename, projectId = null) => {
  * Delete a saved photo from the app's storage and the device media library
  * Accepts a full photo object (expects at least { uri })
  */
-export const deletePhotoFromDevice = async (photo) => {
+export const deletePhotoFromDevice = async (photo, options = {}) => {
   try {
     if (!photo) return;
     const uri = photo.uri;
@@ -472,7 +472,7 @@ export const deleteProjectAssets = async (projectId) => {
 export const deletePhotosFromDevice = async (photos) => {
   if (!Array.isArray(photos) || photos.length === 0) return;
   for (const p of photos) {
-    await deletePhotoFromDevice(p);
+    await deletePhotoFromDevice(p, { noConfirmation: true });
   }
 };
 
@@ -544,6 +544,109 @@ export const purgeAllDevicePhotos = async () => {
     }
   } catch (mlErr) {
     console.warn('⚠️ Media library purge failed:', mlErr?.message);
+  }
+};
+
+/**
+ * Batch delete media library assets by a combination of filenames and prefixes.
+ * Consolidates deletion into a single OS prompt.
+ */
+export const deleteAssetsBatch = async ({ filenames = [], prefixes = [] }) => {
+  try {
+    const uniqueNames = Array.from(new Set(filenames.filter(Boolean)));
+    if (uniqueNames.length === 0 && prefixes.length === 0) return;
+
+    console.log('🗑️ Unified batch delete start', { filenames: uniqueNames.length, prefixes: prefixes.length });
+
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      console.warn('⚠️ Media library permission not granted; skipping batch delete');
+      return;
+    }
+
+    const map = await getAssetIdMap();
+    const allIdsToDelete = new Set();
+    const keysToDeleteFromMap = new Set();
+
+    // 1. Get IDs from map using filenames
+    const remainingNames = [];
+    for (const name of uniqueNames) {
+      const entry = map[name];
+      const id = typeof entry === 'string' ? entry : entry?.id;
+      if (id) {
+        allIdsToDelete.add(id);
+        keysToDeleteFromMap.add(name);
+      } else {
+        remainingNames.push(name);
+      }
+    }
+
+    // 2. Get IDs from map using prefixes
+    if (prefixes.length > 0) {
+      const normPrefixes = prefixes.map(p => normalizeName(p));
+      const keyMatches = (key) => {
+        const nk = normalizeName(key);
+        return normPrefixes.some(np => nk.startsWith(np));
+      };
+      for (const key in map) {
+        if (!keyMatches(key)) continue;
+        const entry = map[key];
+        const id = typeof entry === 'string' ? entry : entry?.id;
+        if (id) {
+          allIdsToDelete.add(id);
+          keysToDeleteFromMap.add(key);
+        }
+      }
+    }
+    
+    // 3. Fallback: scan media library for remaining filenames
+    if (remainingNames.length > 0) {
+        const tryFindMatches = async (scope) => {
+            const res = await MediaLibrary.getAssetsAsync(scope);
+            const byNorm = new Map();
+            for (const a of res.assets) {
+                const norm = normalizeName(a.filename);
+                if (norm) byNorm.set(norm, { id: a.id, filename: a.filename });
+            }
+            for (const name of remainingNames) {
+                const found = byNorm.get(normalizeName(name));
+                if (found) {
+                    allIdsToDelete.add(found.id);
+                    // Also try to add the actual filename to the map keys to be deleted
+                    keysToDeleteFromMap.add(found.filename);
+                    keysToDeleteFromMap.add(name); // And the name we searched for
+                }
+            }
+        };
+
+        const album = await MediaLibrary.getAlbumAsync('ProofPix');
+        if (album) {
+            await tryFindMatches({ album, first: 2000, mediaType: [MediaLibrary.MediaType.photo] });
+        }
+        await tryFindMatches({ first: 2000, mediaType: [MediaLibrary.MediaType.photo] });
+    }
+
+    const ids = Array.from(allIdsToDelete);
+    if (ids.length > 0) {
+      try {
+        await MediaLibrary.deleteAssetsAsync(ids);
+        console.log('🗑️ Unified batch media deleted', { count: ids.length });
+        
+        // Clean mapping
+        const newMap = { ...map };
+        for (const key of keysToDeleteFromMap) {
+          delete newMap[key];
+        }
+        await setAssetIdMap(newMap);
+
+      } catch (err) {
+        console.warn('⚠️ Unified batch media delete failed:', err?.message);
+      }
+    } else {
+      console.log('ℹ️ No media assets matched for unified batch delete');
+    }
+  } catch (e) {
+    console.warn('⚠️ deleteAssetsBatch error:', e?.message);
   }
 };
 

@@ -33,7 +33,8 @@ export default function HomeScreen({ navigation }) {
     setCurrentRoom,
     getBeforePhotos,
     getAfterPhotos,
-    getCombinedPhotos
+    getCombinedPhotos,
+    deletePhotoSet,
   } = usePhotos();
 
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
@@ -111,13 +112,26 @@ export default function HomeScreen({ navigation }) {
     longPressTriggered.current = false;
     longPressTimer.current = setTimeout(() => {
       longPressTriggered.current = true;
-      if (beforePhoto && afterPhoto) {
-        // Show combined preview with both photos
-        setFullScreenPhotoSet({ before: beforePhoto, after: afterPhoto });
-      } else {
-        // Show single photo
-        setFullScreenPhoto(photo);
-      }
+      
+      const photoSet = beforePhoto || photo;
+      if (!photoSet) return;
+      
+      Alert.alert(
+        'Delete Photo Set',
+        `Are you sure you want to delete "${photoSet.name}" and all its related photos (before, after, combined)? This cannot be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel', onPress: () => longPressTriggered.current = false },
+          { 
+            text: 'Delete', 
+            style: 'destructive', 
+            onPress: () => {
+              deletePhotoSet(photoSet.id);
+              longPressTriggered.current = false;
+            }
+          }
+        ],
+        { cancelable: true, onDismiss: () => longPressTriggered.current = false }
+      );
     }, 500); // 500ms for long press
   };
 
@@ -127,16 +141,18 @@ export default function HomeScreen({ navigation }) {
       clearTimeout(longPressTimer.current);
       longPressTimer.current = null;
     }
+
+    // Close any open full-screen previews
     setFullScreenPhoto(null);
     setFullScreenPhotoSet(null);
     
-    // Only delay reset if it was actually a long press
+    // Only delay reset if it was actually a long press to prevent single-tap from firing
     if (wasLongPress) {
       setTimeout(() => {
         longPressTriggered.current = false;
-      }, 100);
+      }, 100); 
     } else {
-      // Quick tap - reset immediately so onPress can fire
+      // On a quick tap, reset immediately so that onPress can fire
       longPressTriggered.current = false;
     }
   };
