@@ -1,4 +1,5 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { AppState } from 'react-native';
 import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice, loadProjects, saveProjects, createProject as storageCreateProject, deleteProjectEntry, loadActiveProjectId, saveActiveProjectId, deleteAssetsByFilenames, deleteAssetsByPrefixes, deleteProjectAssets, getAssetIdMap, deleteAssetsBatch } from '../services/storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import { PHOTO_MODES } from '../constants/rooms';
@@ -21,6 +22,7 @@ export const PhotoProvider = ({ children }) => {
   const [activeProjectId, setActiveProjectId] = useState(null);
 
   // Load photos on mount
+  // Load data on app start
   useEffect(() => {
     (async () => {
       await loadPhotos();
@@ -28,6 +30,22 @@ export const PhotoProvider = ({ children }) => {
       const savedActive = await loadActiveProjectId();
       if (savedActive) setActiveProjectId(savedActive);
     })();
+  }, []);
+
+  // Reload data when app becomes active (returns from background)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log('🔄 App became active, reloading data...');
+        (async () => {
+          await loadPhotos();
+          await loadProjectsList();
+        })();
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
   }, []);
 
   // Reassign photo names sequentially per project and room
@@ -377,7 +395,12 @@ export const PhotoProvider = ({ children }) => {
     getAfterPhotos,
     getCombinedPhotos,
     getUnpairedBeforePhotos,
-    refreshPhotos: loadPhotos
+    refreshPhotos: loadPhotos,
+    refreshAllData: useCallback(async () => {
+      console.log('🔄 Manual refresh all data triggered');
+      await loadPhotos();
+      await loadProjectsList();
+    }, [])
   };
 
   return <PhotoContext.Provider value={value}>{children}</PhotoContext.Provider>;

@@ -2152,6 +2152,10 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedA(true)}
                 />
+                {/* BEFORE label */}
+                <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                  <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
+                </View>
               </View>
               <View style={{ width: '100%', height: sideBaseDims.bottomH }}>
                 <Image
@@ -2160,6 +2164,10 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedB(true)}
                 />
+                {/* AFTER label */}
+                <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                  <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
+                </View>
               </View>
             </View>
           ) : (
@@ -2172,6 +2180,10 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedA(true)}
                 />
+                {/* BEFORE label */}
+                <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                  <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
+                </View>
               </View>
               <View style={{ width: sideBaseDims.rightW, height: '100%' }}>
                 <Image
@@ -2180,6 +2192,10 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedB(true)}
                 />
+                {/* AFTER label */}
+                <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                  <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
+                </View>
               </View>
             </View>
           )}

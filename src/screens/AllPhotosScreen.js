@@ -204,8 +204,11 @@ export default function AllPhotosScreen({ navigation, route }) {
 
   const startSharingWithOptions = async () => {
     try {
+        console.log('🚀 Starting share process...');
         setSharing(true);
+        setShareOptionsVisible(false); // Close the modal immediately
         const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+        console.log('📸 Source photos:', sourcePhotos.length);
 
         if (sourcePhotos.length === 0) {
             Alert.alert('No Photos', 'There are no photos in this project to share.');
@@ -216,6 +219,7 @@ export default function AllPhotosScreen({ navigation, route }) {
             (selectedShareTypes.before && p.mode === PHOTO_MODES.BEFORE) ||
             (selectedShareTypes.after && p.mode === PHOTO_MODES.AFTER)
         );
+        console.log('📦 Items to share:', itemsToShare.length, selectedShareTypes);
 
         if (itemsToShare.length === 0) {
             Alert.alert('No Photos Selected', 'Please select at least one photo type to share.');
@@ -225,29 +229,36 @@ export default function AllPhotosScreen({ navigation, route }) {
         const projectName = projects.find(p => p.id === activeProjectId)?.name || 'Shared-Photos';
         const zipFileName = `${projectName.replace(/\s+/g, '_')}_${Date.now()}.zip`;
         const zipPath = FileSystem.cacheDirectory + zipFileName;
+        console.log('📁 Creating ZIP:', zipFileName);
 
         const zip = new JSZip();
+        console.log('📦 JSZip created');
 
         for (const item of itemsToShare) {
             const filename = item.uri.split('/').pop();
+            console.log('📄 Adding file to ZIP:', filename);
             const content = await FileSystem.readAsStringAsync(item.uri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
             zip.file(filename, content, { base64: true });
         }
 
+        console.log('🔄 Generating ZIP...');
         const zipBase64 = await zip.generateAsync({ type: 'base64' });
+        console.log('💾 Writing ZIP to file...');
 
         await FileSystem.writeAsStringAsync(zipPath, zipBase64, {
             encoding: FileSystem.EncodingType.Base64,
         });
 
+        console.log('📤 Sharing ZIP file...');
         await Share.share({
             url: zipPath,
             title: `Share ${projectName} Photos`,
             message: `Here are the photos from the project: ${projectName}`,
             type: 'application/zip',
         });
+        console.log('✅ Share completed successfully');
 
     } catch (error) {
         console.error('Sharing error:', error);
@@ -824,7 +835,7 @@ export default function AllPhotosScreen({ navigation, route }) {
               disabled={sharing}
             >
               {sharing ? (
-                <ActivityIndicator color={COLORS.TEXT} />
+                <ActivityIndicator />
               ) : (
                 <Text style={styles.shareButtonText}>Share</Text>
               )}
@@ -958,7 +969,7 @@ export default function AllPhotosScreen({ navigation, route }) {
       >
         <View style={styles.uploadModalContainer}>
           <View style={styles.uploadModalContent}>
-            <ActivityIndicator size="large" color={COLORS.PRIMARY} />
+            <ActivityIndicator size="large" />
             <Text style={styles.uploadModalTitle}>Uploading Photos</Text>
             <Text style={styles.uploadModalProgress}>
               {uploadProgress.current} / {uploadProgress.total}
@@ -1181,6 +1192,22 @@ export default function AllPhotosScreen({ navigation, route }) {
                 </TouchableOpacity>
               </View>
             </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Share Loading Modal */}
+      <Modal
+        visible={sharing}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {}} // Prevent closing during sharing
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.loadingModal}>
+            <ActivityIndicator size="large" />
+            <Text style={styles.loadingText}>Preparing photos for sharing...</Text>
+            <Text style={styles.loadingSubtext}>This may take a few seconds</Text>
           </View>
         </View>
       </Modal>
@@ -1586,6 +1613,33 @@ const styles = StyleSheet.create({
     padding: 20,
     width: '86%',
     maxWidth: 380
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  loadingModal: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 30,
+    alignItems: 'center',
+    width: '80%',
+    maxWidth: 300
+  },
+  loadingText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.TEXT,
+    marginTop: 16,
+    textAlign: 'center'
+  },
+  loadingSubtext: {
+    fontSize: 14,
+    color: COLORS.GRAY,
+    marginTop: 8,
+    textAlign: 'center'
   },
   inlineOverlay: {
     position: 'absolute',

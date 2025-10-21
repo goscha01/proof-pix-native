@@ -51,6 +51,9 @@ export default function HomeScreen({ navigation }) {
   const [newProjectName, setNewProjectName] = useState('');
   const [pendingCameraAfterCreate, setPendingCameraAfterCreate] = useState(false);
 
+  // Note: Data reloading is handled by AppState listener in PhotoContext
+  // No need for useFocusEffect here to prevent infinite loops
+
   // Force re-render when photos change (e.g., after project deletion)
   useEffect(() => {
     // This will trigger a re-render when photos change
