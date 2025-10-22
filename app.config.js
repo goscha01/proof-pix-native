@@ -24,7 +24,7 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.proofpix.app",
-      buildNumber: "3",
+      buildNumber: "4",
       requireFullScreen: false,
       infoPlist: {
         NSCameraUsageDescription: "ProofPix needs access to your camera to take before and after photos.",
@@ -45,7 +45,7 @@ export default {
         backgroundColor: "#F2C31B"
       },
       package: "com.proofpix.app",
-      versionCode: 3,
+      versionCode: 4,
       permissions: [
         "CAMERA",
         "WRITE_EXTERNAL_STORAGE",
