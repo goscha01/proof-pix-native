@@ -1136,7 +1136,7 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.optionsModalContent}>
             <Text style={styles.optionsTitle}>Open Project</Text>
 
-            <View style={styles.projectList}>
+            <ScrollView style={styles.projectList} showsVerticalScrollIndicator={true}>
               {projects.length === 0 ? (
                 <Text style={styles.projectItemText}>No saved projects found</Text>
               ) : (
@@ -1175,7 +1175,7 @@ export default function HomeScreen({ navigation }) {
                   );
                 })
               )}
-            </View>
+            </ScrollView>
 
             {isMultiSelectMode ? (
               <>

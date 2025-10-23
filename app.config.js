@@ -6,12 +6,12 @@ export default {
     slug: "proof-pix-native",
     version: process.env.VERSION || "1.0.0",
     orientation: "default",
-    icon: "./assets/PP_logo.png",
+    icon: "./assets/PP_logo_app.png",
     userInterfaceStyle: "light",
     newArchEnabled: true,
     backgroundColor: "#000000",
     splash: {
-      image: "./assets/PP_logo.png",
+      image: "./assets/PP_logo_app.png",
       resizeMode: "contain",
       backgroundColor: "#F2C31B"
     },
@@ -41,7 +41,7 @@ export default {
     },
     android: {
       adaptiveIcon: {
-        foregroundImage: "./assets/PP_logo.png",
+        foregroundImage: "./assets/PP_logo_app.png",
         backgroundColor: "#F2C31B"
       },
       package: "com.proofpix.app",
