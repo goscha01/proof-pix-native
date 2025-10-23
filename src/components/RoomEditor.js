@@ -327,12 +327,14 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
   const [isEditingName, setIsEditingName] = useState(false);
   const [showNameModal, setShowNameModal] = useState(false);
   const [allowDefaultDeletion, setAllowDefaultDeletion] = useState(false);
+  const [markAsDefault, setMarkAsDefault] = useState(false);
   const nameInputRef = useRef(null);
 
   console.log('RoomEditor rendered:', { visible, initialRooms });
 
   const isDefaultRoom = (room) => {
-    return ROOMS.some(defaultRoom => defaultRoom.id === room.id);
+    // Check if it's an original default room OR marked as default
+    return ROOMS.some(defaultRoom => defaultRoom.id === room.id) || room.isDefault === true;
   };
 
   // Initialize rooms only when component first becomes visible
@@ -360,12 +362,14 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
           setEditingRoom(editRoom.id);
           setRoomName(editRoom.name);
           setSelectedIcon(editRoom.icon);
+          setMarkAsDefault(isDefaultRoom(editRoom));
         }, 100);
       } else {
         // Customize mode - show room list
         setEditingRoom(null);
         setRoomName('');
         setSelectedIcon('');
+        setMarkAsDefault(false);
       }
     }
   }, [visible, mode, editRoom]);
@@ -380,6 +384,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
     setIsEditingName(false);
     setShowNameModal(false);
     setAllowDefaultDeletion(false);
+    setMarkAsDefault(false);
     }
   }, [visible]);
 
@@ -392,7 +397,8 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
     const newRoom = {
       id: `room_${Date.now()}`,
       name: 'New Room',
-      icon: '🏠'
+      icon: '🏠',
+      isDefault: markAsDefault
     };
     const updatedRooms = [...rooms, newRoom];
     setRooms(updatedRooms);
@@ -414,6 +420,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
     setEditingRoom(room.id);
     setRoomName(room.name);
     setSelectedIcon(room.icon);
+    setMarkAsDefault(isDefaultRoom(room));
     setIsEditingName(false); // Reset editing state
   };
 
@@ -426,7 +433,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
 
     const updatedRooms = rooms.map(room => 
       room.id === editingRoom 
-        ? { ...room, name: roomName.trim(), icon: selectedIcon }
+        ? { ...room, name: roomName.trim(), icon: selectedIcon, isDefault: markAsDefault }
         : room
     );
     
@@ -436,6 +443,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
     setRoomName('');
     setSelectedIcon('');
     setIsEditingName(false);
+    setMarkAsDefault(false);
     
     // Save the changes and close the editor
     console.log('Calling onSave from handleSaveRoom with:', updatedRooms);
@@ -560,6 +568,24 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
               <Text style={styles.roomNameButtonText}>{roomName || 'Folder Name'}</Text>
               <Text style={styles.editHintText}>Tap to edit</Text>
             </TouchableOpacity>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Folder Type</Text>
+            <View style={styles.checkboxContainer}>
+              <TouchableOpacity
+                style={styles.checkbox}
+                onPress={() => setMarkAsDefault(!markAsDefault)}
+              >
+                <View style={[styles.checkboxBox, markAsDefault && styles.checkboxBoxChecked]}>
+                  {markAsDefault && <Text style={styles.checkboxCheck}>✓</Text>}
+                </View>
+                <Text style={styles.checkboxLabel}>Mark as Default Folder</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.checkboxDescription}>
+              Default folders are protected from deletion and appear in all projects
+            </Text>
           </View>
 
           <View style={styles.inputGroup}>
@@ -1146,6 +1172,13 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: COLORS.TEXT,
     fontWeight: '500',
+  },
+  checkboxDescription: {
+    color: COLORS.TEXT_SECONDARY,
+    fontSize: 12,
+    marginTop: 8,
+    marginLeft: 4,
+    fontStyle: 'italic'
   },
   roomNameContainer: {
     flexDirection: 'row',
