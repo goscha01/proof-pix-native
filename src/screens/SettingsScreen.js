@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
 import { COLORS } from '../constants/rooms';
 import { LOCATIONS, getLocationConfig } from '../config/locations';
+import RoomEditor from '../components/RoomEditor';
 
 export default function SettingsScreen({ navigation }) {
   const {
@@ -27,12 +28,17 @@ export default function SettingsScreen({ navigation }) {
     toggleUseFolderStructure,
     enabledFolders,
     updateEnabledFolders,
-    resetUserData
+    resetUserData,
+    customRooms,
+    saveCustomRooms,
+    getRooms,
+    resetCustomRooms
   } = useSettings();
 
   const [name, setName] = useState(userName);
   const [selectedLocation, setSelectedLocation] = useState(location);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
+  const [showRoomEditor, setShowRoomEditor] = useState(false);
 
   const handleSaveUserInfo = async () => {
     await updateUserInfo(name, selectedLocation);
@@ -82,98 +88,6 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       <ScrollView style={styles.content}>
-        {/* User Information */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>User Information</Text>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Cleaner Name</Text>
-            <TextInput
-              style={styles.input}
-              value={name}
-              onChangeText={setName}
-              placeholder="Enter your name"
-              placeholderTextColor={COLORS.GRAY}
-              onBlur={handleSaveUserInfo}
-            />
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.label}>Location</Text>
-            <TouchableOpacity
-              style={styles.locationPicker}
-              onPress={() => setShowLocationPicker(!showLocationPicker)}
-            >
-              <Text style={styles.locationPickerText}>
-                {selectedLocationObj.name}
-              </Text>
-              <Text style={styles.locationPickerArrow}>▼</Text>
-            </TouchableOpacity>
-
-            {showLocationPicker && (
-              <View style={styles.locationDropdown}>
-                {LOCATIONS.map((loc) => (
-                  <TouchableOpacity
-                    key={loc.id}
-                    style={[
-                      styles.locationOption,
-                      selectedLocation === loc.id && styles.locationOptionSelected
-                    ]}
-                    onPress={() => handleLocationSelect(loc.id)}
-                  >
-                    <Text style={[
-                      styles.locationOptionText,
-                      selectedLocation === loc.id && styles.locationOptionTextSelected
-                    ]}>
-                      {loc.name}
-                    </Text>
-                    {selectedLocation === loc.id && (
-                      <Text style={styles.locationOptionCheck}>✓</Text>
-                    )}
-                  </TouchableOpacity>
-                ))}
-              </View>
-            )}
-          </View>
-
-          <TouchableOpacity
-            style={styles.resetButton}
-            onPress={handleResetUserData}
-          >
-            <Text style={styles.resetButtonText}>Reset User Data</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Google Drive Configuration (Read-only) */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Google Drive Configuration</Text>
-          <Text style={styles.sectionDescription}>
-            Automatically configured based on selected location
-          </Text>
-
-          <View style={styles.configRow}>
-            <Text style={styles.configLabel}>Script URL:</Text>
-            <Text style={styles.configValue} numberOfLines={1}>
-              {config.scriptUrl ? '✓ Configured' : '✗ Not configured'}
-            </Text>
-          </View>
-
-          <View style={styles.configRow}>
-            <Text style={styles.configLabel}>Folder ID:</Text>
-            <Text style={styles.configValue} numberOfLines={1}>
-              {config.folderId ? '✓ Configured' : '✗ Not configured'}
-            </Text>
-          </View>
-
-          {(!config.scriptUrl || !config.folderId) && (
-            <View style={styles.warningBox}>
-              <Text style={styles.warningText}>
-                ⚠️ Configuration missing for {selectedLocationObj.name}. Please check environment variables.
-              </Text>
-            </View>
-          )}
-        </View>
-
         {/* Display Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Display Settings</Text>
@@ -206,6 +120,32 @@ export default function SettingsScreen({ navigation }) {
               trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
               thumbColor="white"
             />
+          </View>
+        </View>
+
+        {/* Room Customization */}
+        <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Folder Customization</Text>
+          <Text style={styles.sectionDescription}>
+            Customize the names and icons of folders in your app
+          </Text>
+
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>Custom Folders</Text>
+              <Text style={styles.settingDescription}>
+                {customRooms ? `${customRooms.length} custom folders` : 'Using default folders'}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.customizeButton}
+              onPress={() => {
+                console.log('Customize button pressed');
+                setShowRoomEditor(true);
+              }}
+            >
+              <Text style={styles.customizeButtonText}>Customize</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -269,7 +209,113 @@ export default function SettingsScreen({ navigation }) {
             </>
           )}
         </View>
+
+        {/* Google Drive Configuration (Read-only) */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Google Drive Configuration</Text>
+          <Text style={styles.sectionDescription}>
+            Automatically configured based on selected location
+          </Text>
+
+          <View style={styles.configRow}>
+            <Text style={styles.configLabel}>Script URL:</Text>
+            <Text style={styles.configValue} numberOfLines={1}>
+              {config.scriptUrl ? '✓ Configured' : '✗ Not configured'}
+            </Text>
+          </View>
+
+          <View style={styles.configRow}>
+            <Text style={styles.configLabel}>Folder ID:</Text>
+            <Text style={styles.configValue} numberOfLines={1}>
+              {config.folderId ? '✓ Configured' : '✗ Not configured'}
+            </Text>
+          </View>
+
+          {(!config.scriptUrl || !config.folderId) && (
+            <View style={styles.warningBox}>
+              <Text style={styles.warningText}>
+                ⚠️ Configuration missing for {selectedLocationObj.name}. Please check environment variables.
+              </Text>
+            </View>
+          )}
+        </View>
+
+        {/* User Information */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>User Information</Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Cleaner Name</Text>
+            <TextInput
+              style={styles.input}
+              value={name}
+              onChangeText={setName}
+              placeholder="Enter your name"
+              placeholderTextColor={COLORS.GRAY}
+              onBlur={handleSaveUserInfo}
+            />
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>Location</Text>
+            <TouchableOpacity
+              style={styles.locationPicker}
+              onPress={() => setShowLocationPicker(!showLocationPicker)}
+            >
+              <Text style={styles.locationPickerText}>
+                {selectedLocationObj.name}
+              </Text>
+              <Text style={styles.locationPickerArrow}>▼</Text>
+            </TouchableOpacity>
+
+            {showLocationPicker && (
+              <View style={styles.locationDropdown}>
+                {LOCATIONS.map((loc) => (
+                  <TouchableOpacity
+                    key={loc.id}
+                    style={[
+                      styles.locationOption,
+                      selectedLocation === loc.id && styles.locationOptionSelected
+                    ]}
+                    onPress={() => handleLocationSelect(loc.id)}
+                  >
+                    <Text style={[
+                      styles.locationOptionText,
+                      selectedLocation === loc.id && styles.locationOptionTextSelected
+                    ]}>
+                      {loc.name}
+                    </Text>
+                    {selectedLocation === loc.id && (
+                      <Text style={styles.locationOptionCheck}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+          </View>
+
+          <TouchableOpacity
+            style={styles.resetButton}
+            onPress={handleResetUserData}
+          >
+            <Text style={styles.resetButtonText}>Reset User Data</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
+
+      <RoomEditor
+        visible={showRoomEditor}
+        onClose={() => setShowRoomEditor(false)}
+        onSave={(rooms) => {
+          console.log('SettingsScreen: Saving rooms', rooms);
+          saveCustomRooms(rooms);
+          // Force a small delay to ensure state updates propagate
+          setTimeout(() => {
+            console.log('SettingsScreen: Rooms saved, state should be updated');
+          }, 100);
+        }}
+        initialRooms={customRooms}
+      />
     </SafeAreaView>
   );
 }
@@ -433,5 +479,16 @@ const styles = StyleSheet.create({
     color: '#CC0000',
     fontSize: 16,
     fontWeight: '600'
+  },
+  customizeButton: {
+    backgroundColor: COLORS.PRIMARY,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8
+  },
+  customizeButtonText: {
+    color: COLORS.TEXT,
+    fontWeight: '600',
+    fontSize: 14
   }
 });

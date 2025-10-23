@@ -17,6 +17,7 @@ import FirstLoadScreen from './src/screens/FirstLoadScreen';
 
 const Stack = createNativeStackNavigator();
 
+// Navigator component that uses settings
 function AppNavigator() {
   const { userName, loading } = useSettings();
 

@@ -2,7 +2,7 @@ import React, { createContext, useState, useContext, useEffect, useCallback } fr
 import { AppState } from 'react-native';
 import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice, loadProjects, saveProjects, createProject as storageCreateProject, deleteProjectEntry, loadActiveProjectId, saveActiveProjectId, deleteAssetsByFilenames, deleteAssetsByPrefixes, deleteProjectAssets, getAssetIdMap, deleteAssetsBatch } from '../services/storage';
 import * as FileSystem from 'expo-file-system/legacy';
-import { PHOTO_MODES } from '../constants/rooms';
+import { PHOTO_MODES, ROOMS } from '../constants/rooms';
 
 const PhotoContext = createContext();
 
@@ -276,6 +276,10 @@ export const PhotoProvider = ({ children }) => {
     })();
     const project = await storageCreateProject(unique);
     setProjects(prev => [project, ...prev]);
+    
+    // Reset custom rooms to default when new project is created
+    console.log('New project created, resetting custom rooms to default');
+    
     // Auto-assign only unassigned photos to the new project
     const unassigned = photos.filter(p => !p.projectId);
     if (unassigned.length > 0) {
