@@ -19,6 +19,7 @@ export const LOCATIONS = [
  * @returns {Object} - { scriptUrl: string, folderId: string }
  */
 export function getLocationConfig(locationId) {
+  console.log(`🔍 Getting config for location: ${locationId}`);
   const location = LOCATIONS.find(loc => loc.id === locationId);
 
   if (!location) {
@@ -28,6 +29,7 @@ export function getLocationConfig(locationId) {
 
   // Get environment variables from app config
   const config = Constants.expoConfig?.extra || {};
+  console.log(`📋 Available config keys:`, Object.keys(config));
   
   let scriptUrl, folderId;
   
@@ -53,11 +55,14 @@ export function getLocationConfig(locationId) {
       return { scriptUrl: '', folderId: '' };
   }
 
+  console.log(`📊 Config for ${location.name}:`, { scriptUrl, folderId });
+
   if (!scriptUrl || !folderId) {
     console.error(`Missing environment variables for ${location.name}:`, { scriptUrl, folderId });
     return { scriptUrl: '', folderId: '' };
   }
 
+  console.log(`✅ Config loaded successfully for ${location.name}`);
   return { scriptUrl, folderId };
 }
 

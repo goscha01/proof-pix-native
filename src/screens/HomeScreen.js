@@ -256,11 +256,17 @@ export default function HomeScreen({ navigation }) {
       const activeProjectExists = projects.some(p => p.id === activeProjectId);
       if (!activeProjectExists) {
         // Active project no longer exists, select the first available project
+        console.log('🔄 Active project no longer exists, selecting first available project');
         setActiveProject(projects[0].id);
       }
     } else if (projects.length > 0 && !activeProjectId) {
       // No active project but projects exist, select the first one
+      console.log('🔄 No active project but projects exist, selecting first project');
       setActiveProject(projects[0].id);
+    } else if (projects.length === 0 && activeProjectId) {
+      // No projects exist but activeProjectId is set, clear it
+      console.log('🔄 No projects exist but activeProjectId is set, clearing it');
+      setActiveProject(null);
     }
   }, [projects, activeProjectId]);
   const longPressTimer = useRef(null);
@@ -750,8 +756,8 @@ export default function HomeScreen({ navigation }) {
     const combinedPhotos = getCombinedPhotos(currentRoom);
     const hasPhotos = beforePhotos.length > 0;
 
-    // If no photos, show centered take photo button
-    if (!hasPhotos) {
+    // If no photos OR no active project, show centered take photo button
+    if (!hasPhotos || !activeProjectId) {
       return (
         <View style={styles.emptyStateContainer}>
           <TouchableOpacity
@@ -772,7 +778,9 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.addPhotoIcon}>
               {rooms.find((r) => r.id === currentRoom)?.icon || '📷'}
             </Text>
-            <Text style={styles.addPhotoText}>Take Photo</Text>
+            <Text style={styles.addPhotoText}>
+              {!activeProjectId ? 'Select Project' : 'Take Photo'}
+            </Text>
           </TouchableOpacity>
         </View>
       );

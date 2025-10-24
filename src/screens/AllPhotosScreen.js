@@ -319,8 +319,8 @@ export default function AllPhotosScreen({ navigation, route }) {
   const startUploadWithOptions = async () => {
     try {
       const config = getLocationConfig(location);
-      // Use active project's exact name if available; otherwise fall back to date-based
-      const albumName = (projects?.find?.(p => p.id === activeProjectId)?.name) || createAlbumName(userName, location);
+      // Always generate album name based on current location, not project's original location
+      const albumName = createAlbumName(userName, location);
       // Scope uploads to the active project if one is selected
       const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
 
@@ -797,11 +797,16 @@ export default function AllPhotosScreen({ navigation, route }) {
         <Text style={[styles.columnHeader, { color: '#FFC107', marginRight: 0 }]}>COMBINED</Text>
       </View>
 
-      {photos.length === 0 ? (
+      {photos.length === 0 || !activeProjectId ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>No photos yet</Text>
+          <Text style={styles.emptyStateText}>
+            {!activeProjectId ? 'No project selected' : 'No photos yet'}
+          </Text>
           <Text style={styles.emptyStateSubtext}>
-            Take some before/after photos to get started
+            {!activeProjectId 
+              ? 'Select a project to view photos' 
+              : 'Take some before/after photos to get started'
+            }
           </Text>
         </View>
       ) : (
@@ -810,8 +815,8 @@ export default function AllPhotosScreen({ navigation, route }) {
         </ScrollView>
       )}
 
-      {/* Manage Projects button at bottom - only show if photos exist */}
-      {photos.length > 0 && (
+      {/* Manage Projects button at bottom - only show if photos exist and project is selected */}
+      {photos.length > 0 && activeProjectId && (
         <TouchableOpacity
           style={[styles.deleteAllButtonBottom, { backgroundColor: '#22A45D' }]}
           onPress={() => setManageVisible(true)}
