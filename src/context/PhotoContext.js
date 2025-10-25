@@ -86,8 +86,8 @@ export const PhotoProvider = ({ children }) => {
       });
     });
 
-    console.log('nameMap:', nameMap);
-    console.log('nameToBeforeId:', nameToBeforeId);
+    // console.log('nameMap:', nameMap);
+    // console.log('nameToBeforeId:', nameToBeforeId);
 
     // Reassign names: before photos get sequential names, after/combined photos use their before photo's name
     const updatedPhotos = photoList.map(photo => {
@@ -99,7 +99,7 @@ export const PhotoProvider = ({ children }) => {
       } else if (photo.mode === PHOTO_MODES.AFTER && photo.beforePhotoId) {
         // After photo uses the name of its paired before photo
         const newName = nameMap[photo.beforePhotoId] || photo.name;
-        console.log('After photo old name:', photo.name, '-> new name:', newName);
+        // console.log('After photo old name:', photo.name, '-> new name:', newName);
         return {
           ...photo,
           name: newName
@@ -109,7 +109,7 @@ export const PhotoProvider = ({ children }) => {
         // Find the before photo ID by the combined photo's current name
         const beforeId = nameToBeforeId[photo.name];
         const newName = nameMap[beforeId] || photo.name;
-        console.log('Combined photo old name:', photo.name, 'beforeId:', beforeId, '-> new name:', newName);
+        // console.log('Combined photo old name:', photo.name, 'beforeId:', beforeId, '-> new name:', newName);
         return {
           ...photo,
           name: newName

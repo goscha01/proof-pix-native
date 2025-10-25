@@ -64,20 +64,20 @@ export default function HomeScreen({ navigation }) {
   const [rooms, setRooms] = useState(() => getRooms());
   
   useEffect(() => {
-    console.log('HomeScreen: useEffect triggered, customRooms length:', customRooms?.length || 0);
+    // console.log('HomeScreen: useEffect triggered, customRooms length:', customRooms?.length || 0);
     const newRooms = getRooms();
-    console.log('HomeScreen: useEffect updating rooms, customRooms:', customRooms?.map(r => r.name) || 'null', 'newRooms:', newRooms.map(r => r.name));
+    // console.log('HomeScreen: useEffect updating rooms, customRooms:', customRooms?.map(r => r.name) || 'null', 'newRooms:', newRooms.map(r => r.name));
     setRooms(newRooms);
   }, [customRooms]);
 
   // Debug logging
-  useEffect(() => {
-    console.log('HomeScreen: rooms updated:', rooms.map(r => r.name));
-  }, [rooms]);
+  // useEffect(() => {
+  //   console.log('HomeScreen: rooms updated:', rooms.map(r => r.name));
+  // }, [rooms]);
 
-  useEffect(() => {
-    console.log('HomeScreen: customRooms updated:', customRooms?.map(r => r.name) || 'null');
-  }, [customRooms]);
+  // useEffect(() => {
+  //   console.log('HomeScreen: customRooms updated:', customRooms?.map(r => r.name) || 'null');
+  // }, [customRooms]);
 
   const handleRoomLongPress = (room, event) => {
     setContextMenuRoom(room);
@@ -303,9 +303,9 @@ export default function HomeScreen({ navigation }) {
   const circularRooms = getCircularRooms();
 
   // Debug logging for circular rooms
-  useEffect(() => {
-    console.log('HomeScreen: circularRooms updated:', circularRooms.map(r => r.name));
-  }, [circularRooms]);
+  // useEffect(() => {
+  //   console.log('HomeScreen: circularRooms updated:', circularRooms.map(r => r.name));
+  // }, [circularRooms]);
 
   // Update ref when currentRoom changes
   useEffect(() => {
@@ -487,7 +487,7 @@ export default function HomeScreen({ navigation }) {
 
   // PanResponder for room switching - recreate when rooms change
   const panResponder = useMemo(() => {
-    console.log('🔄 Room PanResponder recreated with rooms:', rooms.map(r => r.id));
+    // console.log('🔄 Room PanResponder recreated with rooms:', rooms.map(r => r.id));
     return PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
@@ -598,7 +598,7 @@ export default function HomeScreen({ navigation }) {
   }, [fullScreenPhoto, fullScreenPhotoSet, fullScreenPhotos.length, handleSwipeNavigation, handleLongPressEnd]);
 
   // Debug: Log when PanResponder is created
-  console.log('🔄 Full screen PanResponder created:', fullScreenPanResponder);
+  // console.log('🔄 Full screen PanResponder created:', fullScreenPanResponder);
 
   useEffect(() => {
     // No-op: projects come from context
@@ -1353,12 +1353,12 @@ export default function HomeScreen({ navigation }) {
           setRoomEditorMode('customize');
         }}
         onSave={(rooms) => {
-          console.log('HomeScreen: Received rooms from RoomEditor:', rooms);
+          // console.log('HomeScreen: Received rooms from RoomEditor:', rooms);
           saveCustomRooms(rooms);
           
           // If we were editing a specific room, stay on that room after saving
           if (contextMenuRoom) {
-            console.log('HomeScreen: Staying on edited room:', contextMenuRoom.name);
+            // console.log('HomeScreen: Staying on edited room:', contextMenuRoom.name);
             setCurrentRoom(contextMenuRoom.id);
           }
           
