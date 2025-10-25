@@ -1,4 +1,3 @@
-import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
@@ -50,31 +49,27 @@ class GoogleAuthService {
    * Get redirect URI for OAuth
    */
   getRedirectUri() {
-    // For Expo Go, we need to construct the redirect URI manually
-    // Using the project slug from app.config.js
-    const redirectUri = `https://auth.expo.io/@goscha01/proof-pix-native`;
+    // Google requires HTTPS for Drive API scopes
+    // Must use Expo's auth proxy for development
+    const redirectUri = 'https://auth.expo.io/@goscha01/proof-pix-native';
     console.log('[GoogleAuthService] Redirect URI:', redirectUri);
     return redirectUri;
   }
 
   /**
-   * Create auth request configuration
+   * Build authorization URL manually
    */
-  createAuthRequest() {
-    const redirectUri = this.getRedirectUri();
-    console.log('[GoogleAuthService] Redirect URI:', redirectUri);
-
-    return new AuthSession.AuthRequest({
-      clientId: GOOGLE_AUTH_CONFIG.clientId,
-      scopes: GOOGLE_AUTH_CONFIG.scopes,
-      redirectUri,
-      responseType: AuthSession.ResponseType.Code,
-      usePKCE: true,
-      extraParams: {
-        access_type: 'offline', // Get refresh token
-        prompt: 'consent', // Force consent screen to get refresh token
-      },
+  buildAuthUrl() {
+    const params = new URLSearchParams({
+      client_id: GOOGLE_AUTH_CONFIG.clientId,
+      redirect_uri: this.getRedirectUri(),
+      response_type: 'code',
+      scope: GOOGLE_AUTH_CONFIG.scopes.join(' '),
+      access_type: 'offline',
+      prompt: 'consent',
     });
+
+    return `${this.discovery.authorizationEndpoint}?${params.toString()}`;
   }
 
   /**
@@ -125,63 +120,126 @@ class GoogleAuthService {
     try {
       console.log('[GoogleAuthService] Starting sign-in flow...');
 
-      const authRequest = this.createAuthRequest();
+      // Build the authorization URL manually
+      const authUrl = this.buildAuthUrl();
+      console.log('[GoogleAuthService] Auth URL:', authUrl);
 
-      // Perform the authentication
-      const result = await authRequest.promptAsync(this.discovery);
+      // Use WebBrowser to open the auth URL
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrl,
+        this.getRedirectUri()
+      );
 
-      if (result.type === 'success') {
-        const { code } = result.params;
+      console.log('[GoogleAuthService] ===== AUTH RESULT =====');
+      console.log('[GoogleAuthService] Result type:', result.type);
+      console.log('[GoogleAuthService] Result URL:', result.url);
+      console.log('[GoogleAuthService] Full result:', JSON.stringify(result, null, 2));
+      console.log('[GoogleAuthService] ========================');
 
-        // Exchange code for tokens
-        const tokenResult = await AuthSession.exchangeCodeAsync(
-          {
-            clientId: GOOGLE_AUTH_CONFIG.clientId,
-            code,
-            redirectUri: this.getRedirectUri(),
-            extraParams: {
-              code_verifier: authRequest.codeVerifier || '',
+      if (result.type === 'success' && result.url) {
+        console.log('[GoogleAuthService] ✅ Auth succeeded! Parsing URL...');
+
+        // Parse the URL to get the authorization code
+        try {
+          const url = new URL(result.url);
+          console.log('[GoogleAuthService] Parsed URL host:', url.host);
+          console.log('[GoogleAuthService] Parsed URL pathname:', url.pathname);
+          console.log('[GoogleAuthService] Parsed URL search:', url.search);
+
+          const code = url.searchParams.get('code');
+          const error = url.searchParams.get('error');
+
+          if (error) {
+            console.error('[GoogleAuthService] ❌ Error in URL:', error);
+            throw new Error(`OAuth error: ${error}`);
+          }
+
+          if (!code) {
+            console.error('[GoogleAuthService] ❌ No code in URL params');
+            console.error('[GoogleAuthService] Available params:', Array.from(url.searchParams.keys()).join(', '));
+            throw new Error('No authorization code received');
+          }
+
+          console.log('[GoogleAuthService] ✅ Got authorization code (length:', code.length, ')');
+
+          // Exchange code for tokens manually
+          console.log('[GoogleAuthService] 🔄 Exchanging code for tokens...');
+          const tokenResponse = await fetch(this.discovery.tokenEndpoint, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
             },
-          },
-          this.discovery
-        );
+            body: new URLSearchParams({
+              client_id: GOOGLE_AUTH_CONFIG.clientId,
+              code: code,
+              redirect_uri: this.getRedirectUri(),
+              grant_type: 'authorization_code',
+            }).toString(),
+          });
 
-        this.accessToken = tokenResult.accessToken;
-        this.refreshToken = tokenResult.refreshToken;
+          console.log('[GoogleAuthService] Token response status:', tokenResponse.status);
 
-        // Calculate token expiry
-        const expiryTime = Date.now() + (tokenResult.expiresIn || 3600) * 1000;
-        this.tokenExpiry = expiryTime;
+          if (!tokenResponse.ok) {
+            const errorText = await tokenResponse.text();
+            console.error('[GoogleAuthService] ❌ Token exchange failed:', errorText);
+            throw new Error('Failed to exchange authorization code for tokens');
+          }
 
-        // Get user info
-        const userInfo = await this.getUserInfo(tokenResult.accessToken);
+          const tokenResult = await tokenResponse.json();
+          console.log('[GoogleAuthService] ✅ Token exchange successful');
+          console.log('[GoogleAuthService] Has access_token:', !!tokenResult.access_token);
+          console.log('[GoogleAuthService] Has refresh_token:', !!tokenResult.refresh_token);
 
-        // Store tokens and user info
-        await this.storeAuthData(userInfo, {
-          accessToken: tokenResult.accessToken,
-          refreshToken: tokenResult.refreshToken,
-          expiresIn: tokenResult.expiresIn,
-        });
+          this.accessToken = tokenResult.access_token;
+          this.refreshToken = tokenResult.refresh_token;
 
-        console.log('[GoogleAuthService] Sign-in successful');
-        console.log('[GoogleAuthService] User:', userInfo.email);
+          // Calculate token expiry
+          const expiryTime = Date.now() + (tokenResult.expires_in || 3600) * 1000;
+          this.tokenExpiry = expiryTime;
 
-        return {
-          userInfo: {
-            user: userInfo,
-          },
-          tokens: {
-            accessToken: tokenResult.accessToken,
-            idToken: tokenResult.idToken,
-          },
-        };
+          // Get user info
+          console.log('[GoogleAuthService] 🔄 Fetching user info...');
+          const userInfo = await this.getUserInfo(tokenResult.access_token);
+          console.log('[GoogleAuthService] ✅ Got user info:', userInfo.email);
+
+          // Store tokens and user info
+          await this.storeAuthData(userInfo, {
+            accessToken: tokenResult.access_token,
+            refreshToken: tokenResult.refresh_token,
+            expiresIn: tokenResult.expires_in,
+          });
+
+          console.log('[GoogleAuthService] ✅✅✅ Sign-in successful! ✅✅✅');
+          console.log('[GoogleAuthService] User:', userInfo.email);
+
+          return {
+            userInfo: {
+              user: userInfo,
+            },
+            tokens: {
+              accessToken: tokenResult.access_token,
+              idToken: tokenResult.id_token,
+            },
+          };
+        } catch (parseError) {
+          console.error('[GoogleAuthService] ❌ Error parsing auth response:', parseError);
+          throw parseError;
+        }
       } else if (result.type === 'cancel') {
+        console.log('[GoogleAuthService] ⚠️ User cancelled sign-in');
         throw new Error('Sign-in was cancelled');
+      } else if (result.type === 'dismiss') {
+        console.log('[GoogleAuthService] ⚠️ Browser dismissed');
+        throw new Error('Sign-in was dismissed');
       } else {
+        console.error('[GoogleAuthService] ❌ Unexpected result type:', result.type);
         throw new Error('Sign-in failed: ' + result.type);
       }
     } catch (error) {
-      console.error('[GoogleAuthService] Sign-in error:', error);
+      console.error('[GoogleAuthService] ❌❌❌ Sign-in error ❌❌❌');
+      console.error('[GoogleAuthService] Error type:', error.constructor.name);
+      console.error('[GoogleAuthService] Error message:', error.message);
+      console.error('[GoogleAuthService] Error stack:', error.stack);
       throw new Error('Failed to sign in with Google: ' + error.message);
     }
   }
