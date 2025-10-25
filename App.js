@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PhotoProvider } from './src/context/PhotoContext';
 import { SettingsProvider, useSettings } from './src/context/SettingsContext';
+import { AdminProvider } from './src/context/AdminContext';
 
 // Screens
 import HomeScreen from './src/screens/HomeScreen';
@@ -96,16 +97,29 @@ function AppNavigator() {
   );
 }
 
+// Linking configuration for deep links (OAuth redirect)
+const linking = {
+  prefixes: ['com.proofpix.app://', 'https://auth.expo.io/@goscha01/proof-pix-native'],
+  config: {
+    screens: {
+      Home: '',
+      Settings: 'settings',
+    },
+  },
+};
+
 export default function App() {
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <SafeAreaProvider>
         <SettingsProvider>
-          <PhotoProvider>
-            <NavigationContainer>
-              <AppNavigator />
-            </NavigationContainer>
-          </PhotoProvider>
+          <AdminProvider>
+            <PhotoProvider>
+              <NavigationContainer linking={linking}>
+                <AppNavigator />
+              </NavigationContainer>
+            </PhotoProvider>
+          </AdminProvider>
         </SettingsProvider>
       </SafeAreaProvider>
     </View>

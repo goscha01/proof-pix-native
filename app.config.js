@@ -4,12 +4,14 @@ export default {
   expo: {
     name: process.env.APP_NAME || "ProofPix",
     slug: "proof-pix-native",
+    owner: "goscha01",
     version: process.env.VERSION || "1.0.2",
     orientation: "default",
     icon: "./assets/PP_logo_app.png",
     userInterfaceStyle: "light",
     newArchEnabled: true,
     backgroundColor: "#000000",
+    scheme: "com.proofpix.app",
     splash: {
       image: "./assets/PP_logo_app.png",
       resizeMode: "contain",

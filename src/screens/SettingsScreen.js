@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
+import { useAdmin } from '../context/AdminContext';
 import { COLORS } from '../constants/rooms';
 import { LOCATIONS, getLocationConfig } from '../config/locations';
 import RoomEditor from '../components/RoomEditor';
@@ -35,10 +36,21 @@ export default function SettingsScreen({ navigation }) {
     resetCustomRooms
   } = useSettings();
 
+  const {
+    isAuthenticated,
+    userInfo: adminUserInfo,
+    signIn,
+    signOut,
+    isSetupComplete,
+    folderId,
+    scriptUrl,
+  } = useAdmin();
+
   const [name, setName] = useState(userName);
   const [selectedLocation, setSelectedLocation] = useState(location);
   const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
+  const [isSigningIn, setIsSigningIn] = useState(false);
 
   const handleSaveUserInfo = async () => {
     await updateUserInfo(name, selectedLocation);
@@ -56,8 +68,8 @@ export default function SettingsScreen({ navigation }) {
       'This will clear your name and location settings. You will be taken to the setup screen to configure them again. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Reset', 
+        {
+          text: 'Reset',
           style: 'destructive',
           onPress: async () => {
             await resetUserData();
@@ -65,6 +77,57 @@ export default function SettingsScreen({ navigation }) {
               index: 0,
               routes: [{ name: 'FirstLoad' }],
             });
+          }
+        }
+      ]
+    );
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      setIsSigningIn(true);
+      const result = await signIn();
+
+      if (result.success) {
+        Alert.alert(
+          'Success',
+          'Successfully signed in with Google! You can now set up your admin features.',
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert(
+          'Sign-in Failed',
+          result.error || 'Failed to sign in with Google. Please try again.',
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        'An unexpected error occurred: ' + error.message,
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleGoogleSignOut = () => {
+    Alert.alert(
+      'Sign Out',
+      'This will sign you out and clear all admin setup data. Continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Sign Out',
+          style: 'destructive',
+          onPress: async () => {
+            const result = await signOut();
+            if (result.success) {
+              Alert.alert('Success', 'Signed out successfully');
+            } else {
+              Alert.alert('Error', result.error || 'Failed to sign out');
+            }
           }
         }
       ]
@@ -88,6 +151,71 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       <ScrollView style={styles.content}>
+        {/* Admin Setup (Google Authentication) */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Admin Setup</Text>
+          <Text style={styles.sectionDescription}>
+            Sign in with Google to enable admin features for team collaboration
+          </Text>
+
+          {!isAuthenticated ? (
+            <>
+              <TouchableOpacity
+                style={styles.googleSignInButton}
+                onPress={handleGoogleSignIn}
+                disabled={isSigningIn}
+              >
+                <Text style={styles.googleSignInButtonText}>
+                  {isSigningIn ? 'Signing in...' : 'Sign in with Google'}
+                </Text>
+              </TouchableOpacity>
+              <Text style={styles.adminNote}>
+                Required scopes: Drive API, Apps Script API
+              </Text>
+            </>
+          ) : (
+            <>
+              <View style={styles.adminInfoBox}>
+                <Text style={styles.adminInfoLabel}>Signed in as:</Text>
+                <Text style={styles.adminInfoValue}>
+                  {adminUserInfo?.user?.email || 'Unknown'}
+                </Text>
+              </View>
+
+              {isSetupComplete() ? (
+                <View style={styles.setupStatusBox}>
+                  <Text style={styles.setupStatusText}>✓ Admin setup complete</Text>
+                  <View style={styles.setupDetailsRow}>
+                    <Text style={styles.setupDetailLabel}>Folder ID:</Text>
+                    <Text style={styles.setupDetailValue} numberOfLines={1}>
+                      {folderId?.substring(0, 20)}...
+                    </Text>
+                  </View>
+                  <View style={styles.setupDetailsRow}>
+                    <Text style={styles.setupDetailLabel}>Script URL:</Text>
+                    <Text style={styles.setupDetailValue}>
+                      {scriptUrl ? '✓ Configured' : '✗ Not configured'}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.warningBox}>
+                  <Text style={styles.warningText}>
+                    ⚠️ Admin setup incomplete. Next steps: Create Drive folder and deploy Apps Script.
+                  </Text>
+                </View>
+              )}
+
+              <TouchableOpacity
+                style={styles.signOutButton}
+                onPress={handleGoogleSignOut}
+              >
+                <Text style={styles.signOutButtonText}>Sign Out</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
         {/* Display Settings */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Display Settings</Text>
@@ -490,5 +618,78 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT,
     fontWeight: '600',
     fontSize: 14
+  },
+  googleSignInButton: {
+    backgroundColor: '#4285F4',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    marginBottom: 8
+  },
+  googleSignInButtonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600'
+  },
+  adminNote: {
+    color: COLORS.GRAY,
+    fontSize: 12,
+    textAlign: 'center',
+    marginTop: 8
+  },
+  adminInfoBox: {
+    backgroundColor: '#F0F8FF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12
+  },
+  adminInfoLabel: {
+    color: COLORS.GRAY,
+    fontSize: 12,
+    marginBottom: 4
+  },
+  adminInfoValue: {
+    color: COLORS.TEXT,
+    fontSize: 14,
+    fontWeight: '600'
+  },
+  setupStatusBox: {
+    backgroundColor: '#E8F5E9',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12
+  },
+  setupStatusText: {
+    color: '#2E7D32',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 8
+  },
+  setupDetailsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 4
+  },
+  setupDetailLabel: {
+    color: COLORS.GRAY,
+    fontSize: 12
+  },
+  setupDetailValue: {
+    color: COLORS.TEXT,
+    fontSize: 12,
+    maxWidth: '60%'
+  },
+  signOutButton: {
+    backgroundColor: '#FFE6E6',
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center'
+  },
+  signOutButtonText: {
+    color: '#CC0000',
+    fontSize: 14,
+    fontWeight: '600'
   }
 });
