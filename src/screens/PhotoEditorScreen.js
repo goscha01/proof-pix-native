@@ -41,6 +41,9 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const templateScrollRef = useRef(null);
   const { getUnpairedBeforePhotos } = usePhotos();
   const { showLabels } = useSettings();
+  
+  // Debug: Log showLabels value
+  console.log('PhotoEditorScreen - showLabels:', showLabels);
   const templateTypeRef = useRef(templateType);
   const [originalBaseUris, setOriginalBaseUris] = useState({ stack: null, side: null });
   const [originalImageSize, setOriginalImageSize] = useState(null); // { width, height }
@@ -394,11 +397,10 @@ export default function PhotoEditorScreen({ route, navigation }) {
             style={styles.halfImage}
             resizeMode="cover"
           />
-          {showLabels && (
-            <View style={styles.label}>
-              <Text style={styles.labelText}>BEFORE</Text>
-            </View>
-          )}
+          {/* Always show BEFORE label */}
+          <View style={styles.label}>
+            <Text style={styles.labelText}>BEFORE</Text>
+          </View>
         </View>
 
         <View style={[styles.halfContainer, isStack && styles.topBorder, isSideBySide && styles.leftBorder]}>
@@ -407,11 +409,10 @@ export default function PhotoEditorScreen({ route, navigation }) {
             style={styles.halfImage}
             resizeMode="cover"
           />
-          {showLabels && (
-            <View style={styles.label}>
-              <Text style={styles.labelText}>AFTER</Text>
-            </View>
-          )}
+          {/* Always show AFTER label */}
+          <View style={styles.label}>
+            <Text style={styles.labelText}>AFTER</Text>
+          </View>
         </View>
       </View>
     );
@@ -508,7 +509,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
         disabled={saving}
       >
         {saving ? (
-          <ActivityIndicator color={COLORS.TEXT} />
+          <ActivityIndicator />
         ) : (
           <Text style={styles.shareButtonText}>Share</Text>
         )}

@@ -24,6 +24,7 @@ import { createAlbumName } from '../services/uploadService';
 import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import analyticsService from '../services/analyticsService';
+import RoomEditor from '../components/RoomEditor';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 60) / 2; // 2 columns with padding
@@ -49,8 +50,201 @@ export default function HomeScreen({ navigation }) {
   const { userName, location } = useSettings();
   const { uploadStatus, cancelUpload, cancelAllUploads } = useBackgroundUpload();
   const [newProjectVisible, setNewProjectVisible] = useState(false);
+  const [showRoomEditor, setShowRoomEditor] = useState(false);
+  const [contextMenuRoom, setContextMenuRoom] = useState(null);
+  const [showContextMenu, setShowContextMenu] = useState(false);
+  const [contextMenuPosition, setContextMenuPosition] = useState({ x: 0, y: 0 });
+  const [roomEditorMode, setRoomEditorMode] = useState('customize'); // 'customize' or 'add'
   const [newProjectName, setNewProjectName] = useState('');
   const [pendingCameraAfterCreate, setPendingCameraAfterCreate] = useState(false);
+
+  // Get rooms from settings (custom or default)
+  const { getRooms, customRooms, saveCustomRooms, resetCustomRooms } = useSettings();
+  
+  // Make rooms reactive to customRooms changes using useState and useEffect
+  const [rooms, setRooms] = useState(() => getRooms());
+  
+  useEffect(() => {
+    // console.log('HomeScreen: useEffect triggered, customRooms length:', customRooms?.length || 0);
+    const newRooms = getRooms();
+    // console.log('HomeScreen: useEffect updating rooms, customRooms:', customRooms?.map(r => r.name) || 'null', 'newRooms:', newRooms.map(r => r.name));
+    setRooms(newRooms);
+  }, [customRooms]);
+
+  // Debug logging
+  // useEffect(() => {
+  //   console.log('HomeScreen: rooms updated:', rooms.map(r => r.name));
+  // }, [rooms]);
+
+  // useEffect(() => {
+  //   console.log('HomeScreen: customRooms updated:', customRooms?.map(r => r.name) || 'null');
+  // }, [customRooms]);
+
+  const handleRoomLongPress = (room, event) => {
+    setContextMenuRoom(room);
+    const { pageX, pageY } = event.nativeEvent;
+    setContextMenuPosition({ x: pageX, y: pageY });
+    setShowContextMenu(true);
+  };
+
+  const handleAddFolder = () => {
+    setRoomEditorMode('add');
+    setShowRoomEditor(true);
+  };
+
+  const handleDuplicateFolder = async (room) => {
+    console.log('=== DUPLICATION STARTED ===');
+    console.log('Duplicating room:', room);
+    
+    // Generate duplicate name
+    const generateDuplicateName = (baseName, existingRooms) => {
+      // Extract base name without numbers (e.g., "Kitchen 2" -> "Kitchen")
+      const baseNameWithoutNumber = baseName.replace(/\s+\d+$/, '');
+      
+      // Find the highest number for this base name
+      let maxNumber = 1;
+      existingRooms.forEach(room => {
+        const match = room.name.match(new RegExp(`^${baseNameWithoutNumber}\\s+(\\d+)$`));
+        if (match) {
+          const number = parseInt(match[1], 10);
+          if (number > maxNumber) {
+            maxNumber = number;
+          }
+        }
+      });
+      
+      return `${baseNameWithoutNumber} ${maxNumber + 1}`;
+    };
+
+    // Create the duplicate immediately
+    const duplicateName = generateDuplicateName(room.name, rooms);
+    const newRoom = {
+      id: `room_${Date.now()}`,
+      name: duplicateName,
+      icon: room.icon
+    };
+    
+    // Find the base name to determine where to insert the duplicate
+    const baseNameWithoutNumber = room.name.replace(/\s+\d+$/, '');
+    
+    // Find the last room with the same base name to insert after it
+    let insertIndex = rooms.length; // Default to end
+    for (let i = rooms.length - 1; i >= 0; i--) {
+      const roomName = rooms[i].name;
+      if (roomName.startsWith(baseNameWithoutNumber)) {
+        insertIndex = i + 1;
+        break;
+      }
+    }
+    
+    const updatedRooms = [...rooms];
+    updatedRooms.splice(insertIndex, 0, newRoom);
+    
+    console.log('Duplicating room:', room.name, 'inserting at index:', insertIndex);
+    console.log('Updated rooms:', updatedRooms.map(r => r.name));
+    console.log('Updated rooms IDs:', updatedRooms.map(r => r.id));
+    
+    // Save the duplicate to custom rooms immediately
+    console.log('Calling saveCustomRooms with:', updatedRooms.length, 'rooms');
+    await saveCustomRooms(updatedRooms);
+    console.log('saveCustomRooms completed');
+    console.log('=== DUPLICATION COMPLETED ===');
+    
+    // Switch to the new duplicated room immediately
+    console.log('Switching to duplicated room:', newRoom.name);
+    setCurrentRoom(newRoom.id);
+    
+    // Open the room editor in edit mode for the new duplicate
+    setContextMenuRoom(newRoom);
+    setRoomEditorMode('edit');
+    setShowRoomEditor(true);
+  };
+
+  const handleDeleteFolder = (room) => {
+    // Check if it's a default room
+    const isDefaultRoom = ROOMS.some(defaultRoom => defaultRoom.id === room.id);
+    
+    if (isDefaultRoom) {
+      Alert.alert(
+        'Protected Folder',
+        'This is a default folder. Please go to Settings > Folder Customization and check "Allow deletion of default folders" to delete it.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Delete Folder',
+      `Are you sure you want to delete "${room.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Delete', 
+          style: 'destructive',
+          onPress: () => {
+            if (customRooms) {
+              const updatedRooms = customRooms.filter(r => r.id !== room.id);
+              
+              // Determine which room to switch to after deletion
+              const currentIndex = rooms.findIndex(r => r.id === room.id);
+              const isDeletingCurrentRoom = currentRoom.id === room.id;
+              let newCurrentRoom;
+              
+              console.log('Deleting room:', room.name, 'at index:', currentIndex, 'isCurrentRoom:', isDeletingCurrentRoom);
+              
+              if (updatedRooms.length > 0) {
+                if (isDeletingCurrentRoom) {
+                  // If deleting the current room, go to the room to the left (or last if deleting first)
+                  if (currentIndex > 0) {
+                    newCurrentRoom = updatedRooms[currentIndex - 1];
+                  } else {
+                    newCurrentRoom = updatedRooms[updatedRooms.length - 1];
+                  }
+                } else {
+                  // If not deleting current room, keep the current room
+                  newCurrentRoom = rooms.find(r => r.id === currentRoom.id);
+                }
+                
+                console.log('Switching to room:', newCurrentRoom?.name || 'none');
+                saveCustomRooms(updatedRooms);
+                if (newCurrentRoom) {
+                  setCurrentRoom(newCurrentRoom.id);
+                }
+              } else {
+                resetCustomRooms();
+                // Reset to first default room
+                setCurrentRoom(ROOMS[0].id);
+              }
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Force re-render when rooms change
+  useEffect(() => {
+    // This will trigger a re-render when rooms change
+  }, [rooms]);
+
+  // Force re-render when customRooms change
+  useEffect(() => {
+    // This will trigger a re-render when customRooms change
+  }, [customRooms]);
+
+  // Validate currentRoom when rooms change
+  useEffect(() => {
+    if (rooms && rooms.length > 0) {
+      const currentRoomExists = rooms.some(room => room.id === currentRoom);
+      if (!currentRoomExists) {
+        console.log('Current room not found in rooms, switching to first room:', rooms[0].id);
+        setCurrentRoom(rooms[0].id);
+      }
+    }
+  }, [rooms, currentRoom]);
+
+  // Note: Data reloading is handled by AppState listener in PhotoContext
+  // No need for useFocusEffect here to prevent infinite loops
 
   // Force re-render when photos change (e.g., after project deletion)
   useEffect(() => {
@@ -63,11 +257,17 @@ export default function HomeScreen({ navigation }) {
       const activeProjectExists = projects.some(p => p.id === activeProjectId);
       if (!activeProjectExists) {
         // Active project no longer exists, select the first available project
+        console.log('🔄 Active project no longer exists, selecting first available project');
         setActiveProject(projects[0].id);
       }
     } else if (projects.length > 0 && !activeProjectId) {
       // No active project but projects exist, select the first one
+      console.log('🔄 No active project but projects exist, selecting first project');
       setActiveProject(projects[0].id);
+    } else if (projects.length === 0 && activeProjectId) {
+      // No projects exist but activeProjectId is set, clear it
+      console.log('🔄 No projects exist but activeProjectId is set, clearing it');
+      setActiveProject(null);
     }
   }, [projects, activeProjectId]);
   const longPressTimer = useRef(null);
@@ -89,19 +289,24 @@ export default function HomeScreen({ navigation }) {
 
   // Get circular room order with current room in center
   const getCircularRooms = () => {
-    const currentIndex = ROOMS.findIndex(r => r.id === currentRoom);
+    const currentIndex = rooms.findIndex(r => r.id === currentRoom);
     const result = [];
     
     // Show 3 items before, current, and 3 items after (total 7 visible)
     for (let i = -3; i <= 3; i++) {
-      let index = (currentIndex + i + ROOMS.length) % ROOMS.length;
-      result.push({ ...ROOMS[index], offset: i });
+      let index = (currentIndex + i + rooms.length) % rooms.length;
+      result.push({ ...rooms[index], offset: i });
     }
     
     return result;
   };
 
   const circularRooms = getCircularRooms();
+
+  // Debug logging for circular rooms
+  // useEffect(() => {
+  //   console.log('HomeScreen: circularRooms updated:', circularRooms.map(r => r.name));
+  // }, [circularRooms]);
 
   // Update ref when currentRoom changes
   useEffect(() => {
@@ -282,33 +487,45 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  // PanResponder for room switching
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => {
-        isSwiping.current = false;
-        return false;
-      },
+  // PanResponder for room switching - recreate when rooms change
+  const panResponder = useMemo(() => {
+    // console.log('🔄 Room PanResponder recreated with rooms:', rooms.map(r => r.id));
+    return PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
         // Activate for horizontal swipes
         const isHorizontalSwipe = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 30;
         if (isHorizontalSwipe) {
           isSwiping.current = true;
+          return true; // Capture the gesture
         }
-        return isHorizontalSwipe;
+        return false;
+      },
+      onPanResponderGrant: () => {
+        // Gesture started
+        console.log('PanResponder: Gesture started');
       },
       onPanResponderRelease: (evt, gestureState) => {
         const swipeThreshold = 50;
-        const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
+        const currentIndex = rooms.findIndex(r => r.id === currentRoomRef.current);
+        
+        console.log('Swipe detected - currentRoom:', currentRoomRef.current, 'rooms:', rooms.map(r => r.id), 'currentIndex:', currentIndex);
+        
+        if (currentIndex === -1) {
+          console.log('ERROR: Current room not found in rooms array!');
+          return;
+        }
         
         if (gestureState.dx > swipeThreshold) {
           // Swipe right - go to previous room (circular)
-          const newIndex = currentIndex > 0 ? currentIndex - 1 : ROOMS.length - 1;
-          setCurrentRoom(ROOMS[newIndex].id);
+          const newIndex = currentIndex > 0 ? currentIndex - 1 : rooms.length - 1;
+          console.log('Swipe right - switching to:', rooms[newIndex].id);
+          setCurrentRoom(rooms[newIndex].id);
         } else if (gestureState.dx < -swipeThreshold) {
           // Swipe left - go to next room (circular)
-          const newIndex = currentIndex < ROOMS.length - 1 ? currentIndex + 1 : 0;
-          setCurrentRoom(ROOMS[newIndex].id);
+          const newIndex = currentIndex < rooms.length - 1 ? currentIndex + 1 : 0;
+          console.log('Swipe left - switching to:', rooms[newIndex].id);
+          setCurrentRoom(rooms[newIndex].id);
         }
         
         // Reset swipe flag after a short delay
@@ -316,8 +533,8 @@ export default function HomeScreen({ navigation }) {
           isSwiping.current = false;
         }, 100);
       }
-    })
-  ).current;
+    });
+  }, [rooms, currentRoomRef.current, setCurrentRoom]);
 
   // PanResponder for full screen swipe navigation
   const fullScreenPanResponder = useMemo(() => {
@@ -383,7 +600,7 @@ export default function HomeScreen({ navigation }) {
   }, [fullScreenPhoto, fullScreenPhotoSet, fullScreenPhotos.length, handleSwipeNavigation, handleLongPressEnd]);
 
   // Debug: Log when PanResponder is created
-  console.log('🔄 Full screen PanResponder created:', fullScreenPanResponder);
+  // console.log('🔄 Full screen PanResponder created:', fullScreenPanResponder);
 
   useEffect(() => {
     // No-op: projects come from context
@@ -517,6 +734,7 @@ export default function HomeScreen({ navigation }) {
               }
             ]}
             onPress={() => setCurrentRoom(room.id)}
+            onLongPress={(event) => handleRoomLongPress(room, event)}
           >
             <Text style={[styles.roomIcon, { fontSize: isActive ? 28 : 22 }]}>{room.icon}</Text>
             {isActive && (
@@ -540,8 +758,8 @@ export default function HomeScreen({ navigation }) {
     const combinedPhotos = getCombinedPhotos(currentRoom);
     const hasPhotos = beforePhotos.length > 0;
 
-    // If no photos, show centered take photo button
-    if (!hasPhotos) {
+    // If no photos OR no active project, show centered take photo button
+    if (!hasPhotos || !activeProjectId) {
       return (
         <View style={styles.emptyStateContainer}>
           <TouchableOpacity
@@ -560,9 +778,11 @@ export default function HomeScreen({ navigation }) {
             }}
           >
             <Text style={styles.addPhotoIcon}>
-              {ROOMS.find((r) => r.id === currentRoom)?.icon || '📷'}
+              {rooms.find((r) => r.id === currentRoom)?.icon || '📷'}
             </Text>
-            <Text style={styles.addPhotoText}>Take Photo</Text>
+            <Text style={styles.addPhotoText}>
+              {!activeProjectId ? 'Select Project' : 'Take Photo'}
+            </Text>
           </TouchableOpacity>
         </View>
       );
@@ -780,7 +1000,7 @@ export default function HomeScreen({ navigation }) {
         }}
       >
         <Text style={styles.addPhotoIcon}>
-          {ROOMS.find((r) => r.id === currentRoom)?.icon || '📷'}
+          {rooms.find((r) => r.id === currentRoom)?.icon || '📷'}
         </Text>
         <Text style={styles.addPhotoText}>Take Photo</Text>
       </TouchableOpacity>
@@ -926,7 +1146,7 @@ export default function HomeScreen({ navigation }) {
           <View style={styles.optionsModalContent}>
             <Text style={styles.optionsTitle}>Open Project</Text>
 
-            <View style={styles.projectList}>
+            <ScrollView style={styles.projectList} showsVerticalScrollIndicator={true}>
               {projects.length === 0 ? (
                 <Text style={styles.projectItemText}>No saved projects found</Text>
               ) : (
@@ -965,7 +1185,7 @@ export default function HomeScreen({ navigation }) {
                   );
                 })
               )}
-            </View>
+            </ScrollView>
 
             {isMultiSelectMode ? (
               <>
@@ -1080,6 +1300,78 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Custom Context Menu */}
+      <Modal visible={showContextMenu} transparent={true} animationType="fade">
+        <TouchableWithoutFeedback onPress={() => setShowContextMenu(false)}>
+          <View style={styles.contextMenuOverlay}>
+            <View style={[styles.contextMenu, { 
+              left: Math.min(contextMenuPosition.x, width - 200),
+              top: Math.max(contextMenuPosition.y - 100, 50)
+            }]}>
+              <TouchableOpacity
+                style={styles.contextMenuItem}
+                onPress={() => {
+                  setShowContextMenu(false);
+                  handleAddFolder();
+                }}
+              >
+                <Text style={styles.contextMenuIcon}>➕</Text>
+                <Text style={styles.contextMenuText}>Add Folder</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.contextMenuItem}
+                onPress={() => {
+                  setShowContextMenu(false);
+                  handleDuplicateFolder(contextMenuRoom);
+                }}
+              >
+                <Text style={styles.contextMenuIcon}>📋</Text>
+                <Text style={styles.contextMenuText}>Duplicate Folder</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.contextMenuItem, styles.contextMenuItemDanger]}
+                onPress={() => {
+                  setShowContextMenu(false);
+                  handleDeleteFolder(contextMenuRoom);
+                }}
+              >
+                <Text style={styles.contextMenuIcon}>🗑️</Text>
+                <Text style={[styles.contextMenuText, styles.contextMenuTextDanger]}>Delete Folder</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      <RoomEditor
+        visible={showRoomEditor}
+        mode={roomEditorMode}
+        onClose={() => {
+          setShowRoomEditor(false);
+          setContextMenuRoom(null);
+          setRoomEditorMode('customize');
+        }}
+        onSave={(rooms) => {
+          // console.log('HomeScreen: Received rooms from RoomEditor:', rooms);
+          saveCustomRooms(rooms);
+          
+          // If we were editing a specific room, stay on that room after saving
+          if (contextMenuRoom) {
+            // console.log('HomeScreen: Staying on edited room:', contextMenuRoom.name);
+            setCurrentRoom(contextMenuRoom.id);
+          }
+          
+          setShowRoomEditor(false);
+          setContextMenuRoom(null);
+          setRoomEditorMode('customize');
+        }}
+        initialRooms={customRooms}
+        editRoom={contextMenuRoom}
+        mode={roomEditorMode}
+      />
     </SafeAreaView>
   );
 }
@@ -1428,5 +1720,49 @@ const styles = StyleSheet.create({
   },
   actionPrimary: {
     backgroundColor: COLORS.PRIMARY
-  }
+  },
+  contextMenuOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  },
+  contextMenu: {
+    position: 'absolute',
+    backgroundColor: 'white',
+    borderRadius: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 4,
+    minWidth: 180,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  contextMenuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  contextMenuItemDanger: {
+    backgroundColor: 'rgba(255, 0, 0, 0.05)',
+  },
+  contextMenuIcon: {
+    fontSize: 18,
+    marginRight: 12,
+    width: 24,
+    textAlign: 'center',
+  },
+  contextMenuText: {
+    fontSize: 16,
+    color: COLORS.TEXT,
+    fontWeight: '500',
+  },
+  contextMenuTextDanger: {
+    color: '#FF4444',
+  },
 });

@@ -87,7 +87,10 @@ export default function CameraScreen({ route, navigation }) {
   const enlargedGalleryPhotoRef = useRef(enlargedGalleryPhoto);
   const isGalleryAnimatingRef = useRef(false);
   const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom, activeProjectId } = usePhotos();
-  const { showLabels } = useSettings();
+  const { showLabels, getRooms } = useSettings();
+  
+  // Get rooms from settings (custom or default)
+  const rooms = getRooms();
   const labelViewRef = useRef(null);
   // Hidden vertical side-by-side base renderer
   const sideBaseRef = useRef(null);
@@ -322,20 +325,20 @@ export default function CameraScreen({ route, navigation }) {
       },
       onPanResponderRelease: (evt, gestureState) => {
         const swipeThreshold = 50;
-        const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
+        const currentIndex = rooms.findIndex(r => r.id === currentRoomRef.current);
         let newRoomIndex;
         
         if (gestureState.dx > swipeThreshold) {
           // Swipe right - go to previous room (circular)
-          newRoomIndex = currentIndex > 0 ? currentIndex - 1 : ROOMS.length - 1;
+          newRoomIndex = currentIndex > 0 ? currentIndex - 1 : rooms.length - 1;
         } else if (gestureState.dx < -swipeThreshold) {
           // Swipe left - go to next room (circular)
-          newRoomIndex = currentIndex < ROOMS.length - 1 ? currentIndex + 1 : 0;
+          newRoomIndex = currentIndex < rooms.length - 1 ? currentIndex + 1 : 0;
         } else {
           return; // Not enough swipe distance
         }
 
-        const newRoom = ROOMS[newRoomIndex].id;
+        const newRoom = rooms[newRoomIndex].id;
         console.log('Switching to room:', newRoom);
         setRoom(newRoom);
         
@@ -351,7 +354,7 @@ export default function CameraScreen({ route, navigation }) {
             setSelectedBeforePhoto(null);
             Alert.alert(
               'No Before Photos',
-              `There are no before photos in ${ROOMS[newRoomIndex].name}. Please take a before photo first.`,
+              `There are no before photos in ${rooms[newRoomIndex].name}. Please take a before photo first.`,
               [{ text: 'OK' }]
             );
           }
@@ -409,12 +412,12 @@ export default function CameraScreen({ route, navigation }) {
         else if (Math.abs(dx) > Math.abs(dy)) {
           console.log('Combined: Horizontal swipe - switching room');
           const swipeThreshold = 50;
-          const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
+          const currentIndex = rooms.findIndex(r => r.id === currentRoomRef.current);
           
           if (dx > swipeThreshold) {
             // Swipe right - go to previous room (circular)
-            const newIndex = currentIndex > 0 ? currentIndex - 1 : ROOMS.length - 1;
-            const newRoom = ROOMS[newIndex].id;
+            const newIndex = currentIndex > 0 ? currentIndex - 1 : rooms.length - 1;
+            const newRoom = rooms[newIndex].id;
             setRoom(newRoom);
             if (mode === 'after') {
               const unpairedPhotos = getUnpairedBeforePhotos(newRoom);
@@ -426,8 +429,8 @@ export default function CameraScreen({ route, navigation }) {
             }
           } else if (dx < -swipeThreshold) {
             // Swipe left - go to next room (circular)
-            const newIndex = currentIndex < ROOMS.length - 1 ? currentIndex + 1 : 0;
-            const newRoom = ROOMS[newIndex].id;
+            const newIndex = currentIndex < rooms.length - 1 ? currentIndex + 1 : 0;
+            const newRoom = rooms[newIndex].id;
             setRoom(newRoom);
             if (mode === 'after') {
               const unpairedPhotos = getUnpairedBeforePhotos(newRoom);
@@ -602,12 +605,12 @@ export default function CameraScreen({ route, navigation }) {
               return;
             }
             console.log('Horizontal swipe with gallery - switching room');
-            const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
+            const currentIndex = rooms.findIndex(r => r.id === currentRoomRef.current);
             
             if (dx > 0) {
               // Swipe right - previous room
-              const newIndex = currentIndex > 0 ? currentIndex - 1 : ROOMS.length - 1;
-              const newRoom = ROOMS[newIndex].id;
+              const newIndex = currentIndex > 0 ? currentIndex - 1 : rooms.length - 1;
+              const newRoom = rooms[newIndex].id;
               setRoom(newRoom);
               if (mode === 'after') {
                 const beforePhotos = getBeforePhotos(newRoom);
@@ -617,15 +620,15 @@ export default function CameraScreen({ route, navigation }) {
                   setSelectedBeforePhoto(null);
                   Alert.alert(
                     'No Before Photos',
-                    `There are no before photos in ${ROOMS[newIndex].name}. Please take a before photo first.`,
+                    `There are no before photos in ${rooms[newIndex].name}. Please take a before photo first.`,
                     [{ text: 'OK' }]
                   );
                 }
               }
             } else {
               // Swipe left - next room
-              const newIndex = currentIndex < ROOMS.length - 1 ? currentIndex + 1 : 0;
-              const newRoom = ROOMS[newIndex].id;
+              const newIndex = currentIndex < rooms.length - 1 ? currentIndex + 1 : 0;
+              const newRoom = rooms[newIndex].id;
               setRoom(newRoom);
               if (mode === 'after') {
                 const beforePhotos = getBeforePhotos(newRoom);
@@ -635,7 +638,7 @@ export default function CameraScreen({ route, navigation }) {
                   setSelectedBeforePhoto(null);
                   Alert.alert(
                     'No Before Photos',
-                    `There are no before photos in ${ROOMS[newIndex].name}. Please take a before photo first.`,
+                    `There are no before photos in ${rooms[newIndex].name}. Please take a before photo first.`,
                     [{ text: 'OK' }]
                   );
                 }
@@ -713,12 +716,12 @@ export default function CameraScreen({ route, navigation }) {
           // Check for horizontal swipe (room switching, reduced threshold)
           if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) {
             console.log('Horizontal swipe - switching room');
-            const currentIndex = ROOMS.findIndex(r => r.id === currentRoomRef.current);
+            const currentIndex = rooms.findIndex(r => r.id === currentRoomRef.current);
             
             if (dx > 0) {
               // Swipe right - previous room
-              const newIndex = currentIndex > 0 ? currentIndex - 1 : ROOMS.length - 1;
-              const newRoom = ROOMS[newIndex].id;
+              const newIndex = currentIndex > 0 ? currentIndex - 1 : rooms.length - 1;
+              const newRoom = rooms[newIndex].id;
               setRoom(newRoom);
               if (mode === 'after') {
                 const beforePhotos = getBeforePhotos(newRoom);
@@ -728,7 +731,7 @@ export default function CameraScreen({ route, navigation }) {
                   setSelectedBeforePhoto(null);
                   Alert.alert(
                     'No Before Photos',
-                    `There are no before photos in ${ROOMS[newIndex].name}. Please take a before photo first.`,
+                    `There are no before photos in ${rooms[newIndex].name}. Please take a before photo first.`,
                     [{ text: 'OK' }]
                   );
                 }
@@ -737,8 +740,8 @@ export default function CameraScreen({ route, navigation }) {
               }
             } else {
               // Swipe left - next room
-              const newIndex = currentIndex < ROOMS.length - 1 ? currentIndex + 1 : 0;
-              const newRoom = ROOMS[newIndex].id;
+              const newIndex = currentIndex < rooms.length - 1 ? currentIndex + 1 : 0;
+              const newRoom = rooms[newIndex].id;
               setRoom(newRoom);
               if (mode === 'after') {
                 const beforePhotos = getBeforePhotos(newRoom);
@@ -748,7 +751,7 @@ export default function CameraScreen({ route, navigation }) {
                   setSelectedBeforePhoto(null);
                   Alert.alert(
                     'No Before Photos',
-                    `There are no before photos in ${ROOMS[newIndex].name}. Please take a before photo first.`,
+                    `There are no before photos in ${rooms[newIndex].name}. Please take a before photo first.`,
                     [{ text: 'OK' }]
                   );
                 }
@@ -1422,7 +1425,7 @@ export default function CameraScreen({ route, navigation }) {
 
   // Get current room info
   const getCurrentRoomInfo = () => {
-    return ROOMS.find(r => r.id === room) || ROOMS[0];
+    return rooms.find(r => r.id === room) || rooms[0];
   };
 
   // Check if orientation matches for after mode
@@ -2153,6 +2156,10 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedA(true)}
                 />
+                {/* BEFORE label */}
+                <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                  <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
+                </View>
               </View>
               <View style={{ width: '100%', height: sideBaseDims.bottomH }}>
                 <Image
@@ -2161,6 +2168,10 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedB(true)}
                 />
+                {/* AFTER label */}
+                <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                  <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
+                </View>
               </View>
             </View>
           ) : (
@@ -2173,6 +2184,10 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedA(true)}
                 />
+                {/* BEFORE label */}
+                <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                  <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
+                </View>
               </View>
               <View style={{ width: sideBaseDims.rightW, height: '100%' }}>
                 <Image
@@ -2181,6 +2196,10 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedB(true)}
                 />
+                {/* AFTER label */}
+                <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                  <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
+                </View>
               </View>
             </View>
           )}

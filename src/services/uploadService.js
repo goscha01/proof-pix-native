@@ -108,6 +108,9 @@ export async function uploadPhoto({
 }) {
   try {
     console.log(`📤 Starting upload: ${filename}, type: ${type}, format: ${format}`);
+    console.log(`📍 Location: ${location}`);
+    console.log(`🔗 Script URL: ${scriptUrl}`);
+    console.log(`📁 Folder ID: ${folderId}`);
 
     if (!scriptUrl || !folderId) {
       throw new Error('Missing Google Drive configuration. Please set Script URL and Folder ID in Settings.');
@@ -175,13 +178,14 @@ export async function uploadPhoto({
     }
 
     const result = await response.json();
-    console.log(`📋 Upload result:`, result);
+    console.log(`📋 Upload result for ${location}:`, result);
 
     if (result.success) {
-      console.log(`✅ Upload successful: ${filename}`);
+      console.log(`✅ Upload successful: ${filename} to ${location}`);
       return result;
     } else {
-      console.error(`❌ Upload failed: ${result.message}`);
+      console.error(`❌ Upload failed for ${location}: ${result.message}`);
+      console.error(`❌ Full error response:`, result);
       throw new Error(result.message || 'Upload failed');
     }
   } catch (error) {
@@ -189,9 +193,17 @@ export async function uploadPhoto({
     const message = (error && error.message) || '';
     const isAbort = `${name} ${message}`.toLowerCase().includes('abort');
     if (isAbort) {
-      console.warn(`⏹️ Upload aborted: ${filename}`);
+      console.warn(`⏹️ Upload aborted: ${filename} for ${location}`);
     } else {
-      console.error(`❌ Upload error for ${filename}:`, error);
+      console.error(`❌ Upload error for ${filename} to ${location}:`, error);
+      console.error(`❌ Error details:`, {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        location,
+        scriptUrl,
+        folderId
+      });
     }
     throw error;
   }

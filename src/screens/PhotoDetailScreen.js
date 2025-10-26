@@ -99,7 +99,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
         disabled={sharing}
       >
         {sharing ? (
-          <ActivityIndicator color={COLORS.TEXT} />
+          <ActivityIndicator />
         ) : (
           <Text style={styles.shareButtonText}>Share</Text>
         )}

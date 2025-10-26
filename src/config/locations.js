@@ -3,6 +3,8 @@
  * Maps location IDs to Google Drive settings from environment variables
  */
 
+import Constants from 'expo-constants';
+
 // Location definitions matching the original JS app
 export const LOCATIONS = [
   { id: 'tampa', name: 'Tampa', key: 'LOCATION_A' },
@@ -17,6 +19,7 @@ export const LOCATIONS = [
  * @returns {Object} - { scriptUrl: string, folderId: string }
  */
 export function getLocationConfig(locationId) {
+  // console.log(`🔍 Getting config for location: ${locationId}`);
   const location = LOCATIONS.find(loc => loc.id === locationId);
 
   if (!location) {
@@ -24,14 +27,42 @@ export function getLocationConfig(locationId) {
     return getLocationConfig('tampa');
   }
 
-  const scriptUrl = process.env[`EXPO_PUBLIC_${location.key}_SCRIPT_URL`];
-  const folderId = process.env[`EXPO_PUBLIC_${location.key}_FOLDER_ID`];
+  // Get environment variables from app config
+  const config = Constants.expoConfig?.extra || {};
+  // console.log(`📋 Available config keys:`, Object.keys(config));
+  
+  let scriptUrl, folderId;
+  
+  switch (location.key) {
+    case 'LOCATION_A':
+      scriptUrl = config.locationAScriptUrl;
+      folderId = config.locationAFolderId;
+      break;
+    case 'LOCATION_B':
+      scriptUrl = config.locationBScriptUrl;
+      folderId = config.locationBFolderId;
+      break;
+    case 'LOCATION_C':
+      scriptUrl = config.locationCScriptUrl;
+      folderId = config.locationCFolderId;
+      break;
+    case 'LOCATION_D':
+      scriptUrl = config.locationDScriptUrl;
+      folderId = config.locationDFolderId;
+      break;
+    default:
+      console.error(`Unknown location key: ${location.key}`);
+      return { scriptUrl: '', folderId: '' };
+  }
+
+  // console.log(`📊 Config for ${location.name}:`, { scriptUrl, folderId });
 
   if (!scriptUrl || !folderId) {
-    console.error(`Missing environment variables for ${location.name}`);
+    console.error(`Missing environment variables for ${location.name}:`, { scriptUrl, folderId });
     return { scriptUrl: '', folderId: '' };
   }
 
+  // console.log(`✅ Config loaded successfully for ${location.name}`);
   return { scriptUrl, folderId };
 }
 

@@ -1,7 +1,8 @@
-import React, { createContext, useState, useContext, useEffect } from 'react';
+import React, { createContext, useState, useContext, useEffect, useCallback } from 'react';
+import { AppState } from 'react-native';
 import { loadPhotosMetadata, savePhotosMetadata, deletePhotoFromDevice, loadProjects, saveProjects, createProject as storageCreateProject, deleteProjectEntry, loadActiveProjectId, saveActiveProjectId, deleteAssetsByFilenames, deleteAssetsByPrefixes, deleteProjectAssets, getAssetIdMap, deleteAssetsBatch } from '../services/storage';
 import * as FileSystem from 'expo-file-system/legacy';
-import { PHOTO_MODES } from '../constants/rooms';
+import { PHOTO_MODES, ROOMS } from '../constants/rooms';
 
 const PhotoContext = createContext();
 
@@ -21,6 +22,7 @@ export const PhotoProvider = ({ children }) => {
   const [activeProjectId, setActiveProjectId] = useState(null);
 
   // Load photos on mount
+  // Load data on app start
   useEffect(() => {
     (async () => {
       await loadPhotos();
@@ -28,6 +30,22 @@ export const PhotoProvider = ({ children }) => {
       const savedActive = await loadActiveProjectId();
       if (savedActive) setActiveProjectId(savedActive);
     })();
+  }, []);
+
+  // Reload data when app becomes active (returns from background)
+  useEffect(() => {
+    const handleAppStateChange = (nextAppState) => {
+      if (nextAppState === 'active') {
+        console.log('🔄 App became active, reloading data...');
+        (async () => {
+          await loadPhotos();
+          await loadProjectsList();
+        })();
+      }
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription?.remove();
   }, []);
 
   // Reassign photo names sequentially per project and room
@@ -68,8 +86,8 @@ export const PhotoProvider = ({ children }) => {
       });
     });
 
-    console.log('nameMap:', nameMap);
-    console.log('nameToBeforeId:', nameToBeforeId);
+    // console.log('nameMap:', nameMap);
+    // console.log('nameToBeforeId:', nameToBeforeId);
 
     // Reassign names: before photos get sequential names, after/combined photos use their before photo's name
     const updatedPhotos = photoList.map(photo => {
@@ -81,7 +99,7 @@ export const PhotoProvider = ({ children }) => {
       } else if (photo.mode === PHOTO_MODES.AFTER && photo.beforePhotoId) {
         // After photo uses the name of its paired before photo
         const newName = nameMap[photo.beforePhotoId] || photo.name;
-        console.log('After photo old name:', photo.name, '-> new name:', newName);
+        // console.log('After photo old name:', photo.name, '-> new name:', newName);
         return {
           ...photo,
           name: newName
@@ -91,7 +109,7 @@ export const PhotoProvider = ({ children }) => {
         // Find the before photo ID by the combined photo's current name
         const beforeId = nameToBeforeId[photo.name];
         const newName = nameMap[beforeId] || photo.name;
-        console.log('Combined photo old name:', photo.name, 'beforeId:', beforeId, '-> new name:', newName);
+        // console.log('Combined photo old name:', photo.name, 'beforeId:', beforeId, '-> new name:', newName);
         return {
           ...photo,
           name: newName
@@ -258,6 +276,10 @@ export const PhotoProvider = ({ children }) => {
     })();
     const project = await storageCreateProject(unique);
     setProjects(prev => [project, ...prev]);
+    
+    // Reset custom rooms to default when new project is created
+    console.log('New project created, resetting custom rooms to default');
+    
     // Auto-assign only unassigned photos to the new project
     const unassigned = photos.filter(p => !p.projectId);
     if (unassigned.length > 0) {
@@ -377,7 +399,12 @@ export const PhotoProvider = ({ children }) => {
     getAfterPhotos,
     getCombinedPhotos,
     getUnpairedBeforePhotos,
-    refreshPhotos: loadPhotos
+    refreshPhotos: loadPhotos,
+    refreshAllData: useCallback(async () => {
+      console.log('🔄 Manual refresh all data triggered');
+      await loadPhotos();
+      await loadProjectsList();
+    }, [])
   };
 
   return <PhotoContext.Provider value={value}>{children}</PhotoContext.Provider>;

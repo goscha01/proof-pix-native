@@ -136,7 +136,7 @@ export default function FirstLoadScreen({ navigation }) {
 
         <View style={styles.logoContainer}>
           <Image
-            source={require('../../assets/PP_logo.png')}
+            source={require('../../assets/PP_logo_app.png')}
             style={styles.logo}
             resizeMode="contain"
           />
