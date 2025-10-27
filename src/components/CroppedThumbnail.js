@@ -7,6 +7,7 @@ export const CroppedThumbnail = ({ imageUri, aspectRatio = '4:3', orientation = 
     <View style={[styles.thumbnailContainer, { width: size, height: size }]}>
       {/* Full image centered with flexbox */}
       <Image 
+        key={imageUri}
         source={{ uri: imageUri }} 
         style={{ width: size, height: size }} 
         resizeMode="contain" 

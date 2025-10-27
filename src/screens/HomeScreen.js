@@ -14,6 +14,7 @@ import {
   TextInput
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { usePhotos } from '../context/PhotoContext';
 import { ROOMS, COLORS, PHOTO_MODES } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
@@ -57,6 +58,7 @@ export default function HomeScreen({ navigation }) {
   const [roomEditorMode, setRoomEditorMode] = useState('customize'); // 'customize' or 'add'
   const [newProjectName, setNewProjectName] = useState('');
   const [pendingCameraAfterCreate, setPendingCameraAfterCreate] = useState(false);
+  const [combinedBaseUris, setCombinedBaseUris] = useState({}); // Cache for combined base image URIs
 
   // Get rooms from settings (custom or default)
   const { getRooms, customRooms, saveCustomRooms, resetCustomRooms } = useSettings();
@@ -286,6 +288,151 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     // This will trigger a re-render when photos change
   }, [photos]);
+
+  // Load combined base images for thumbnails (efficiently)
+  useEffect(() => {
+    let cancelled = false;
+    
+    (async () => {
+      try {
+        const dir = FileSystem.documentDirectory;
+        if (!dir || cancelled) return;
+
+        const beforePhotos = getBeforePhotos(currentRoom);
+        const afterPhotos = getAfterPhotos(currentRoom);
+        const uriMap = {};
+
+        // Read directory once
+        const entries = await FileSystem.readDirectoryAsync(dir);
+        if (cancelled) return;
+        
+        for (const beforePhoto of beforePhotos) {
+          const afterPhoto = afterPhotos.find(p => p.beforePhotoId === beforePhoto.id);
+          if (!afterPhoto) continue;
+
+          const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
+          const projectId = beforePhoto.projectId;
+          const projectIdSuffix = projectId ? `_P${projectId}` : '';
+          
+          const extractTimestamp = (filename) => {
+            const match = filename.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+            return match ? parseInt(match[1], 10) : 0;
+          };
+
+          // Find newest combined base images
+          const prefixes = [
+            `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`,
+            `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`
+          ];
+          
+          let newestUri = null;
+          let newestTs = -1;
+          
+          for (const prefix of prefixes) {
+            const matches = entries.filter(name => {
+              if (!name.startsWith(prefix)) return false;
+              if (projectId && !name.includes(projectIdSuffix)) return false;
+              return true;
+            });
+            
+            for (const filename of matches) {
+              const ts = extractTimestamp(filename);
+              if (ts > newestTs) {
+                newestTs = ts;
+                newestUri = `${dir}${filename}`;
+              }
+            }
+          }
+          
+          if (newestUri) {
+            uriMap[beforePhoto.name] = newestUri;
+          }
+        }
+        
+        if (!cancelled) {
+          setCombinedBaseUris(uriMap);
+        }
+      } catch (e) {
+        console.error('Error loading combined base images:', e);
+      }
+    })();
+    
+    return () => { cancelled = true; };
+  }, [photos.length, currentRoom]);
+
+  // Also reload when screen comes into focus (debounced to prevent freezes)
+  useFocusEffect(
+    React.useCallback(() => {
+      let cancelled = false;
+      const timeoutId = setTimeout(() => {
+        (async () => {
+          try {
+            const dir = FileSystem.documentDirectory;
+            if (!dir || cancelled) return;
+
+            const beforePhotos = getBeforePhotos(currentRoom);
+            const afterPhotos = getAfterPhotos(currentRoom);
+            const uriMap = {};
+
+            const entries = await FileSystem.readDirectoryAsync(dir);
+            
+            for (const beforePhoto of beforePhotos) {
+              const afterPhoto = afterPhotos.find(p => p.beforePhotoId === beforePhoto.id);
+              if (!afterPhoto || cancelled) continue;
+
+              const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
+              const projectId = beforePhoto.projectId;
+              const projectIdSuffix = projectId ? `_P${projectId}` : '';
+              
+              const extractTimestamp = (filename) => {
+                const match = filename.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+                return match ? parseInt(match[1], 10) : 0;
+              };
+
+              const prefixes = [
+                `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`,
+                `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`
+              ];
+              
+              let newestUri = null;
+              let newestTs = -1;
+              
+              for (const prefix of prefixes) {
+                const matches = entries.filter(name => {
+                  if (!name.startsWith(prefix)) return false;
+                  if (projectId && !name.includes(projectIdSuffix)) return false;
+                  return true;
+                });
+                
+                for (const filename of matches) {
+                  const ts = extractTimestamp(filename);
+                  if (ts > newestTs) {
+                    newestTs = ts;
+                    newestUri = `${dir}${filename}`;
+                  }
+                }
+              }
+              
+              if (newestUri) {
+                uriMap[beforePhoto.name] = newestUri;
+              }
+            }
+            
+            if (!cancelled) {
+              setCombinedBaseUris(uriMap);
+            }
+          } catch (e) {
+            console.error('Error loading combined base images:', e);
+          }
+        })();
+      }, 600); // Long debounce to avoid interfering with other screens
+      
+      return () => {
+        cancelled = true;
+        clearTimeout(timeoutId);
+      };
+    }, [currentRoom, getBeforePhotos, getAfterPhotos])
+  );
 
   // Get circular room order with current room in center
   const getCircularRooms = () => {
@@ -800,11 +947,14 @@ export default function HomeScreen({ navigation }) {
           (p) => p.name === beforePhoto.name
         );
 
-        if (combinedPhoto) {
+        // Use dynamic base image URI if available, fallback to combined photo URI
+        const thumbnailUri = combinedBaseUris[beforePhoto.name] || combinedPhoto?.uri;
+
+        if (thumbnailUri) {
           // Show the combined image - tap to retake after photo
           gridItems.push(
             <TouchableOpacity
-              key={combinedPhoto.id}
+              key={beforePhoto.id}
               style={styles.photoItem}
               delayPressIn={50}
               onPress={() => {
@@ -847,9 +997,9 @@ export default function HomeScreen({ navigation }) {
               }}
               onPressIn={() => handleLongPressStart(combinedPhoto)}
               onPressOut={handleLongPressEnd}
-            >
+              >
               <CroppedThumbnail
-                imageUri={combinedPhoto.uri}
+                imageUri={thumbnailUri}
                 aspectRatio={beforePhoto.aspectRatio || '4:3'}
                 orientation={beforePhoto.orientation || 'portrait'}
                 size={PHOTO_SIZE}
