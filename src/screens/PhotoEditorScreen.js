@@ -17,6 +17,7 @@ import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
 import { COLORS, TEMPLATE_TYPES, TEMPLATE_CONFIGS } from '../constants/rooms';
+import PhotoLabel from '../components/PhotoLabel';
 
 export default function PhotoEditorScreen({ route, navigation }) {
   const { beforePhoto, afterPhoto } = route.params;
@@ -487,22 +488,14 @@ export default function PhotoEditorScreen({ route, navigation }) {
               {templateType === 'original-stack' ? (
                 // Stacked layout: BEFORE on top, AFTER on bottom
                 <>
-                  <View style={styles.label}>
-                    <Text style={styles.labelText}>BEFORE</Text>
-                  </View>
-                  <View style={[styles.label, { top: 'auto', bottom: 10 }]}>
-                    <Text style={styles.labelText}>AFTER</Text>
-                  </View>
+                  <PhotoLabel label="BEFORE" />
+                  <PhotoLabel label="AFTER" style={{ top: 'auto', bottom: 10 }} />
                 </>
               ) : (
                 // Side-by-side layout: BEFORE on left, AFTER on right
                 <>
-                  <View style={styles.label}>
-                    <Text style={styles.labelText}>BEFORE</Text>
-                  </View>
-                  <View style={[styles.label, { left: 'auto', right: 10 }]}>
-                    <Text style={styles.labelText}>AFTER</Text>
-                  </View>
+                  <PhotoLabel label="BEFORE" />
+                  <PhotoLabel label="AFTER" style={{ left: 'auto', right: 10 }} />
                 </>
               )}
             </>
@@ -568,9 +561,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
           />
           {/* Show BEFORE label only if showLabels is true */}
           {showLabels && (
-            <View style={styles.label}>
-              <Text style={styles.labelText}>BEFORE</Text>
-            </View>
+            <PhotoLabel label="BEFORE" />
           )}
         </View>
 
@@ -602,9 +593,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
           />
           {/* Show AFTER label only if showLabels is true */}
           {showLabels && (
-            <View style={styles.label}>
-              <Text style={styles.labelText}>AFTER</Text>
-            </View>
+            <PhotoLabel label="AFTER" />
           )}
         </View>
       </View>
@@ -818,20 +807,6 @@ const styles = StyleSheet.create({
   halfImage: {
     width: '100%',
     height: '100%'
-  },
-  label: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: COLORS.PRIMARY,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6
-  },
-  labelText: {
-    color: COLORS.TEXT,
-    fontSize: 14,
-    fontWeight: 'bold'
   },
   templateSelector: {
     paddingHorizontal: 20,

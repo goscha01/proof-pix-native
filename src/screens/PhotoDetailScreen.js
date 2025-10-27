@@ -16,6 +16,7 @@ import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { COLORS, PHOTO_MODES } from '../constants/rooms';
 import * as FileSystem from 'expo-file-system/legacy';
+import PhotoLabel from '../components/PhotoLabel';
 
 const { width, height } = Dimensions.get('window');
 
@@ -169,8 +170,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
       // Position label 10px from the top-left of the actual image display area (matching combined photos)
       return {
         top: bounds.offsetY + 10,
-        left: bounds.offsetX + 10,
-        position: 'absolute'
+        left: bounds.offsetX + 10
       };
     };
 
@@ -198,11 +198,10 @@ export default function PhotoDetailScreen({ route, navigation }) {
         />
         {/* Show label overlay for before/after photos if showLabels is true */}
         {showLabels && photo.mode && (
-          <View style={[styles.photoLabel, getLabelStyle()]}>
-            <Text style={styles.photoLabelText}>
-              {photo.mode.toUpperCase()}
-            </Text>
-          </View>
+          <PhotoLabel 
+            label={photo.mode.toUpperCase()} 
+            style={getLabelStyle()} 
+          />
         )}
       </View>
     );
@@ -257,30 +256,28 @@ export default function PhotoDetailScreen({ route, navigation }) {
             resizeMode="cover"
           />
           {(() => {
-            // Scale the label to match the visual size on screen
-            // The capture view is max 2000px, screen is typically ~400px wide
-            // Scale factor: capture width / screen width
-            const scaleFactor = captureDimensions.captureWidth / width;
-            console.log('📏 Label scale factor:', { captureWidth: captureDimensions.captureWidth, screenWidth: width, scaleFactor });
+            // Use a consistent scale factor to match the "correct" label size from landscape photos
+            // Landscape photos (1920px wide) have a scaleFactor of ~5.09 which looks correct
+            // Use 1920 as reference for all orientations to maintain consistent label size
+            const referenceWidth = 1920; // Landscape photo width reference
+            const screenWidth = width;
+            const scaleFactor = referenceWidth / screenWidth;
+            console.log('📏 Label scale factor (1920 reference):', { referenceWidth, screenWidth, scaleFactor });
             
             return (
-              <View style={{
-                position: 'absolute',
-                top: 10 * scaleFactor,
-                left: 10 * scaleFactor,
-                backgroundColor: COLORS.PRIMARY,
-                paddingHorizontal: 12 * scaleFactor,
-                paddingVertical: 6 * scaleFactor,
-                borderRadius: 6 * scaleFactor
-              }}>
-                <Text style={{ 
-                  color: COLORS.TEXT, 
-                  fontSize: 14 * scaleFactor, 
-                  fontWeight: 'bold' 
-                }}>
-                  {photo.mode.toUpperCase()}
-                </Text>
-              </View>
+              <PhotoLabel
+                label={photo.mode.toUpperCase()}
+                style={{
+                  top: 10 * scaleFactor,
+                  left: 10 * scaleFactor,
+                  paddingHorizontal: 12 * scaleFactor,
+                  paddingVertical: 6 * scaleFactor,
+                  borderRadius: 6 * scaleFactor
+                }}
+                textStyle={{
+                  fontSize: 14 * scaleFactor
+                }}
+              />
             );
           })()}
         </View>
@@ -373,16 +370,5 @@ const styles = StyleSheet.create({
     color: COLORS.PRIMARY,
     fontSize: 12,
     fontWeight: '600'
-  },
-  photoLabel: {
-    backgroundColor: COLORS.PRIMARY,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6
-  },
-  photoLabelText: {
-    color: COLORS.TEXT,
-    fontSize: 14,
-    fontWeight: 'bold'
   },
 });

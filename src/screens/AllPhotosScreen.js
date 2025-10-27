@@ -22,6 +22,7 @@ import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { COLORS, PHOTO_MODES, ROOMS, TEMPLATE_CONFIGS, TEMPLATE_TYPES } from '../constants/rooms';
 import { CroppedThumbnail } from '../components/CroppedThumbnail';
+import PhotoLabel from '../components/PhotoLabel';
 import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
 import { getLocationConfig } from '../config/locations';
 import { captureRef } from 'react-native-view-shot';
@@ -942,11 +943,7 @@ export default function AllPhotosScreen({ navigation, route }) {
             />
             {/* Show label for individual before/after photos if showLabels is true */}
             {showLabels && fullScreenPhoto.mode && (
-              <View style={styles.fullScreenIndividualLabel}>
-                <Text style={styles.fullScreenIndividualLabelText}>
-                  {fullScreenPhoto.mode.toUpperCase()}
-                </Text>
-              </View>
+              <PhotoLabel label={fullScreenPhoto.mode.toUpperCase()} />
             )}
             <TouchableOpacity
               style={styles.shareButton}
@@ -1006,9 +1003,7 @@ export default function AllPhotosScreen({ navigation, route }) {
                 />
                 {/* Show BEFORE label only if showLabels is true */}
                 {showLabels && (
-                  <View style={styles.fullScreenLabel}>
-                    <Text style={styles.fullScreenLabelText}>BEFORE</Text>
-                  </View>
+                  <PhotoLabel label="BEFORE" />
                 )}
               </View>
               <View style={styles.fullScreenHalf}>
@@ -1041,9 +1036,7 @@ export default function AllPhotosScreen({ navigation, route }) {
                 />
                 {/* Show AFTER label only if showLabels is true */}
                 {showLabels && (
-                  <View style={styles.fullScreenLabel}>
-                    <Text style={styles.fullScreenLabelText}>AFTER</Text>
-                  </View>
+                  <PhotoLabel label="AFTER" />
                 )}
               </View>
             </View>
@@ -1101,9 +1094,7 @@ export default function AllPhotosScreen({ navigation, route }) {
                       resizeMode="cover"
                     />
                     {showLabels && (
-                      <View style={styles.renderLabel}>
-                        <Text style={styles.renderLabelText}>BEFORE</Text>
-                      </View>
+                      <PhotoLabel label="BEFORE" />
                     )}
                   </View>
                   <View style={styles.renderHalf}>
@@ -1113,9 +1104,7 @@ export default function AllPhotosScreen({ navigation, route }) {
                       resizeMode="cover"
                     />
                     {showLabels && (
-                      <View style={styles.renderLabel}>
-                        <Text style={styles.renderLabelText}>AFTER</Text>
-                      </View>
+                      <PhotoLabel label="AFTER" />
                     )}
                   </View>
                 </View>
@@ -1757,16 +1746,16 @@ const styles = StyleSheet.create({
   },
   fullScreenIndividualLabel: {
     position: 'absolute',
-    top: 20,
-    left: 20,
+    top: 10,
+    left: 10,
     backgroundColor: COLORS.PRIMARY,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6
   },
   fullScreenIndividualLabelText: {
     color: COLORS.TEXT,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold'
   },
   uploadModalContainer: {
@@ -1827,20 +1816,6 @@ const styles = StyleSheet.create({
   renderImage: {
     width: '100%',
     height: '100%'
-  },
-  renderLabel: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    backgroundColor: COLORS.PRIMARY,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8
-  },
-  renderLabelText: {
-    color: COLORS.TEXT,
-    fontSize: 14,
-    fontWeight: 'bold'
   },
   // Options modal styles
   optionsModalOverlay: {

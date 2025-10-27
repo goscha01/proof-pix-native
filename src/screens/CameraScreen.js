@@ -22,6 +22,7 @@ import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
 import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS } from '../constants/rooms';
 import analyticsService from '../services/analyticsService';
+import PhotoLabel from '../components/PhotoLabel';
 
 const initialDimensions = Dimensions.get('window');
 const initialWidth = initialDimensions.width;
@@ -2134,9 +2135,35 @@ export default function CameraScreen({ route, navigation }) {
           style={styles.hiddenLabelImage}
           resizeMode="cover"
         />
-        <View style={styles.hiddenPhotoLabel}>
-          <Text style={styles.hiddenPhotoLabelText}>{tempPhotoLabel}</Text>
-          </View>
+        {/* Calculate scale factor for label to match standard size
+            Camera photos are typically 1920x1080 (portrait) or 1080x1920 (landscape)
+            Scale factor needed to make label appear the same size as on screen photos
+        */}
+        {(() => {
+          // Use the same consistent scale factor as PhotoDetailScreen
+          // Reference width: 1920px (landscape photo width for consistent scaling)
+          const referenceWidth = 1920;
+          const screenWidth = Dimensions.get('window').width;
+          const scaleFactor = referenceWidth / screenWidth;
+          
+          console.log('📏 Camera label scale factor (1920 reference):', { referenceWidth, screenWidth, scaleFactor });
+          
+          return (
+            <PhotoLabel
+              label={tempPhotoLabel}
+              style={{
+                top: 10 * scaleFactor,
+                left: 10 * scaleFactor,
+                paddingHorizontal: 12 * scaleFactor,
+                paddingVertical: 6 * scaleFactor,
+                borderRadius: 6 * scaleFactor
+              }}
+              textStyle={{
+                fontSize: 14 * scaleFactor
+              }}
+            />
+          );
+        })()}
         </View>
       );
   };
@@ -3031,18 +3058,4 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%'
   },
-  hiddenPhotoLabel: {
-    position: 'absolute',
-    top: 20,
-    left: 20,
-    backgroundColor: COLORS.PRIMARY,
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 12
-  },
-  hiddenPhotoLabelText: {
-    color: COLORS.TEXT,
-    fontSize: 24,
-    fontWeight: 'bold'
-  }
 });
