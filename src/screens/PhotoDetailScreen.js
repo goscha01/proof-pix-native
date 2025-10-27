@@ -109,6 +109,17 @@ export default function PhotoDetailScreen({ route, navigation }) {
       } else if (result.action === Share.dismissedAction) {
         console.log('Share dialog dismissed');
       }
+      
+      // Clean up temporary file after sharing
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(tempUri);
+        if (fileInfo.exists) {
+          await FileSystem.deleteAsync(tempUri, { idempotent: true });
+          console.log('🧹 Cleaned up temporary file');
+        }
+      } catch (cleanupError) {
+        console.warn('Could not clean up temporary file:', cleanupError);
+      }
     } catch (error) {
       console.error('Error sharing photo:', error);
       Alert.alert('Error', 'Failed to share photo');

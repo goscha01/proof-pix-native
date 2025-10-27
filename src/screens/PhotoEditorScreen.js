@@ -353,9 +353,10 @@ export default function PhotoEditorScreen({ route, navigation }) {
         quality: 0.9
       });
 
-      // Create a temporary file for sharing
+      // Copy to cache directory (temporary, not permanent storage)
       const tempFileName = `${beforePhoto.room}_${beforePhoto.name}_COMBINED_${templateType}_${Date.now()}.jpg`;
-      const tempUri = await savePhotoToDevice(uri, tempFileName);
+      const tempUri = `${FileSystem.cacheDirectory}${tempFileName}`;
+      await FileSystem.copyAsync({ from: uri, to: tempUri });
 
       // Share the image
       const shareOptions = {
@@ -371,6 +372,17 @@ export default function PhotoEditorScreen({ route, navigation }) {
         console.log('Photo shared successfully');
       } else if (result.action === Share.dismissedAction) {
         console.log('Share dialog dismissed');
+      }
+      
+      // Clean up temporary file after sharing
+      try {
+        const fileInfo = await FileSystem.getInfoAsync(tempUri);
+        if (fileInfo.exists) {
+          await FileSystem.deleteAsync(tempUri, { idempotent: true });
+          console.log('🧹 Cleaned up temporary file');
+        }
+      } catch (cleanupError) {
+        console.warn('Could not clean up temporary file:', cleanupError);
       }
     } catch (error) {
       console.error('Error sharing combined photo:', error);
@@ -818,7 +830,7 @@ const styles = StyleSheet.create({
   },
   labelText: {
     color: COLORS.TEXT,
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: 'bold'
   },
   templateSelector: {
