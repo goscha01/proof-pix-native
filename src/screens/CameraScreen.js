@@ -1517,6 +1517,7 @@ export default function CameraScreen({ route, navigation }) {
           ref={cameraRef}
           style={styles.camera}
           facing={facing}
+          zoom={0}
         />
         
         {/* Before photo overlay (for after mode) */}
@@ -1540,6 +1541,7 @@ export default function CameraScreen({ route, navigation }) {
                 ref={cameraRef}
                 style={styles.camera}
                 facing={facing}
+                zoom={0}
               />
               
               {/* Before photo overlay (for after mode) */}
