@@ -397,10 +397,12 @@ export default function PhotoEditorScreen({ route, navigation }) {
             style={styles.halfImage}
             resizeMode="cover"
           />
-          {/* Always show BEFORE label */}
-          <View style={styles.label}>
-            <Text style={styles.labelText}>BEFORE</Text>
-          </View>
+          {/* Show BEFORE label only if showLabels is true */}
+          {showLabels && (
+            <View style={styles.label}>
+              <Text style={styles.labelText}>BEFORE</Text>
+            </View>
+          )}
         </View>
 
         <View style={[styles.halfContainer, isStack && styles.topBorder, isSideBySide && styles.leftBorder]}>
@@ -409,10 +411,12 @@ export default function PhotoEditorScreen({ route, navigation }) {
             style={styles.halfImage}
             resizeMode="cover"
           />
-          {/* Always show AFTER label */}
-          <View style={styles.label}>
-            <Text style={styles.labelText}>AFTER</Text>
-          </View>
+          {/* Show AFTER label only if showLabels is true */}
+          {showLabels && (
+            <View style={styles.label}>
+              <Text style={styles.labelText}>AFTER</Text>
+            </View>
+          )}
         </View>
       </View>
     );
