@@ -1649,10 +1649,14 @@ export default function CameraScreen({ route, navigation }) {
               <TouchableOpacity
                     style={[
                       styles.thumbnailViewerContainer,
-                      photoOrientation === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
+                      cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
                     ]}
                 activeOpacity={1}
-                onPress={handleDoubleTap}
+                onPress={() => {
+                  const newMode = cameraViewMode === 'portrait' ? 'landscape' : 'portrait';
+                  console.log('Toggling camera view mode from thumbnail:', newMode);
+                  setCameraViewMode(newMode);
+                }}
                     onPressIn={handleThumbnailPressIn}
                     onPressOut={handleThumbnailPressOut}
               >
@@ -1687,8 +1691,8 @@ export default function CameraScreen({ route, navigation }) {
               )}
             </TouchableOpacity>
 
-            {/* Right side button */}
-            {mode === 'before' && (
+            {/* Right side button - Hidden: now using left preview to toggle orientation */}
+            {false && mode === 'before' && (
               /* Camera orientation toggle - only in before mode */
             <TouchableOpacity
                 style={[
