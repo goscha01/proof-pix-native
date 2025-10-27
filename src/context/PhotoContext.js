@@ -327,7 +327,13 @@ export const PhotoProvider = ({ children }) => {
   const deleteProject = async (projectId, options = {}) => {
     const { deleteFromStorage = true } = options;
     const related = photos.filter(p => p.projectId === projectId);
-    console.log('🗂️ deleteProject start', { projectId, deleteFromStorage, relatedCount: related.length });
+    console.log('🗂️ deleteProject start', { 
+      projectId, 
+      deleteFromStorage, 
+      relatedCount: related.length,
+      photos: related.map(p => ({ id: p.id, uri: p.uri, name: p.name }))
+    });
+    
     // Delete all photos for this project from device and metadata
     if (deleteFromStorage) {
       // 1) Delete local files directly (no media calls here to avoid per-asset prompts)
@@ -337,10 +343,17 @@ export const PhotoProvider = ({ children }) => {
         const uriStr = p?.uri;
         if (typeof uriStr === 'string' && uriStr.startsWith('file')) {
           filePaths.push(uriStr);
+          console.log('🗑️ Adding file path for deletion:', uriStr);
         }
         const fname = (uriStr || '').split('/').pop();
         if (fname) filenamesSet.add(fname);
       }
+      
+      console.log('🗑️ Files to delete:', { 
+        filePaths: filePaths.length, 
+        uniqueFilenames: filenamesSet.size,
+        filenames: Array.from(filenamesSet)
+      });
 
       try {
         for (const path of filePaths) {

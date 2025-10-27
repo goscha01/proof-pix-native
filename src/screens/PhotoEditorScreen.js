@@ -527,8 +527,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
               });
             }}
           />
-          {/* Show BEFORE label only if showLabels is true */}
-          {showLabels && (
+          {/* Show BEFORE label only if showLabels is true AND photo doesn't already have labels */}
+          {false && showLabels && !beforePhoto.uri.includes('_LABELED') && (
             <View style={styles.label}>
               <Text style={styles.labelText}>BEFORE</Text>
             </View>
@@ -561,8 +561,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
               });
             }}
           />
-          {/* Show AFTER label only if showLabels is true */}
-          {showLabels && (
+          {/* Show AFTER label only if showLabels is true AND photo doesn't already have labels */}
+          {false && showLabels && !afterPhoto.uri.includes('_LABELED') && (
             <View style={styles.label}>
               <Text style={styles.labelText}>AFTER</Text>
             </View>

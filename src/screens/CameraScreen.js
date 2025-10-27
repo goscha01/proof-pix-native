@@ -1035,6 +1035,9 @@ export default function CameraScreen({ route, navigation }) {
   // Helper function to add label to photo
   const addLabelToPhoto = async (uri, labelText) => {
     console.log('addLabelToPhoto called - showLabels:', showLabels, 'labelText:', labelText);
+    console.log('⚠️ LABELS TEMPORARILY DISABLED FOR DEBUGGING - returning original URI');
+    return uri; // Temporarily disabled
+    
     if (!showLabels) {
       console.log('Labels disabled, returning original URI');
       return uri;
@@ -1125,7 +1128,8 @@ export default function CameraScreen({ route, navigation }) {
       setSelectedBeforePhoto(newPhoto);
 
       // Process label in background if enabled (non-blocking)
-      if (showLabels) {
+      // ⚠️ TEMPORARILY DISABLED FOR DEBUGGING
+      if (false && showLabels) {
         (async () => {
           try {
             const labeledUri = await addLabelToPhoto(uri, 'BEFORE');
@@ -1201,7 +1205,8 @@ export default function CameraScreen({ route, navigation }) {
       await addPhoto(newAfterPhoto);
 
       // Process label in background if enabled (non-blocking)
-      if (showLabels) {
+      // ⚠️ TEMPORARILY DISABLED FOR DEBUGGING
+      if (false && showLabels) {
         (async () => {
           try {
             const labeledUri = await addLabelToPhoto(uri, 'AFTER');
@@ -2158,8 +2163,8 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedA(true)}
                 />
-                {/* BEFORE label */}
-                {showLabels && (
+                {/* BEFORE label - only if photo doesn't already have labels */}
+                {false && showLabels && !sideBasePair.beforeUri.includes('_LABELED') && (
                   <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
                     <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
                   </View>
@@ -2172,8 +2177,8 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedB(true)}
                 />
-                {/* AFTER label */}
-                {showLabels && (
+                {/* AFTER label - only if photo doesn't already have labels */}
+                {false && showLabels && !sideBasePair.afterUri.includes('_LABELED') && (
                   <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
                     <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
                   </View>
@@ -2190,8 +2195,8 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedA(true)}
                 />
-                {/* BEFORE label */}
-                {showLabels && (
+                {/* BEFORE label - only if photo doesn't already have labels */}
+                {false && showLabels && !sideBasePair.beforeUri.includes('_LABELED') && (
                   <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
                     <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
                   </View>
@@ -2204,8 +2209,8 @@ export default function CameraScreen({ route, navigation }) {
                   resizeMode="cover"
                   onLoad={() => setSideLoadedB(true)}
                 />
-                {/* AFTER label */}
-                {showLabels && (
+                {/* AFTER label - only if photo doesn't already have labels */}
+                {false && showLabels && !sideBasePair.afterUri.includes('_LABELED') && (
                   <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
                     <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
                   </View>

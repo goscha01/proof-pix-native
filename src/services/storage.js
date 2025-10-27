@@ -413,8 +413,15 @@ export const deleteAssetsByPrefixes = async (prefixes, projectIdFilter = null) =
  */
 export const deleteProjectAssets = async (projectId) => {
   try {
-    if (!projectId) return;
+    console.log('🗑️ deleteProjectAssets starting for project:', projectId);
+    if (!projectId) {
+      console.log('⚠️ No projectId provided');
+      return;
+    }
+    
     const map = await getAssetIdMap();
+    console.log('🗑️ Asset map total entries:', Object.keys(map).length);
+    
     const filenames = [];
     const assetIds = [];
     for (const [name, entry] of Object.entries(map)) {
@@ -423,44 +430,65 @@ export const deleteProjectAssets = async (projectId) => {
       if (pid && pid === projectId) {
         filenames.push(name);
         if (id) assetIds.push(id);
+        console.log('🗑️ Found project asset:', { name, id, projectId: pid });
       }
     }
+
+    console.log('🗑️ Project assets summary:', { 
+      projectId, 
+      totalFilenames: filenames.length, 
+      totalAssetIds: assetIds.length,
+      filenames,
+      assetIds 
+    });
 
     // Delete media assets in a single batch
     if (assetIds.length > 0) {
       try {
         const { status } = await MediaLibrary.requestPermissionsAsync();
+        console.log('🗑️ Media library permission status:', status);
         if (status === 'granted') {
           await MediaLibrary.deleteAssetsAsync(assetIds);
-          console.log('🗑️ Deleted media assets by project', { projectId, count: assetIds.length });
+          console.log('✅ Deleted media assets by project', { projectId, count: assetIds.length, assetIds });
+        } else {
+          console.warn('⚠️ Media library permission not granted, cannot delete');
         }
       } catch (e) {
-        console.warn('⚠️ Project media batch delete failed:', e?.message);
+        console.error('❌ Project media batch delete failed:', { error: e?.message, assetIds });
       }
+    } else {
+      console.log('ℹ️ No asset IDs found for project, skipping media deletion');
     }
 
     // Delete local doc files by filename
     try {
       const dir = FileSystem.documentDirectory;
+      console.log('🗑️ Attempting to delete local files from:', dir);
       if (dir) {
         for (const name of filenames) {
           const full = `${dir}${name}`;
+          console.log('🗑️ Attempting to delete local file:', full);
           try {
             await FileSystem.deleteAsync(full, { idempotent: true });
-            console.log('🗑️ Deleted project local file', { full });
+            console.log('✅ Deleted project local file:', full);
           } catch (e) {
-            // best-effort
+            console.warn('⚠️ Failed to delete local file:', full, 'Error:', e?.message);
           }
         }
+      } else {
+        console.warn('⚠️ No document directory available');
       }
-    } catch {}
+    } catch (e) {
+      console.error('❌ Error deleting local files:', e?.message);
+    }
 
     // Clean the map
     const newMap = { ...map };
     for (const name of filenames) delete newMap[name];
     await setAssetIdMap(newMap);
+    console.log('✅ Cleaned asset map, removed', filenames.length, 'entries for project:', projectId);
   } catch (e) {
-    console.warn('⚠️ deleteProjectAssets error:', e?.message);
+    console.error('❌ deleteProjectAssets error:', e?.message, e);
   }
 };
 
@@ -809,3 +837,4 @@ export const getUniqueUploadAlbumName = async (baseName) => {
     return baseName;
   }
 };
+
