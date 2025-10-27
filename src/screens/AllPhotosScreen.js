@@ -77,6 +77,7 @@ export default function AllPhotosScreen({ navigation, route }) {
   const [currentRenderPair, setCurrentRenderPair] = useState(null);
   const [currentRenderTemplate, setCurrentRenderTemplate] = useState(null);
   const renderViewRef = useRef(null);
+  const combinedCaptureRef = useRef(null);
   const [showUploadDetails, setShowUploadDetails] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
 
@@ -201,9 +202,10 @@ export default function AllPhotosScreen({ navigation, route }) {
     try {
       setSharing(true);
       
-      // Create a temporary file for sharing
+      // Create a temporary file in cache directory for sharing (not permanent storage)
       const tempFileName = `${photo.room}_${photo.name}_${photo.mode}_${Date.now()}.jpg`;
-      const tempUri = await savePhotoToDevice(photo.uri, tempFileName);
+      const tempUri = `${FileSystem.cacheDirectory}${tempFileName}`;
+      await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
 
       // Share the image
       const shareOptions = {
@@ -222,6 +224,45 @@ export default function AllPhotosScreen({ navigation, route }) {
       }
     } catch (error) {
       console.error('Error sharing photo:', error);
+      Alert.alert('Error', 'Failed to share photo');
+    } finally {
+      setSharing(false);
+    }
+  };
+
+  // Share combined photo (before + after with labels)
+  const shareCombinedPhoto = async (photoSet) => {
+    try {
+      setSharing(true);
+      
+      // Capture the combined view with labels
+      const capturedUri = await captureRef(combinedCaptureRef, {
+        format: 'jpg',
+        quality: 0.95
+      });
+      
+      // Copy captured image to cache directory to ensure it's temporary
+      const tempFileName = `${photoSet.room}_${photoSet.name}_combined_${Date.now()}.jpg`;
+      const tempUri = `${FileSystem.cacheDirectory}${tempFileName}`;
+      await FileSystem.copyAsync({ from: capturedUri, to: tempUri });
+
+      // Share the image
+      const shareOptions = {
+        title: `Before/After - ${photoSet.name}`,
+        message: `Check out this before/after comparison from ${photoSet.room}!`,
+        url: tempUri,
+        type: 'image/jpeg'
+      };
+
+      const result = await Share.share(shareOptions);
+      
+      if (result.action === Share.sharedAction) {
+        console.log('Combined photo shared successfully');
+      } else if (result.action === Share.dismissedAction) {
+        console.log('Share dialog dismissed');
+      }
+    } catch (error) {
+      console.error('Error sharing combined photo:', error);
       Alert.alert('Error', 'Failed to share photo');
     } finally {
       setSharing(false);
@@ -716,6 +757,7 @@ export default function AllPhotosScreen({ navigation, route }) {
               afterPhoto: photoSet.after
             });
           }}
+          onLongPress={() => handleLongPressStart(null, photoSet)}
         >
           <View style={[styles.combinedThumbnail, isLandscape ? styles.stackedThumbnail : styles.sideBySideThumbnail]}>
             <Image source={{ uri: photoSet.before.uri }} style={styles.halfImage} resizeMode="cover" />
@@ -747,6 +789,7 @@ export default function AllPhotosScreen({ navigation, route }) {
         key={photoType}
         style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast]}
         onPress={handlePress}
+        onLongPress={() => handleLongPressStart(photo, photoType === 'combined' ? photoSet : null)}
       >
         <CroppedThumbnail
           imageUri={photo.uri}
@@ -875,6 +918,14 @@ export default function AllPhotosScreen({ navigation, route }) {
               style={styles.fullScreenPhoto}
               resizeMode="contain"
             />
+            {/* Show label for individual before/after photos if showLabels is true */}
+            {showLabels && fullScreenPhoto.mode && (
+              <View style={styles.fullScreenIndividualLabel}>
+                <Text style={styles.fullScreenIndividualLabelText}>
+                  {fullScreenPhoto.mode.toUpperCase()}
+                </Text>
+              </View>
+            )}
             <TouchableOpacity
               style={styles.shareButton}
               onPress={() => shareIndividualPhoto(fullScreenPhoto)}
@@ -894,7 +945,10 @@ export default function AllPhotosScreen({ navigation, route }) {
       {fullScreenPhotoSet && (
         <TouchableWithoutFeedback onPress={handleLongPressEnd}>
           <View style={styles.fullScreenPhotoContainer}>
-            <View style={[
+            <View 
+              ref={combinedCaptureRef}
+              collapsable={false}
+              style={[
               styles.fullScreenCombinedPreview,
               (fullScreenPhotoSet.before.orientation === 'landscape' || fullScreenPhotoSet.before.cameraViewMode === 'landscape')
                 ? styles.fullScreenStacked
@@ -971,6 +1025,17 @@ export default function AllPhotosScreen({ navigation, route }) {
                 )}
               </View>
             </View>
+            <TouchableOpacity
+              style={styles.shareButton}
+              onPress={() => shareCombinedPhoto(fullScreenPhotoSet)}
+              disabled={sharing}
+            >
+              {sharing ? (
+                <ActivityIndicator />
+              ) : (
+                <Text style={styles.shareButtonText}>Share</Text>
+              )}
+            </TouchableOpacity>
           </View>
         </TouchableWithoutFeedback>
       )}
@@ -1666,6 +1731,20 @@ const styles = StyleSheet.create({
   fullScreenLabelText: {
     color: COLORS.TEXT,
     fontSize: 14,
+    fontWeight: 'bold'
+  },
+  fullScreenIndividualLabel: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    backgroundColor: COLORS.PRIMARY,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8
+  },
+  fullScreenIndividualLabelText: {
+    color: COLORS.TEXT,
+    fontSize: 16,
     fontWeight: 'bold'
   },
   uploadModalContainer: {
