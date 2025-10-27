@@ -83,7 +83,13 @@ export default {
           isAccessMediaLocationEnabled: true
         }
       ],
-      "expo-screen-orientation"
+      "expo-screen-orientation",
+      [
+        "@react-native-firebase/app",
+        {
+          // Firebase plugin configuration
+        }
+      ]
     ],
     extra: {
       eas: {
