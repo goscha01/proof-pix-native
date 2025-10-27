@@ -12,7 +12,8 @@ import {
   Platform,
   PanResponder,
   Animated,
-  PixelRatio
+  PixelRatio,
+  StatusBar
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { captureRef } from 'react-native-view-shot';
@@ -2172,6 +2173,7 @@ export default function CameraScreen({ route, navigation }) {
 
   return (
     <>
+      <StatusBar hidden={Platform.OS === 'android'} />
       {renderOverlayMode()}
       {renderLabelView()}
 
