@@ -468,6 +468,33 @@ export default function PhotoEditorScreen({ route, navigation }) {
               });
             }}
           />
+          {/* Show labels overlay on original images if showLabels is true */}
+          {showLabels && (
+            <>
+              {/* Position labels based on template layout */}
+              {templateType === 'original-stack' ? (
+                // Stacked layout: BEFORE on top, AFTER on bottom
+                <>
+                  <View style={styles.label}>
+                    <Text style={styles.labelText}>BEFORE</Text>
+                  </View>
+                  <View style={[styles.label, { top: 'auto', bottom: 10 }]}>
+                    <Text style={styles.labelText}>AFTER</Text>
+                  </View>
+                </>
+              ) : (
+                // Side-by-side layout: BEFORE on left, AFTER on right
+                <>
+                  <View style={styles.label}>
+                    <Text style={styles.labelText}>BEFORE</Text>
+                  </View>
+                  <View style={[styles.label, { left: 'auto', right: 10 }]}>
+                    <Text style={styles.labelText}>AFTER</Text>
+                  </View>
+                </>
+              )}
+            </>
+          )}
         </View>
       );
     }

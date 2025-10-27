@@ -928,6 +928,12 @@ export default function AllPhotosScreen({ navigation, route }) {
                     });
                   }}
                 />
+                {/* Show BEFORE label only if showLabels is true */}
+                {showLabels && (
+                  <View style={styles.fullScreenLabel}>
+                    <Text style={styles.fullScreenLabelText}>BEFORE</Text>
+                  </View>
+                )}
               </View>
               <View style={styles.fullScreenHalf}>
                 <Image
@@ -957,6 +963,12 @@ export default function AllPhotosScreen({ navigation, route }) {
                     });
                   }}
                 />
+                {/* Show AFTER label only if showLabels is true */}
+                {showLabels && (
+                  <View style={styles.fullScreenLabel}>
+                    <Text style={styles.fullScreenLabelText}>AFTER</Text>
+                  </View>
+                )}
               </View>
             </View>
           </View>
@@ -1641,6 +1653,20 @@ const styles = StyleSheet.create({
   fullScreenHalfImage: {
     width: '100%',
     height: '100%'
+  },
+  fullScreenLabel: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: COLORS.PRIMARY,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6
+  },
+  fullScreenLabelText: {
+    color: COLORS.TEXT,
+    fontSize: 14,
+    fontWeight: 'bold'
   },
   uploadModalContainer: {
     flex: 1,
