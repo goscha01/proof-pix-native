@@ -1300,9 +1300,10 @@ export default function CameraScreen({ route, navigation }) {
             console.log('📸 Side base captured URI:', capUri);
             const safeName = (activeBeforePhoto.name || 'Photo').replace(/\s+/g, '_');
             const baseType = isLandscapePair ? 'STACK' : 'SIDE';
+            const projectIdSuffix = activeProjectId ? `_P${activeProjectId}` : '';
             const firstSaved = await savePhotoToDevice(
               capUri,
-              `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_${baseType}_${Date.now()}.jpg`,
+              `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_${baseType}_${Date.now()}${projectIdSuffix}.jpg`,
               activeProjectId || null
             );
             console.log(`✅ Base (${baseType}) saved to device:`, firstSaved);
@@ -1346,9 +1347,10 @@ export default function CameraScreen({ route, navigation }) {
                     width: sideDimsLB.width,
                     height: sideDimsLB.height
                   });
+                  const projectIdSuffix = activeProjectId ? `_P${activeProjectId}` : '';
                   const secondSaved = await savePhotoToDevice(
                     capUriLB,
-                    `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}.jpg`,
+                    `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}${projectIdSuffix}.jpg`,
                     activeProjectId || null
                   );
                   console.log('✅ Letterbox side-by-side base saved to device:', secondSaved);

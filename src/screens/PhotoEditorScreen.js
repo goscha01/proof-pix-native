@@ -97,19 +97,77 @@ export default function PhotoEditorScreen({ route, navigation }) {
         const dir = FileSystem.documentDirectory;
         if (!dir) return;
         const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
+        const projectId = beforePhoto.projectId;
+        const projectIdSuffix = projectId ? `_P${projectId}` : '';
         const prefixStack = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
         const prefixSide = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
+        
+        console.log('🔍 Searching for original base images:', {
+          room: beforePhoto.room,
+          name: beforePhoto.name,
+          safeName,
+          projectId,
+          prefixStack,
+          prefixSide,
+          dir
+        });
+        
         const entries = await FileSystem.readDirectoryAsync(dir);
-        let stack = null;
-        let side = null;
-        for (const name of entries) {
-          if (!stack && name.startsWith(prefixStack)) stack = `${dir}${name}`;
-          if (!side && name.startsWith(prefixSide)) side = `${dir}${name}`;
-          if (stack && side) break;
+        console.log('📁 Directory entries found:', entries.length);
+        
+        // Helper function to extract timestamp from filename
+        const extractTimestamp = (filename) => {
+          // Match timestamp before project ID suffix if present
+          // Format: _<timestamp>[_PprojectId].jpg
+          const match = filename.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+          return match ? parseInt(match[1], 10) : 0;
+        };
+        
+        // Helper function to find the newest file with a given prefix that matches project ID
+        const findNewestFile = (prefix) => {
+          let matches = entries.filter(name => name.startsWith(prefix));
+          
+          // Filter by project ID if available
+          if (projectId) {
+            matches = matches.filter(name => name.includes(projectIdSuffix));
+          }
+          
+          if (matches.length === 0) {
+            console.log(`📅 No files found with prefix "${prefix}" and projectId "${projectId}"`);
+            return null;
+          }
+          
+          // Find the file with the highest timestamp
+          let newest = null;
+          let newestTs = -1;
+          for (const name of matches) {
+            const ts = extractTimestamp(name);
+            if (ts > newestTs) {
+              newestTs = ts;
+              newest = name;
+            }
+          }
+          console.log(`📅 Found ${matches.length} files with prefix "${prefix}" and projectId "${projectId}", selected newest: ${newest} (timestamp: ${newestTs})`);
+          return newest ? `${dir}${newest}` : null;
+        };
+        
+        const stack = findNewestFile(prefixStack);
+        const side = findNewestFile(prefixSide);
+        
+        if (stack) {
+          console.log('✅ Selected newest STACK base:', stack);
         }
+        if (side) {
+          console.log('✅ Selected newest SIDE base:', side);
+        }
+        
+        if (!stack && !side) {
+          console.log('⚠️ No original base images found for:', beforePhoto.name);
+        }
+        
         setOriginalBaseUris({ stack, side });
       } catch (e) {
-        // ignore
+        console.error('❌ Error locating original base images:', e);
       }
     })();
   }, [beforePhoto]);
@@ -355,6 +413,24 @@ export default function PhotoEditorScreen({ route, navigation }) {
     // If an original base is selected and available, display the saved image (no cropping)
     if ((templateType === 'original-stack' && originalBaseUris.stack) || (templateType === 'original-side' && originalBaseUris.side)) {
       const uri = templateType === 'original-stack' ? originalBaseUris.stack : originalBaseUris.side;
+      console.log('🖼️ Rendering ORIGINAL base image:', {
+        templateType,
+        uri,
+        photoSize: originalImageSize,
+        beforePhoto: {
+          id: beforePhoto.id,
+          uri: beforePhoto.uri,
+          name: beforePhoto.name,
+          timestamp: beforePhoto.timestamp
+        },
+        afterPhoto: {
+          id: afterPhoto.id,
+          uri: afterPhoto.uri,
+          name: afterPhoto.name,
+          timestamp: afterPhoto.timestamp
+        }
+      });
+      
       // Fit inside max box while preserving original aspect
       const maxW = 350;
       const maxH = 500;
@@ -373,10 +449,44 @@ export default function PhotoEditorScreen({ route, navigation }) {
           style={[styles.combinedPreview, { width: w, height: h }]}
           collapsable={false}
         >
-          <Image source={{ uri }} style={{ width: '100%', height: '100%' }} resizeMode="contain" />
+          <Image 
+            source={{ uri }} 
+            style={{ width: '100%', height: '100%' }} 
+            resizeMode="contain"
+            onError={(error) => {
+              console.error('❌ Failed to load ORIGINAL base image:', {
+                uri,
+                templateType,
+                error: error.nativeEvent.error
+              });
+            }}
+            onLoad={() => {
+              console.log('✅ Successfully loaded ORIGINAL base image:', {
+                uri,
+                templateType,
+                photoSize: originalImageSize
+              });
+            }}
+          />
         </View>
       );
     }
+    
+    console.log('🖼️ Rendering DYNAMIC combined preview:', {
+      templateType,
+      beforePhoto: {
+        id: beforePhoto.id,
+        uri: beforePhoto.uri,
+        name: beforePhoto.name,
+        timestamp: beforePhoto.timestamp
+      },
+      afterPhoto: {
+        id: afterPhoto.id,
+        uri: afterPhoto.uri,
+        name: afterPhoto.name,
+        timestamp: afterPhoto.timestamp
+      }
+    });
 
     return (
       <View
@@ -396,6 +506,26 @@ export default function PhotoEditorScreen({ route, navigation }) {
             source={{ uri: beforePhoto.uri }}
             style={styles.halfImage}
             resizeMode="cover"
+            onError={(error) => {
+              console.error('❌ Failed to load BEFORE in combined:', {
+                uri: beforePhoto.uri,
+                photo: {
+                  id: beforePhoto.id,
+                  name: beforePhoto.name,
+                  timestamp: beforePhoto.timestamp
+                },
+                error: error.nativeEvent.error
+              });
+            }}
+            onLoad={() => {
+              console.log('✅ Successfully loaded BEFORE in combined:', {
+                uri: beforePhoto.uri,
+                photo: {
+                  id: beforePhoto.id,
+                  name: beforePhoto.name
+                }
+              });
+            }}
           />
           {/* Show BEFORE label only if showLabels is true */}
           {showLabels && (
@@ -410,6 +540,26 @@ export default function PhotoEditorScreen({ route, navigation }) {
             source={{ uri: afterPhoto.uri }}
             style={styles.halfImage}
             resizeMode="cover"
+            onError={(error) => {
+              console.error('❌ Failed to load AFTER in combined:', {
+                uri: afterPhoto.uri,
+                photo: {
+                  id: afterPhoto.id,
+                  name: afterPhoto.name,
+                  timestamp: afterPhoto.timestamp
+                },
+                error: error.nativeEvent.error
+              });
+            }}
+            onLoad={() => {
+              console.log('✅ Successfully loaded AFTER in combined:', {
+                uri: afterPhoto.uri,
+                photo: {
+                  id: afterPhoto.id,
+                  name: afterPhoto.name
+                }
+              });
+            }}
           />
           {/* Show AFTER label only if showLabels is true */}
           {showLabels && (

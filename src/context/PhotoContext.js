@@ -129,10 +129,35 @@ export const PhotoProvider = ({ children }) => {
       // Filter out any photos with ph:// URIs (old data)
       const validPhotos = metadata.filter(photo => {
         if (photo.uri && photo.uri.startsWith('ph://')) {
-          console.warn('⚠️ Skipping photo with invalid URI:', photo.uri);
+          console.warn('⚠️ Skipping photo with invalid URI:', {
+            uri: photo.uri,
+            photo: {
+              id: photo.id,
+              name: photo.name,
+              room: photo.room,
+              mode: photo.mode,
+              timestamp: photo.timestamp,
+              projectId: photo.projectId
+            }
+          });
           return false;
         }
         return true;
+      });
+      
+      console.log('📸 Loaded photos from metadata:', {
+        totalMetadata: metadata.length,
+        validPhotos: validPhotos.length,
+        invalidPhotos: metadata.length - validPhotos.length,
+        photosSummary: validPhotos.map(p => ({
+          id: p.id,
+          name: p.name,
+          room: p.room,
+          mode: p.mode,
+          uriPrefix: p.uri?.substring(0, 50),
+          timestamp: p.timestamp,
+          projectId: p.projectId
+        }))
       });
 
       // If we filtered out any photos, save the cleaned data

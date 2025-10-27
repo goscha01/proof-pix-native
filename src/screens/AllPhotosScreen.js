@@ -122,9 +122,34 @@ export default function AllPhotosScreen({ navigation, route }) {
       longPressTriggered.current = true;
       if (photoSet) {
         // Show combined preview with both photos
+        console.log('📸 Setting fullScreenPhotoSet:', {
+          name: photoSet.name,
+          room: photoSet.room,
+          beforePhoto: {
+            id: photoSet.before?.id,
+            uri: photoSet.before?.uri,
+            name: photoSet.before?.name,
+            timestamp: photoSet.before?.timestamp,
+            projectId: photoSet.before?.projectId
+          },
+          afterPhoto: {
+            id: photoSet.after?.id,
+            uri: photoSet.after?.uri,
+            name: photoSet.after?.name,
+            timestamp: photoSet.after?.timestamp,
+            projectId: photoSet.after?.projectId
+          }
+        });
         setFullScreenPhotoSet(photoSet);
       } else {
         // Show single photo
+        console.log('📸 Setting fullScreenPhoto:', {
+          id: photo?.id,
+          uri: photo?.uri,
+          name: photo?.name,
+          timestamp: photo?.timestamp,
+          projectId: photo?.projectId
+        });
         setFullScreenPhoto(photo);
       }
     }, 300);
@@ -367,25 +392,34 @@ export default function AllPhotosScreen({ navigation, route }) {
             const dir = FileSystem.documentDirectory;
             const entries = dir ? await FileSystem.readDirectoryAsync(dir) : [];
 
-            const pickLatestByPrefix = (prefix) => {
-              const matches = entries.filter(name => name.startsWith(prefix));
-              if (matches.length === 0) return null;
-              // Filenames end with _<timestamp>.jpg; pick max timestamp
-              let best = null;
-              let bestTs = -1;
-              for (const name of matches) {
-                const m = name.match(/_(\d+)\.(jpg|jpeg|png)$/i);
-                const ts = m ? parseInt(m[1], 10) : 0;
-                if (ts > bestTs) { bestTs = ts; best = name; }
-              }
-              return best || matches[matches.length - 1];
-            };
-
             let foundCount = 0;
             for (const pair of pairs) {
               const safeName = (pair.before.name || 'Photo').replace(/\s+/g, '_');
+              const projectId = pair.before.projectId;
+              const projectIdSuffix = projectId ? `_P${projectId}` : '';
               const stackPrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_STACK_`;
               const sidePrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_SIDE_`;
+
+              const pickLatestByPrefix = (prefix) => {
+                let matches = entries.filter(name => name.startsWith(prefix));
+                
+                // Filter by project ID if available
+                if (projectId) {
+                  matches = matches.filter(name => name.includes(projectIdSuffix));
+                }
+                
+                if (matches.length === 0) return null;
+                // Filenames end with _<timestamp>[_PprojectId].jpg; pick max timestamp
+                let best = null;
+                let bestTs = -1;
+                for (const name of matches) {
+                  // Match timestamp before project ID suffix if present
+                  const m = name.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+                  const ts = m ? parseInt(m[1], 10) : 0;
+                  if (ts > bestTs) { bestTs = ts; best = name; }
+                }
+                return best || matches[matches.length - 1];
+              };
 
               const stackName = pickLatestByPrefix(stackPrefix);
               const sideName = pickLatestByPrefix(sidePrefix);
@@ -871,6 +905,28 @@ export default function AllPhotosScreen({ navigation, route }) {
                   source={{ uri: fullScreenPhotoSet.before.uri }}
                   style={styles.fullScreenHalfImage}
                   resizeMode="cover"
+                  onError={(error) => {
+                    console.error('❌ Failed to load BEFORE image:', {
+                      uri: fullScreenPhotoSet.before.uri,
+                      photo: {
+                        id: fullScreenPhotoSet.before.id,
+                        name: fullScreenPhotoSet.before.name,
+                        timestamp: fullScreenPhotoSet.before.timestamp,
+                        projectId: fullScreenPhotoSet.before.projectId
+                      },
+                      error: error.nativeEvent.error
+                    });
+                  }}
+                  onLoad={() => {
+                    console.log('✅ Successfully loaded BEFORE image:', {
+                      uri: fullScreenPhotoSet.before.uri,
+                      photo: {
+                        id: fullScreenPhotoSet.before.id,
+                        name: fullScreenPhotoSet.before.name,
+                        timestamp: fullScreenPhotoSet.before.timestamp
+                      }
+                    });
+                  }}
                 />
               </View>
               <View style={styles.fullScreenHalf}>
@@ -878,6 +934,28 @@ export default function AllPhotosScreen({ navigation, route }) {
                   source={{ uri: fullScreenPhotoSet.after.uri }}
                   style={styles.fullScreenHalfImage}
                   resizeMode="cover"
+                  onError={(error) => {
+                    console.error('❌ Failed to load AFTER image:', {
+                      uri: fullScreenPhotoSet.after.uri,
+                      photo: {
+                        id: fullScreenPhotoSet.after.id,
+                        name: fullScreenPhotoSet.after.name,
+                        timestamp: fullScreenPhotoSet.after.timestamp,
+                        projectId: fullScreenPhotoSet.after.projectId
+                      },
+                      error: error.nativeEvent.error
+                    });
+                  }}
+                  onLoad={() => {
+                    console.log('✅ Successfully loaded AFTER image:', {
+                      uri: fullScreenPhotoSet.after.uri,
+                      photo: {
+                        id: fullScreenPhotoSet.after.id,
+                        name: fullScreenPhotoSet.after.name,
+                        timestamp: fullScreenPhotoSet.after.timestamp
+                      }
+                    });
+                  }}
                 />
               </View>
             </View>
