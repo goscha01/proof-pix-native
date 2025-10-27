@@ -44,6 +44,7 @@ export default function CameraScreen({ route, navigation }) {
   const { mode, beforePhoto, afterPhoto: existingAfterPhoto, combinedPhoto: existingCombinedPhoto, room: initialRoom } = route.params || {};
   const [room, setRoom] = useState(initialRoom);
   const [facing, setFacing] = useState('back');
+  const [enableTorch, setEnableTorch] = useState(false);
   const [permission, requestPermission] = useCameraPermissions();
   const [aspectRatio, setAspectRatio] = useState('4:3'); // '4:3' or '2:3'
   const [selectedBeforePhoto, setSelectedBeforePhoto] = useState(beforePhoto);
@@ -118,6 +119,15 @@ export default function CameraScreen({ route, navigation }) {
     // Update global room state so HomeScreen shows the same room when camera closes
     setCurrentRoom(room);
   }, [room, setCurrentRoom]);
+
+  // Cleanup: Turn off flashlight when component unmounts
+  useEffect(() => {
+    return () => {
+      if (enableTorch) {
+        setEnableTorch(false);
+      }
+    };
+  }, []);
 
   // Update dimensions ref when dimensions change
   useEffect(() => {
@@ -1429,7 +1439,14 @@ export default function CameraScreen({ route, navigation }) {
   };
 
   const toggleCameraFacing = () => {
-    setFacing(current => (current === 'back' ? 'front' : 'back'));
+    setFacing(current => {
+      const newFacing = current === 'back' ? 'front' : 'back';
+      // Turn off flashlight when switching to front camera
+      if (newFacing === 'front' && enableTorch) {
+        setEnableTorch(false);
+      }
+      return newFacing;
+    });
   };
 
   // Get current room info
@@ -1519,6 +1536,7 @@ export default function CameraScreen({ route, navigation }) {
           style={styles.camera}
           facing={facing}
           zoom={0}
+          enableTorch={enableTorch}
         />
         
         {/* Before photo overlay (for after mode) */}
@@ -1543,6 +1561,7 @@ export default function CameraScreen({ route, navigation }) {
                 style={styles.camera}
                 facing={facing}
                 zoom={0}
+                enableTorch={enableTorch}
               />
               
               {/* Before photo overlay (for after mode) */}
@@ -1602,6 +1621,19 @@ export default function CameraScreen({ route, navigation }) {
         >
           <Text style={styles.closeButtonText}>✕</Text>
         </TouchableOpacity>
+
+        {/* Flashlight button - only show for back camera - TESTING: overlaying capture button */}
+        {facing === 'back' && (
+          <TouchableOpacity
+            style={styles.flashlightButtonOverlay}
+            onPress={() => {
+              setEnableTorch(!enableTorch);
+            }}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.flashlightButtonText}>{enableTorch ? '🔦' : '💡'}</Text>
+          </TouchableOpacity>
+        )}
 
         <View style={styles.bottomControls}>
           {/* Main control row */}
@@ -2426,6 +2458,39 @@ const styles = StyleSheet.create({
   closeButtonText: {
     color: 'white',
     fontSize: 24
+  },
+  flashlightButton: {
+    position: 'absolute',
+    top: 110,
+    right: 20,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+    elevation: 1000,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)'
+  },
+  flashlightButtonText: {
+    fontSize: 24
+  },
+  flashlightButtonOverlay: {
+    position: 'absolute',
+    bottom: 30, // Position it above the capture button
+    alignSelf: 'center',
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: 'rgba(242, 195, 27, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 2000,
+    elevation: 2000,
+    borderWidth: 3,
+    borderColor: 'white'
   },
   flipButton: {
     width: 44,
