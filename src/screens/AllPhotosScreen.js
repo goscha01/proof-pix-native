@@ -43,7 +43,7 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
-  const { userName, location, isBusiness, useFolderStructure, enabledFolders } = useSettings();
+  const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels } = useSettings();
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
@@ -1001,6 +1001,11 @@ export default function AllPhotosScreen({ navigation, route }) {
                       style={styles.renderImage}
                       resizeMode="cover"
                     />
+                    {showLabels && (
+                      <View style={styles.renderLabel}>
+                        <Text style={styles.renderLabelText}>BEFORE</Text>
+                      </View>
+                    )}
                   </View>
                   <View style={styles.renderHalf}>
                     <Image
@@ -1008,6 +1013,11 @@ export default function AllPhotosScreen({ navigation, route }) {
                       style={styles.renderImage}
                       resizeMode="cover"
                     />
+                    {showLabels && (
+                      <View style={styles.renderLabel}>
+                        <Text style={styles.renderLabelText}>AFTER</Text>
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
@@ -1684,11 +1694,26 @@ const styles = StyleSheet.create({
     flex: 1
   },
   renderHalf: {
-    flex: 1
+    flex: 1,
+    position: 'relative'
   },
   renderImage: {
     width: '100%',
     height: '100%'
+  },
+  renderLabel: {
+    position: 'absolute',
+    top: 20,
+    left: 20,
+    backgroundColor: COLORS.PRIMARY,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8
+  },
+  renderLabelText: {
+    color: COLORS.TEXT,
+    fontSize: 14,
+    fontWeight: 'bold'
   },
   // Options modal styles
   optionsModalOverlay: {
