@@ -5,7 +5,7 @@ export default {
     name: process.env.APP_NAME || "ProofPix",
     slug: "proof-pix-native",
     owner: "goscha01",
-    version: process.env.VERSION || "1.0.4",
+    version: process.env.VERSION || "1.0.5",
     orientation: "default",
     icon: "./assets/PP_logo_app.png",
     userInterfaceStyle: "light",
@@ -26,7 +26,8 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.proofpix.app",
-      buildNumber: "7",
+      buildNumber: "8",
+      googleServicesFile: "./GoogleService-Info.plist",
       requireFullScreen: false,
       infoPlist: {
         NSCameraUsageDescription: "ProofPix needs access to your camera to take before and after photos.",
@@ -86,11 +87,20 @@ export default {
       ],
       "expo-screen-orientation",
       [
-        "@react-native-firebase/app",
+        '@react-native-google-signin/google-signin',
         {
-          // Firebase plugin configuration
+          iosUrlScheme: 'com.googleusercontent.apps.366423185-oboi1er7n69rgrbqtkf5il8j6tsm4don'
         }
-      ]
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static"
+          }
+        }
+      ],
+      "./plugins/withUseModularHeaders.js"
     ],
     extra: {
       eas: {

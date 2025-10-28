@@ -24,7 +24,6 @@ import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
 import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS } from '../constants/rooms';
-import analyticsService from '../services/analyticsService';
 import PhotoLabel from '../components/PhotoLabel';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';

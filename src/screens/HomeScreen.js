@@ -24,7 +24,6 @@ import { useSettings } from '../context/SettingsContext';
 import { createAlbumName } from '../services/uploadService';
 import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
-import analyticsService from '../services/analyticsService';
 import RoomEditor from '../components/RoomEditor';
 
 const { width } = Dimensions.get('window');
@@ -455,7 +454,7 @@ export default function HomeScreen({ navigation }) {
             style: 'destructive', 
             onPress: () => {
               deletePhotoSet(photoSet.id);
-              analyticsService.logEvent('PhotoSet_Delete', { photoName: photoSet.name, from: 'HomeScreen' });
+              // analyticsService.logEvent('PhotoSet_Delete', { photoName: photoSet.name, from: 'HomeScreen' });
               longPressTriggered.current = false;
             }
           }

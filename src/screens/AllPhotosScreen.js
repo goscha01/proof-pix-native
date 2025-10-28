@@ -33,7 +33,6 @@ import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import UploadCompletionModal from '../components/UploadCompletionModal';
 import { filterNewPhotos, markPhotosAsUploaded } from '../services/uploadTracker';
 import JSZip from 'jszip';
-import analyticsService from '../services/analyticsService';
 
 const { width } = Dimensions.get('window');
 const SET_NAME_WIDTH = 80;
@@ -296,11 +295,11 @@ export default function AllPhotosScreen({ navigation, route }) {
             type: 'application/zip',
         });
         
-        analyticsService.logEvent('Project_Shared', { 
-          projectName, 
-          photoCount: itemsToShare.length,
-          sharedTypes: Object.keys(selectedShareTypes).filter(k => selectedShareTypes[k]),
-        });
+        // analyticsService.logEvent('Project_Shared', { 
+        //   projectName, 
+        //   photoCount: itemsToShare.length,
+        //   sharedTypes: Object.keys(selectedShareTypes).filter(k => selectedShareTypes[k]),
+        // });
     } catch (error) {
         Alert.alert('Error', 'Failed to prepare photos for sharing.');
     } finally {

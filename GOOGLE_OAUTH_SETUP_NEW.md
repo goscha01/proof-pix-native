@@ -75,7 +75,8 @@ You need to create **TWO** separate OAuth clients - one for iOS and one for Andr
 1. Click **+ CREATE CREDENTIALS** → **OAuth client ID** again
 2. Choose **Application type**: **Web application**
 3. **Name**: `ProofPix Web`
-4. **Authorized redirect URIs**: Leave empty for now (not needed for mobile)
+4. **Authorized redirect URIs**: Add the following URI:
+   - `https://auth.expo.io/@goscha01/proof-pix-native`
 5. Click **CREATE**
 6. **COPY THE CLIENT ID** - you'll need this too!
 
