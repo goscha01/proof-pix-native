@@ -63,7 +63,8 @@ export default {
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_MEDIA_AUDIO"
       ],
-      edgeToEdgeEnabled: true
+      edgeToEdgeEnabled: true,
+      googleServicesFile: "./google-services.json"
     },
     web: {
       favicon: "./assets/favicon.png"
