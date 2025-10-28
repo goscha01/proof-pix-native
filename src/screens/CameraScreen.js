@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useContext } from 'react';
+import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import {
   View,
   Text,
@@ -29,6 +29,7 @@ import PhotoLabel from '../components/PhotoLabel';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as MediaLibrary from 'expo-media-library';
+import { useFocusEffect } from '@react-navigation/native';
 
 const initialDimensions = Dimensions.get('window');
 const initialWidth = initialDimensions.width;
@@ -866,11 +867,26 @@ export default function CameraScreen({ route, navigation }) {
     // Get orientation immediately on mount
     getSpecificOrientation();
 
+    // Cleanup listener on unmount
     return () => {
       subscription?.remove();
       ScreenOrientation.removeOrientationChangeListener(orientationSubscription);
     };
   }, []);
+
+  // Update camera view mode when device orientation changes
+  useEffect(() => {
+    setCameraViewMode(deviceOrientation);
+  }, [deviceOrientation]);
+
+  // Handle screen focus/blur to re-check permissions and settings
+  useFocusEffect(
+    useCallback(() => {
+      if (permission && !permission.granted) {
+        requestPermission();
+      }
+    }, [permission, requestPermission])
+  );
 
   useEffect(() => {
     if (permission && !permission.granted) {
@@ -1529,7 +1545,7 @@ export default function CameraScreen({ route, navigation }) {
       <View style={styles.cameraContainer}>
           {/* Letterbox container for landscape mode */}
           {(() => {
-            const showLetterbox = cameraViewMode === 'landscape';
+            const showLetterbox = deviceOrientation === 'landscape';
             console.log('Camera render - Letterbox check:', { cameraViewMode, deviceOrientation, showLetterbox });
             return showLetterbox;
           })() ? (
@@ -3155,7 +3171,7 @@ const styles = StyleSheet.create({
   },
   letterboxCamera: {
     width: '100%',
-    aspectRatio: 4 / 3, // Landscape 4:3 aspect ratio
+    aspectRatio: Platform.OS === 'android' ? 16 / 9 : 4 / 3, // Landscape 16:9 for Android
     position: 'relative',
     overflow: 'hidden'
   },
