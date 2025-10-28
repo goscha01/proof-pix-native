@@ -5,7 +5,7 @@ export default {
     name: process.env.APP_NAME || "ProofPix",
     slug: "proof-pix-native",
     owner: "goscha01",
-    version: process.env.VERSION || "1.0.2",
+    version: process.env.VERSION || "1.0.4",
     orientation: "default",
     icon: "./assets/PP_logo_app.png",
     userInterfaceStyle: "light",
@@ -26,7 +26,7 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.proofpix.app",
-      buildNumber: "6",
+      buildNumber: "7",
       requireFullScreen: false,
       infoPlist: {
         NSCameraUsageDescription: "ProofPix needs access to your camera to take before and after photos.",
@@ -47,7 +47,7 @@ export default {
         backgroundColor: "#F2C31B"
       },
       package: "com.proofpix.app",
-      versionCode: 6,
+      versionCode: 7,
       permissions: [
         "CAMERA",
         "WRITE_EXTERNAL_STORAGE",
