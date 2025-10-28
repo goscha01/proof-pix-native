@@ -1404,7 +1404,9 @@ export default function CameraScreen({ route, navigation }) {
       <View style={styles.cameraContainer}>
           {/* Letterbox container for landscape mode */}
           {(() => {
-            const showLetterbox = deviceOrientation === 'landscape';
+            const showLetterbox = Platform.OS === 'android'
+              ? deviceOrientation === 'landscape'  // Android: follow device orientation
+              : cameraViewMode === 'landscape';     // iOS: follow camera view mode toggle
             return showLetterbox;
           })() ? (
             <View style={[
