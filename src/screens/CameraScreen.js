@@ -18,6 +18,8 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { captureRef } from 'react-native-view-shot';
 import * as ScreenOrientation from 'expo-screen-orientation';
+import * as NavigationBar from 'expo-navigation-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
@@ -2198,8 +2200,19 @@ export default function CameraScreen({ route, navigation }) {
       );
   };
 
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      NavigationBar.setVisibilityAsync('hidden');
+    }
+    return () => {
+      if (Platform.OS === 'android') {
+        NavigationBar.setVisibilityAsync('visible');
+      }
+    };
+  }, []);
+
   return (
-    <>
+    <SafeAreaView style={styles.container}>
       <StatusBar hidden={Platform.OS === 'android'} />
       {renderOverlayMode()}
       {renderLabelView()}
@@ -2278,7 +2291,7 @@ export default function CameraScreen({ route, navigation }) {
           )}
         </View>
       )}
-    </>
+    </SafeAreaView>
   );
 }
 
