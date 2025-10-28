@@ -1521,38 +1521,41 @@ export default function CameraScreen({ route, navigation }) {
       <View style={styles.cameraContainer}>
           {/* Letterbox container for landscape mode */}
           {(() => {
-            const showLetterbox = cameraViewMode === 'landscape' && deviceOrientation === 'portrait';
+            const showLetterbox = cameraViewMode === 'landscape';
             console.log('Camera render - Letterbox check:', { cameraViewMode, deviceOrientation, showLetterbox });
             return showLetterbox;
           })() ? (
-            <View style={styles.letterboxContainer}>
-              {/* Top bar */}
-              <View style={styles.letterboxBar} />
+            <View style={[
+              styles.letterboxContainer,
+              deviceOrientation === 'landscape' ? styles.letterboxContainerLandscape : null
+            ]}>
+              {/* First bar - top for portrait, left for landscape */}
+              <View style={deviceOrientation === 'landscape' ? styles.letterboxBarHorizontal : styles.letterboxBar} />
               
               {/* Camera in landscape aspect ratio */}
               <View style={styles.letterboxCamera}>
-        <CameraView
-          ref={cameraRef}
-          style={styles.camera}
-          facing={facing}
-          zoom={0}
-          enableTorch={enableTorch}
-        />
-        
-        {/* Before photo overlay (for after mode) */}
+                <CameraView
+                  ref={cameraRef}
+                  style={styles.camera}
+                  facing={facing}
+                  zoom={0}
+                  enableTorch={enableTorch}
+                />
+                
+                {/* Before photo overlay (for after mode) */}
                 {mode === 'after' && getActiveBeforePhoto() && (
-          <View style={styles.beforePhotoOverlay}>
-            <Image
+                  <View style={styles.beforePhotoOverlay}>
+                    <Image
                       source={{ uri: getActiveBeforePhoto().uri }}
-              style={styles.beforePhotoImage}
-              resizeMode="cover"
-            />
-          </View>
-        )}
-      </View>
+                      style={styles.beforePhotoImage}
+                      resizeMode="cover"
+                    />
+                  </View>
+                )}
+              </View>
 
-              {/* Bottom bar */}
-              <View style={styles.letterboxBar} />
+              {/* Second bar - bottom for portrait, right for landscape */}
+              <View style={deviceOrientation === 'landscape' ? styles.letterboxBarHorizontal : styles.letterboxBar} />
             </View>
           ) : (
             <>
@@ -3082,8 +3085,16 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#000'
   },
+  letterboxContainerLandscape: {
+    flexDirection: 'row'
+  },
   letterboxBar: {
     width: '100%',
+    backgroundColor: '#000',
+    flex: 1
+  },
+  letterboxBarHorizontal: {
+    height: '100%',
     backgroundColor: '#000',
     flex: 1
   },
