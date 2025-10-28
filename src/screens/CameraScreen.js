@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import {
   View,
   Text,
@@ -26,6 +26,9 @@ import { savePhotoToDevice } from '../services/storage';
 import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS } from '../constants/rooms';
 import analyticsService from '../services/analyticsService';
 import PhotoLabel from '../components/PhotoLabel';
+import * as FileSystem from 'expo-file-system';
+import * as ImageManipulator from 'expo-image-manipulator';
+import * as MediaLibrary from 'expo-media-library';
 
 const initialDimensions = Dimensions.get('window');
 const initialWidth = initialDimensions.width;
@@ -103,6 +106,9 @@ export default function CameraScreen({ route, navigation }) {
   const [sideBaseDims, setSideBaseDims] = useState(null); // { width, height, leftW, rightW }
   const [sideLoadedA, setSideLoadedA] = useState(false);
   const [sideLoadedB, setSideLoadedB] = useState(false);
+  const [isTakingPicture, setIsTakingPicture] = useState(false);
+  const [showFullScreenPhoto, setShowFullScreenPhoto] = useState(null);
+  const [layout, setLayout] = useState(null);
 
   // Helper function to get the active before photo based on current room and mode
   const getActiveBeforePhoto = () => {
@@ -1536,13 +1542,15 @@ export default function CameraScreen({ route, navigation }) {
               
               {/* Camera in landscape aspect ratio */}
               <View style={styles.letterboxCamera}>
-                <CameraView
-                  ref={cameraRef}
-                  style={styles.camera}
-                  facing={facing}
-                  zoom={0}
-                  enableTorch={enableTorch}
-                />
+                {layout && (
+                  <CameraView
+                    ref={cameraRef}
+                    style={styles.camera}
+                    facing={facing}
+                    zoom={0}
+                    enableTorch={enableTorch}
+                  />
+                )}
                 
                 {/* Before photo overlay (for after mode) */}
                 {mode === 'after' && getActiveBeforePhoto() && (
@@ -1560,14 +1568,16 @@ export default function CameraScreen({ route, navigation }) {
               <View style={deviceOrientation === 'landscape' ? styles.letterboxBarHorizontal : styles.letterboxBar} />
             </View>
           ) : (
-            <>
-              <CameraView
-                ref={cameraRef}
-                style={styles.camera}
-                facing={facing}
-                zoom={0}
-                enableTorch={enableTorch}
-              />
+            <View style={Platform.OS === 'android' ? styles.androidCameraWrapper : {flex: 1}}>
+              {layout && (
+                <CameraView
+                  ref={cameraRef}
+                  style={styles.camera}
+                  facing={facing}
+                  zoom={0}
+                  enableTorch={enableTorch}
+                />
+              )}
               
               {/* Before photo overlay (for after mode) */}
               {mode === 'after' && getActiveBeforePhoto() && (
@@ -1579,7 +1589,7 @@ export default function CameraScreen({ route, navigation }) {
                   />
                 </View>
               )}
-            </>
+            </View>
           )}
         </View>
       </Animated.View>
@@ -2211,87 +2221,118 @@ export default function CameraScreen({ route, navigation }) {
     };
   }, []);
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar hidden={Platform.OS === 'android'} />
-      {renderOverlayMode()}
-      {renderLabelView()}
+  if (!permission) {
+    // Camera permissions are still loading.
+    return <View />;
+  }
 
-      {/* Hidden vertical side-by-side renderer (no transform, no padding) */}
-      {sideBasePair && sideBaseDims && (
-        <View
-          ref={sideBaseRef}
-          style={{ position: 'absolute', top: -10000, left: 0, width: sideBaseDims.width, height: sideBaseDims.height, backgroundColor: 'transparent' }}
-          collapsable={false}
-        >
-          {sideBasePair.isLandscapePair ? (
-            // STACKED
-            <View style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
-              <View style={{ width: '100%', height: sideBaseDims.topH }}>
-                <Image
-                  source={{ uri: sideBasePair.beforeUri }}
-                  style={{ width: '100%', height: '100%' }}
-                  resizeMode="cover"
-                  onLoad={() => setSideLoadedA(true)}
-                />
-                {/* BEFORE label - only if photo doesn't already have labels */}
-                {false && showLabels && !sideBasePair.beforeUri.includes('_LABELED') && (
-                  <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
-                    <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
-                  </View>
-                )}
+  if (!permission.granted) {
+    // Camera permissions are not granted yet.
+    return (
+      <View style={styles.container}>
+        <Text style={styles.message}>We need your permission to show the camera</Text>
+        <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
+          <Text style={styles.permissionButtonText}>Grant Permission</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.container} onLayout={(event) => setLayout(event.nativeEvent.layout)}>
+     
+      {/* Animated container for camera and gallery - allows sliding up/down */}
+      <Animated.View
+        style={[
+          styles.cameraWrapper,
+          {
+            transform: [
+              { scaleX: cameraScale },
+              { scaleY: cameraScale },
+              { translateY: cameraTranslateY }
+            ]
+          }
+        ]}
+      >
+        {renderOverlayMode()}
+        {renderLabelView()}
+
+        {/* Hidden vertical side-by-side renderer (no transform, no padding) */}
+        {sideBasePair && sideBaseDims && (
+          <View
+            ref={sideBaseRef}
+            style={{ position: 'absolute', top: -10000, left: 0, width: sideBaseDims.width, height: sideBaseDims.height, backgroundColor: 'transparent' }}
+            collapsable={false}
+          >
+            {sideBasePair.isLandscapePair ? (
+              // STACKED
+              <View style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
+                <View style={{ width: '100%', height: sideBaseDims.topH }}>
+                  <Image
+                    source={{ uri: sideBasePair.beforeUri }}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                    onLoad={() => setSideLoadedA(true)}
+                  />
+                  {/* BEFORE label - only if photo doesn't already have labels */}
+                  {false && showLabels && !sideBasePair.beforeUri.includes('_LABELED') && (
+                    <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                      <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={{ width: '100%', height: sideBaseDims.bottomH }}>
+                  <Image
+                    source={{ uri: sideBasePair.afterUri }}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                    onLoad={() => setSideLoadedB(true)}
+                  />
+                  {/* AFTER label - only if photo doesn't already have labels */}
+                  {false && showLabels && !sideBasePair.afterUri.includes('_LABELED') && (
+                    <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                      <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
+                    </View>
+                  )}
+                </View>
               </View>
-              <View style={{ width: '100%', height: sideBaseDims.bottomH }}>
-                <Image
-                  source={{ uri: sideBasePair.afterUri }}
-                  style={{ width: '100%', height: '100%' }}
-                  resizeMode="cover"
-                  onLoad={() => setSideLoadedB(true)}
-                />
-                {/* AFTER label - only if photo doesn't already have labels */}
-                {false && showLabels && !sideBasePair.afterUri.includes('_LABELED') && (
-                  <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
-                    <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
-                  </View>
-                )}
+            ) : (
+              // SIDE-BY-SIDE
+              <View style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
+                <View style={{ width: sideBaseDims.leftW, height: '100%' }}>
+                  <Image
+                    source={{ uri: sideBasePair.beforeUri }}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                    onLoad={() => setSideLoadedA(true)}
+                  />
+                  {/* BEFORE label - only if photo doesn't already have labels */}
+                  {false && showLabels && !sideBasePair.beforeUri.includes('_LABELED') && (
+                    <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                      <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
+                    </View>
+                  )}
+                </View>
+                <View style={{ width: sideBaseDims.rightW, height: '100%' }}>
+                  <Image
+                    source={{ uri: sideBasePair.afterUri }}
+                    style={{ width: '100%', height: '100%' }}
+                    resizeMode="cover"
+                    onLoad={() => setSideLoadedB(true)}
+                  />
+                  {/* AFTER label - only if photo doesn't already have labels */}
+                  {false && showLabels && !sideBasePair.afterUri.includes('_LABELED') && (
+                    <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
+                      <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
+                    </View>
+                  )}
+                </View>
               </View>
-            </View>
-          ) : (
-            // SIDE-BY-SIDE
-            <View style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
-              <View style={{ width: sideBaseDims.leftW, height: '100%' }}>
-                <Image
-                  source={{ uri: sideBasePair.beforeUri }}
-                  style={{ width: '100%', height: '100%' }}
-                  resizeMode="cover"
-                  onLoad={() => setSideLoadedA(true)}
-                />
-                {/* BEFORE label - only if photo doesn't already have labels */}
-                {false && showLabels && !sideBasePair.beforeUri.includes('_LABELED') && (
-                  <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
-                    <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
-                  </View>
-                )}
-              </View>
-              <View style={{ width: sideBaseDims.rightW, height: '100%' }}>
-                <Image
-                  source={{ uri: sideBasePair.afterUri }}
-                  style={{ width: '100%', height: '100%' }}
-                  resizeMode="cover"
-                  onLoad={() => setSideLoadedB(true)}
-                />
-                {/* AFTER label - only if photo doesn't already have labels */}
-                {false && showLabels && !sideBasePair.afterUri.includes('_LABELED') && (
-                  <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
-                    <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
-                  </View>
-                )}
-              </View>
-            </View>
-          )}
-        </View>
-      )}
-    </SafeAreaView>
+            )}
+          </View>
+        )}
+      </Animated.View>
+    </View>
   );
 }
 
@@ -2361,7 +2402,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#000'
+    backgroundColor: '#000',
+    justifyContent: 'center',
   },
   camera: {
     flex: 1
@@ -3126,5 +3168,11 @@ const styles = StyleSheet.create({
   hiddenLabelImage: {
     width: '100%',
     height: '100%'
+  },
+  androidCameraWrapper: {
+    width: '100%',
+    aspectRatio: 9/16,
+    overflow: 'hidden',
+    alignSelf: 'center',
   },
 });
