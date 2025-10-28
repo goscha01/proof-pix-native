@@ -1622,104 +1622,92 @@ export default function CameraScreen({ route, navigation }) {
           <Text style={styles.closeButtonText}>✕</Text>
         </TouchableOpacity>
 
-        {/* Flashlight button - only show for back camera - TESTING: overlaying capture button */}
-        {facing === 'back' && (
-          <TouchableOpacity
-            style={styles.flashlightButtonOverlay}
-            onPress={() => {
-              setEnableTorch(!enableTorch);
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.flashlightButtonText}>{enableTorch ? '🔦' : '💡'}</Text>
-          </TouchableOpacity>
-        )}
-
         <View style={styles.bottomControls}>
           {/* Main control row */}
           <View style={styles.mainControlRow}>
-            {/* Left side thumbnail - only show when gallery is NOT open */}
-            {!showGallery && !showEnlargedGallery && (() => {
-              const activePhoto = getActiveBeforePhoto();
-              
-              if (activePhoto) {
-                const photoOrientation = activePhoto.orientation || 'portrait';
-                console.log('Thumbnail - Photo orientation:', photoOrientation, 'Photo:', activePhoto.name, 'Room:', room);
-                return (
+            {/* Left container - Thumbnail */}
+            <View style={styles.buttonContainer}>
+              {!showGallery && !showEnlargedGallery && (() => {
+                const activePhoto = getActiveBeforePhoto();
+                
+                if (activePhoto) {
+                  const photoOrientation = activePhoto.orientation || 'portrait';
+                  console.log('Thumbnail - Photo orientation:', photoOrientation, 'Photo:', activePhoto.name, 'Room:', room);
+                  return (
+                <TouchableOpacity
+                      style={[
+                        styles.thumbnailViewerContainer,
+                        cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
+                      ]}
+                  activeOpacity={1}
+                  onPress={() => {
+                    const newMode = cameraViewMode === 'portrait' ? 'landscape' : 'portrait';
+                    console.log('Toggling camera view mode from thumbnail:', newMode);
+                    setCameraViewMode(newMode);
+                  }}
+                      onPressIn={handleThumbnailPressIn}
+                      onPressOut={handleThumbnailPressOut}
+                >
+                  <Image
+                        source={{ uri: activePhoto.uri }}
+                    style={styles.thumbnailViewerImage}
+                    resizeMode="cover"
+                  />
+                  <Text style={styles.thumbnailViewerLabel}>👁</Text>
+                </TouchableOpacity>
+                  );
+                } else {
+                  // Show empty placeholder - allow switching camera view mode
+                  return (
+                    <TouchableOpacity
+                      style={[
+                        styles.thumbnailViewerContainer,
+                        cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
+                      ]}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        const newMode = cameraViewMode === 'portrait' ? 'landscape' : 'portrait';
+                        console.log('Toggling camera view mode from empty placeholder:', newMode);
+                        setCameraViewMode(newMode);
+                      }}
+                    />
+                  );
+                }
+              })()}
+            </View>
+
+            {/* Center container - Capture button */}
+            <View style={styles.buttonContainer}>
               <TouchableOpacity
-                    style={[
-                      styles.thumbnailViewerContainer,
-                      cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
-                    ]}
-                activeOpacity={1}
-                onPress={() => {
-                  const newMode = cameraViewMode === 'portrait' ? 'landscape' : 'portrait';
-                  console.log('Toggling camera view mode from thumbnail:', newMode);
-                  setCameraViewMode(newMode);
-                }}
-                    onPressIn={handleThumbnailPressIn}
-                    onPressOut={handleThumbnailPressOut}
+                style={[styles.captureButton, isOrientationMismatch() && styles.captureButtonDisabled]} 
+                onPress={takePicture}
+                disabled={isOrientationMismatch()}
               >
-                <Image
-                      source={{ uri: activePhoto.uri }}
-                  style={styles.thumbnailViewerImage}
-                  resizeMode="cover"
-                />
-                <Text style={styles.thumbnailViewerLabel}>👁</Text>
+                <View style={[styles.captureButtonInner, isOrientationMismatch() && styles.captureButtonInnerDisabled]} />
+                {isOrientationMismatch() && (
+                  <Text style={styles.captureButtonWarning}>🔄</Text>
+                )}
               </TouchableOpacity>
-                );
-              } else {
-                // Show empty placeholder matching current camera view mode
-                return (
-                  <View style={[
-                    styles.thumbnailViewerContainer, 
-                    cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
-                  ]} />
-                );
-              }
-            })()}
+            </View>
 
-            {/* Capture button - center */}
-              <TouchableOpacity
-              style={[styles.captureButton, isOrientationMismatch() && styles.captureButtonDisabled]} 
-              onPress={takePicture}
-              disabled={isOrientationMismatch()}
-            >
-              <View style={[styles.captureButtonInner, isOrientationMismatch() && styles.captureButtonInnerDisabled]} />
-              {isOrientationMismatch() && (
-                <Text style={styles.captureButtonWarning}>🔄</Text>
-              )}
-            </TouchableOpacity>
-
-            {/* Right side button - Hidden: now using left preview to toggle orientation */}
-            {false && mode === 'before' && (
-              /* Camera orientation toggle - only in before mode */
-            <TouchableOpacity
-                style={[
-                  styles.orientationToggle,
-                  cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
-                ]}
-                onPress={() => {
-                  const newMode = cameraViewMode === 'portrait' ? 'landscape' : 'portrait';
-                  console.log('Toggling camera view mode:', newMode);
-                  setCameraViewMode(newMode);
-                }}
-              >
-                <View style={styles.orientationToggleIcon}>
-                  <Text style={styles.orientationToggleText}>
-                    {cameraViewMode === 'portrait' ? '📐' : '📱'}
+            {/* Right container - Flashlight */}
+            <View style={styles.buttonContainer}>
+              {facing === 'back' ? (
+                <TouchableOpacity
+                  style={styles.flashlightButton}
+                  onPress={() => {
+                    setEnableTorch(!enableTorch);
+                  }}
+                  activeOpacity={0.7}
+                >
+                  <Text style={styles.flashlightButtonText}>
+                    {enableTorch ? '💡' : '⚫'}
                   </Text>
-                </View>
-            </TouchableOpacity>
-            )}
-            
-            {/* Empty placeholder in after mode to maintain layout balance */}
-            {mode === 'after' && (
-              <View style={[
-                styles.orientationToggle,
-                cameraViewMode === 'landscape' ? styles.thumbnailLandscape : styles.thumbnailPortrait
-              ]} />
-            )}
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.flashlightButton} />
+              )}
+            </View>
           </View>
         </View>
       </Animated.View>
@@ -2464,37 +2452,18 @@ const styles = StyleSheet.create({
     fontSize: 24
   },
   flashlightButton: {
-    position: 'absolute',
-    top: 110,
-    right: 20,
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 8,
+    overflow: 'hidden',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1000,
-    elevation: 1000,
-    borderWidth: 2,
-    borderColor: 'rgba(255,255,255,0.3)'
+    width: 56,   // Portrait orientation - narrow width
+    height: 84   // Portrait orientation - full height
   },
   flashlightButtonText: {
     fontSize: 24
-  },
-  flashlightButtonOverlay: {
-    position: 'absolute',
-    bottom: 30, // Position it above the capture button
-    alignSelf: 'center',
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: 'rgba(242, 195, 27, 0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 2000,
-    elevation: 2000,
-    borderWidth: 3,
-    borderColor: 'white'
   },
   flipButton: {
     width: 44,
@@ -2509,7 +2478,7 @@ const styles = StyleSheet.create({
   },
   bottomControls: {
     alignItems: 'center',
-    paddingBottom: 10,
+    paddingBottom: 20,
     paddingHorizontal: 20,
     backgroundColor: 'transparent'
   },
@@ -2520,6 +2489,12 @@ const styles = StyleSheet.create({
     width: '100%',
     position: 'relative',
     paddingHorizontal: 10
+  },
+  buttonContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 84  // Match tallest button height
   },
   modeInfo: {
     backgroundColor: 'rgba(0,0,0,0.7)',
@@ -2538,8 +2513,7 @@ const styles = StyleSheet.create({
     borderRadius: 40,
     backgroundColor: 'white',
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 20
+    alignItems: 'center'
   },
   captureButtonDisabled: {
     opacity: 0.5,
@@ -2642,8 +2616,6 @@ const styles = StyleSheet.create({
   },
   // Thumbnail viewer styles (overlay mode - left side of shutter button)
   thumbnailViewerContainer: {
-    position: 'absolute',
-    left: 10,
     borderRadius: 8,
     overflow: 'hidden',
     backgroundColor: 'rgba(0,0,0,0.5)',
