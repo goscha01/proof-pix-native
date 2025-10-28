@@ -12,12 +12,9 @@ const PHOTOS_METADATA_KEY = 'cleaning-photos-metadata';
  */
 export const clearAllPhotoData = async () => {
   try {
-    console.log('🧹 Clearing old photo data...');
     await AsyncStorage.removeItem(PHOTOS_METADATA_KEY);
-    console.log('✅ Photo data cleared successfully');
     return true;
   } catch (error) {
-    console.error('❌ Error clearing photo data:', error);
     return false;
   }
 };
@@ -39,7 +36,6 @@ export const checkForInvalidURIs = async () => {
       total: photos.length
     };
   } catch (error) {
-    console.error('Error checking URIs:', error);
     return { hasInvalid: false, count: 0 };
   }
 };
@@ -62,7 +58,6 @@ export const removeInvalidPhotos = async () => {
       remaining: validPhotos.length
     };
   } catch (error) {
-    console.error('Error removing invalid photos:', error);
     return { removed: 0 };
   }
 };

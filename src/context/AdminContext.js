@@ -69,7 +69,6 @@ export function AdminProvider({ children }) {
         setPlanLimit(storedPlanLimit[1] ? parseInt(storedPlanLimit[1]) : 5);
       }
     } catch (error) {
-      console.error('[AdminContext] Error loading admin data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -85,7 +84,6 @@ export function AdminProvider({ children }) {
       setUserInfo(user);
       return { success: true };
     } catch (error) {
-      console.error('[AdminContext] Sign-in error:', error);
       return { success: false, error: error.message };
     }
   };
@@ -105,7 +103,6 @@ export function AdminProvider({ children }) {
       setInviteTokens([]);
       return { success: true };
     } catch (error) {
-      console.error('[AdminContext] Sign-out error:', error);
       return { success: false, error: error.message };
     }
   };
@@ -118,7 +115,6 @@ export function AdminProvider({ children }) {
       await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_FOLDER_ID, id);
       setFolderId(id);
     } catch (error) {
-      console.error('[AdminContext] Error saving folder ID:', error);
       throw error;
     }
   };
@@ -135,7 +131,6 @@ export function AdminProvider({ children }) {
       setScriptUrl(url);
       setScriptId(id);
     } catch (error) {
-      console.error('[AdminContext] Error saving script info:', error);
       throw error;
     }
   };
@@ -150,7 +145,6 @@ export function AdminProvider({ children }) {
       setInviteTokens(newTokens);
       return { success: true };
     } catch (error) {
-      console.error('[AdminContext] Error adding invite token:', error);
       return { success: false, error: error.message };
     }
   };
@@ -165,7 +159,6 @@ export function AdminProvider({ children }) {
       setInviteTokens(newTokens);
       return { success: true };
     } catch (error) {
-      console.error('[AdminContext] Error removing invite token:', error);
       return { success: false, error: error.message };
     }
   };
@@ -178,7 +171,6 @@ export function AdminProvider({ children }) {
       await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_PLAN_LIMIT, limit.toString());
       setPlanLimit(limit);
     } catch (error) {
-      console.error('[AdminContext] Error updating plan limit:', error);
       throw error;
     }
   };
@@ -196,7 +188,6 @@ export function AdminProvider({ children }) {
         STORAGE_KEYS.ADMIN_PLAN_LIMIT,
       ]);
     } catch (error) {
-      console.error('[AdminContext] Error clearing admin data:', error);
       throw error;
     }
   };

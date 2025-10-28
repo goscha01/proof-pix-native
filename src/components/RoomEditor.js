@@ -330,7 +330,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
   const [markAsDefault, setMarkAsDefault] = useState(false);
   const nameInputRef = useRef(null);
 
-  // console.log('RoomEditor rendered:', { visible, initialRooms });
+  // 
 
   const isDefaultRoom = (room) => {
     // Check if it's an original default room OR marked as default
@@ -340,7 +340,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
   // Initialize rooms only when component first becomes visible
   useEffect(() => {
     if (visible && rooms.length === 0) {
-      // console.log('RoomEditor: First initialization with rooms:', initialRooms);
+      // 
       const initialData = initialRooms || ROOMS;
       setRooms([...initialData]);
     }
@@ -349,7 +349,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
   // Handle mode changes
   useEffect(() => {
     if (visible) {
-      // console.log('RoomEditor: Mode change - mode:', mode, 'editRoom:', editRoom);
+      // 
       
       if (mode === 'add') {
         // Automatically add a new room and enter edit mode
@@ -404,7 +404,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
     setRooms(updatedRooms);
     
     // Immediately save the changes
-    // console.log('Adding new room, calling onSave with:', updatedRooms);
+    // 
     onSave(updatedRooms);
 
     setEditingRoom(newRoom.id);
@@ -412,11 +412,11 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
     setSelectedIcon('🏠');
     setIsEditingName(false);
 
-    // console.log('Added new room:', newRoom);
+    // 
   };
 
   const handleEditRoom = (room) => {
-    // console.log('handleEditRoom called with:', room);
+    // 
     setEditingRoom(room.id);
     setRoomName(room.name);
     setSelectedIcon(room.icon);
@@ -425,7 +425,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
   };
 
   const handleSaveRoom = () => {
-    // console.log('handleSaveRoom called with:', { roomName, selectedIcon, editingRoom });
+    // 
     if (!roomName.trim()) {
       Alert.alert('Error', 'Room name cannot be empty.');
       return;
@@ -437,7 +437,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
         : room
     );
     
-    // console.log('Updated rooms:', updatedRooms);
+    // 
     setRooms(updatedRooms);
     setEditingRoom(null);
     setRoomName('');
@@ -446,7 +446,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
     setMarkAsDefault(false);
 
     // Save the changes and close the editor
-    // console.log('Calling onSave from handleSaveRoom with:', updatedRooms);
+    // 
     onSave(updatedRooms);
   };
 
@@ -477,10 +477,10 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
           style: 'destructive',
           onPress: () => {
             const updatedRooms = rooms.filter(room => room.id !== roomId);
-            // console.log('Deleting room, updated rooms:', updatedRooms);
+            // 
             setRooms(updatedRooms);
             // Immediately save the changes
-            // console.log('Calling onSave with:', updatedRooms);
+            // 
             onSave(updatedRooms);
           }
         }
@@ -494,7 +494,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
       return;
     }
 
-    // console.log('Saving all rooms:', rooms);
+    // 
     onSave(rooms);
     onClose();
   };
@@ -537,7 +537,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
                 selectedIcon === icon && styles.iconButtonSelected
               ]}
               onPress={() => {
-                // console.log('Icon selected:', icon);
+                // 
                 setSelectedIcon(icon);
               }}
             >
@@ -550,7 +550,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
   };
 
   const renderRoomEditor = () => {
-    // console.log('renderRoomEditor called, editingRoom:', editingRoom);
+    // 
     if (!editingRoom) return null;
 
     const currentRoom = rooms.find(r => r.id === editingRoom);
@@ -605,7 +605,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
           <TouchableOpacity
             style={styles.cancelButton}
             onPress={() => {
-              // console.log('Cancel button pressed');
+              // 
               setEditingRoom(null);
               setRoomName('');
               setSelectedIcon('');
@@ -617,7 +617,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
           <TouchableOpacity
             style={styles.saveButton}
             onPress={() => {
-              // console.log('Save button pressed');
+              // 
               handleSaveRoom();
             }}
           >

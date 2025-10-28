@@ -174,7 +174,6 @@ export default function CameraScreen({ route, navigation }) {
           const photos = getUnpairedBeforePhotos(room);
           const index = photos.findIndex(p => p.id === selectedBeforePhoto.id);
           if (index !== -1) {
-            console.log('Scrolling to selected photo at index:', index);
             galleryScrollRef.current.scrollTo({ x: index * 112, animated: false });
           }
         } else if (mode === 'before') {
@@ -183,7 +182,6 @@ export default function CameraScreen({ route, navigation }) {
           if (photos.length > 0) {
             const lastIndex = photos.length - 1;
             const scrollX = lastIndex * 112;
-            console.log('Before mode - scrolling to last photo, index:', lastIndex, 'scrollX:', scrollX);
             galleryScrollRef.current.scrollTo({ x: scrollX, animated: false });
           }
         }
@@ -198,7 +196,6 @@ export default function CameraScreen({ route, navigation }) {
         if (enlargedGalleryScrollRef.current) {
           // Scroll to the tapped photo index
           const scrollX = enlargedGalleryIndex * dimensions.width;
-          console.log('Enlarged gallery - scrolling to index:', enlargedGalleryIndex, 'scrollX:', scrollX);
           enlargedGalleryScrollRef.current.scrollTo({ 
             x: scrollX, 
             animated: false 
@@ -271,7 +268,6 @@ export default function CameraScreen({ route, navigation }) {
         const { dx, dy } = gestureState;
         const isVertical = Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 20;
         if (isVertical) {
-          console.log('Carousel: Vertical swipe detected', dy);
         }
         return isVertical;
       },
@@ -283,28 +279,23 @@ export default function CameraScreen({ route, navigation }) {
       onPanResponderMove: (evt, gestureState) => {
         // Only allow downward swipes (positive dy)
         if (gestureState.dy > 0) {
-          console.log('Carousel moving down:', gestureState.dy);
           carouselTranslateY.setValue(gestureState.dy);
         }
       },
       onPanResponderRelease: (evt, gestureState) => {
         const threshold = 100; // Swipe down at least 100px to dismiss
-        console.log('Carousel release, dy:', gestureState.dy);
         if (gestureState.dy > threshold) {
           // Dismiss carousel with animation - slide down
-          console.log('Carousel swipe-down detected - closing carousel, staying on camera');
           Animated.timing(carouselTranslateY, {
             toValue: dimensionsRef.current.height,
             duration: 300,
             useNativeDriver: true
           }).start(() => {
-            console.log('Carousel closed - back to camera view');
             setShowCarousel(false);
             carouselTranslateY.setValue(0);
           });
         } else {
           // Spring back to original position
-          console.log('Carousel swipe not enough - springing back');
           Animated.spring(carouselTranslateY, {
             toValue: 0,
             useNativeDriver: true
@@ -330,7 +321,6 @@ export default function CameraScreen({ route, navigation }) {
         const threshold = 100; // Swipe down at least 100px to close
         if (gestureState.dy > threshold) {
           // Close camera immediately - native animation handles it
-          console.log('Camera swipe-down detected - closing');
           navigation.goBack();
         }
       }
@@ -360,7 +350,6 @@ export default function CameraScreen({ route, navigation }) {
         }
 
         const newRoom = rooms[newRoomIndex].id;
-        console.log('Switching to room:', newRoom);
         setRoom(newRoom);
         
         // Update thumbnail based on mode
@@ -393,23 +382,19 @@ export default function CameraScreen({ route, navigation }) {
       onMoveShouldSetPanResponder: (evt, gestureState) => {
         // Don't capture gestures if carousel or gallery is open
         if (showCarouselRef.current) {
-          console.log('Combined: Carousel is open - ignoring gesture');
           return false;
         }
         if (showGalleryRef.current) {
-          console.log('Combined: Gallery is open - ignoring gesture');
           return false;
         }
         
         const { dx, dy } = gestureState;
         // Vertical swipe down for closing camera
         if (Math.abs(dy) > Math.abs(dx) && dy > 10) {
-          console.log('Combined: Vertical swipe DOWN detected (will close camera)');
           return true;
         }
         // Horizontal swipe for room switching
         if (Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 30) {
-          console.log('Combined: Horizontal swipe detected (will switch room)');
           return true;
         }
         return false;
@@ -425,13 +410,11 @@ export default function CameraScreen({ route, navigation }) {
           const threshold = 100;
           if (dy > threshold) {
             // Close camera immediately - native animation handles it
-            console.log('Combined: Camera swipe-down detected - closing');
             navigation.goBack();
           }
         } 
         // Check if it's a horizontal swipe (room switching)
         else if (Math.abs(dx) > Math.abs(dy)) {
-          console.log('Combined: Horizontal swipe - switching room');
           const swipeThreshold = 50;
           const currentIndex = rooms.findIndex(r => r.id === currentRoomRef.current);
           
@@ -476,12 +459,6 @@ export default function CameraScreen({ route, navigation }) {
         // Don't activate if carousel, fullscreen, or enlarged gallery/photo is open
         // NOTE: Allow gestures even when gallery is animating, so user can cancel the opening animation
         if (showCarouselRef.current || isFullScreen || enlargedGalleryPhotoRef.current || showEnlargedGalleryRef.current) {
-          console.log('Camera gesture blocked:', { 
-            carousel: showCarouselRef.current, 
-            fullscreen: isFullScreen,
-            enlarged: enlargedGalleryPhotoRef.current !== null,
-            enlargedGallery: showEnlargedGalleryRef.current
-          });
           return false;
         }
         
@@ -495,7 +472,6 @@ export default function CameraScreen({ route, navigation }) {
           const isTopArea = gestureY < galleryTop;
           const isSwipeDown = dy > 0 && (Math.abs(dy) >= Math.abs(dx) || Math.abs(dx) < 5);
           const isHorizontal = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 5;
-          console.log('Camera with gallery - gesture check:', { dy, dx, isSwipeDown, isHorizontal, gestureY, isTopArea });
           // Only allow horizontal room switching from TOP area; bottom area horizontal should be handled by ScrollView
           return isSwipeDown || (isTopArea && isHorizontal);
         }
@@ -503,8 +479,6 @@ export default function CameraScreen({ route, navigation }) {
         // If gallery is NOT shown, respond to swipe up, swipe down, or horizontal swipes
         const isVerticalSwipe = Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 10;
         const isHorizontalSwipe = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10;
-        
-        console.log('Camera without gallery - gesture check:', { dy, dx, vertical: isVerticalSwipe, horizontal: isHorizontalSwipe });
         return isVerticalSwipe || isHorizontalSwipe;
       },
       onMoveShouldSetPanResponderCapture: (evt, gestureState) => {
@@ -531,11 +505,9 @@ export default function CameraScreen({ route, navigation }) {
             const isDownward = dy > 0;
             const notClearlyHorizontal = Math.abs(dx) <= Math.abs(dy) || Math.abs(dx) < 5;
             if (isDownward && notClearlyHorizontal) {
-              console.log('🎯 CAPTURE Gallery swipe:', { dy, dx, gestureY, screenHeight, galleryTop });
               return true;
             }
             // Don't capture horizontal gestures - let ScrollView handle them
-            console.log('❌ NOT capturing (horizontal):', { dy, dx });
             return false;
           }
           
@@ -543,7 +515,6 @@ export default function CameraScreen({ route, navigation }) {
           const isVertical = dy > 2 && Math.abs(dy) > Math.abs(dx);
           const isHorizontal = Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10;
           if (isVertical || isHorizontal) {
-            console.log('Capture - Camera area:', { dy, dx, gestureY, isVertical, isHorizontal });
             return true;
           }
           
@@ -560,13 +531,6 @@ export default function CameraScreen({ route, navigation }) {
         if (showGalleryRef.current) {
           // Vertical swipe down - close gallery (reduced threshold for better responsiveness)
           if (Math.abs(dy) > Math.abs(dx) && dy > 20) {
-            console.log('Swipe down with gallery - closing gallery. Current state:', { 
-              gallery: showGalleryRef.current, 
-              cameraViewMode,
-              deviceOrientation,
-              wasAnimating: isGalleryAnimatingRef.current
-            });
-            
             // Stop any ongoing animations immediately
             cameraScale.stopAnimation();
             cameraTranslateY.stopAnimation();
@@ -578,9 +542,6 @@ export default function CameraScreen({ route, navigation }) {
             
             // Update state immediately before animation
             setShowGallery(false);
-            
-            console.log('Gallery closing - animating to scale: 1, translateY: 0');
-            
             Animated.parallel([
               Animated.spring(cameraScale, {
                 toValue: 1,
@@ -600,7 +561,6 @@ export default function CameraScreen({ route, navigation }) {
                 useNativeDriver: true
               })
             ]).start(() => {
-              console.log('Gallery animation complete. Resetting values explicitly.');
               // Explicitly reset values to ensure they're at default
               cameraScale.setValue(1);
               cameraTranslateY.setValue(0);
@@ -610,7 +570,6 @@ export default function CameraScreen({ route, navigation }) {
               setTimeout(() => {
                 isGalleryAnimatingRef.current = false;
                 setIsGalleryAnimating(false);
-                console.log('Gallery animation flag cleared - ready for next gesture');
               }, 100);
             });
             return;
@@ -622,10 +581,8 @@ export default function CameraScreen({ route, navigation }) {
             const startY = gestureState.y0;
             const galleryTop = dimensionsRef.current.height * 0.6;
             if (startY >= galleryTop) {
-              console.log('Horizontal swipe started in gallery area - do not switch rooms');
               return;
             }
-            console.log('Horizontal swipe with gallery - switching room');
             const currentIndex = rooms.findIndex(r => r.id === currentRoomRef.current);
             
             if (dx > 0) {
@@ -675,14 +632,11 @@ export default function CameraScreen({ route, navigation }) {
           if (Math.abs(dy) > Math.abs(dx)) {
             // Swipe down - close camera
             if (dy > 100) {
-              console.log('Swipe down without gallery - closing camera');
               navigation.goBack();
               return;
             }
             // Swipe up - show gallery
             if (dy < -100) {
-              console.log('Swipe up - showing gallery');
-              
               // Set animating flag
               isGalleryAnimatingRef.current = true;
               setIsGalleryAnimating(true);
@@ -701,9 +655,6 @@ export default function CameraScreen({ route, navigation }) {
               const zoomFactor = cameraAspect / containerAspect; // Zoom to fill width
               const scale = baseScale * zoomFactor; // Final scale
               const translateY = -galleryHeight / 2;
-              
-              console.log('Gallery opening - baseScale:', baseScale.toFixed(2), 'zoomFactor:', zoomFactor.toFixed(2), 'final scale:', scale.toFixed(2), 'translateY:', translateY);
-              
               Animated.parallel([
                 Animated.spring(cameraScale, {
                   toValue: scale,
@@ -723,11 +674,9 @@ export default function CameraScreen({ route, navigation }) {
                   useNativeDriver: true
                 })
               ]).start(() => {
-                console.log('Gallery open animation complete');
                 setTimeout(() => {
                   isGalleryAnimatingRef.current = false;
                   setIsGalleryAnimating(false);
-                  console.log('Gallery open animation flag cleared');
                 }, 100);
               });
               return;
@@ -736,7 +685,6 @@ export default function CameraScreen({ route, navigation }) {
           
           // Check for horizontal swipe (room switching, reduced threshold)
           if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 30) {
-            console.log('Horizontal swipe - switching room');
             const currentIndex = rooms.findIndex(r => r.id === currentRoomRef.current);
             
             if (dx > 0) {
@@ -804,7 +752,6 @@ export default function CameraScreen({ route, navigation }) {
         const threshold = 80;
         
         if (dy > threshold) {
-          console.log('Enlarged gallery swipe down - closing (instant, like cross button)');
           // Clear both states immediately (same as cross button)
           setEnlargedGalleryPhoto(null);
           setShowEnlargedGallery(false);
@@ -818,8 +765,6 @@ export default function CameraScreen({ route, navigation }) {
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       const newOrientation = window.width > window.height ? 'landscape' : 'portrait';
-      console.log('Screen rotated - Width:', window.width, 'Height:', window.height, 'Orientation:', newOrientation);
-      
       // Update dimensions immediately for instant response
       setDimensions({ width: window.width, height: window.height });
       setDeviceOrientation(newOrientation);
@@ -834,7 +779,6 @@ export default function CameraScreen({ route, navigation }) {
     // Get specific orientation (landscape-left vs landscape-right)
     const getSpecificOrientation = async () => {
       const orientation = await ScreenOrientation.getOrientationAsync();
-      console.log('Initial specific orientation value:', orientation);
       setSpecificOrientation(orientation);
     };
     
@@ -846,17 +790,13 @@ export default function CameraScreen({ route, navigation }) {
         3: 'LANDSCAPE_LEFT (counter-clockwise)',
         4: 'LANDSCAPE_RIGHT (clockwise)'
       };
-      console.log('📱 Orientation changed to:', orientation, '-', orientationNames[orientation]);
-      
       // Cross-check with dimensions to ensure consistency
       const currentDims = Dimensions.get('window');
       const currentOrientation = currentDims.width > currentDims.height ? 'landscape' : 'portrait';
       
       if (currentOrientation === 'portrait' && (orientation === 3 || orientation === 4)) {
-        console.log('⚠️ Listener mismatch! Dimensions say portrait, correcting to 1');
         setSpecificOrientation(1);
       } else if (currentOrientation === 'landscape' && orientation === 1) {
-        console.log('⚠️ Listener mismatch! Dimensions say landscape, keeping landscape value');
         // Keep the landscape orientation (3 or 4) - don't force to portrait
       } else {
         // Update immediately - native rotation is already smooth
@@ -909,7 +849,6 @@ export default function CameraScreen({ route, navigation }) {
     }
     
     // Show indicator
-    console.log('Room changed - showing indicator for:', room);
     setShowRoomIndicator(true);
     
     // Hide after 500ms
@@ -932,14 +871,10 @@ export default function CameraScreen({ route, navigation }) {
         const orientation = await ScreenOrientation.getOrientationAsync();
         const currentDims = Dimensions.get('window');
         const currentOrientation = currentDims.width > currentDims.height ? 'landscape' : 'portrait';
-        console.log('🔄 Force orientation check on mount:', orientation, 'Dimensions:', currentDims.width, 'x', currentDims.height, 'Calculated:', currentOrientation);
-        
         // Cross-check: If dimensions say portrait but API says landscape (or vice versa), trust dimensions
         if (currentOrientation === 'portrait' && (orientation === 3 || orientation === 4)) {
-          console.log('⚠️ Orientation mismatch detected! Correcting to PORTRAIT (1)');
           setSpecificOrientation(1);
         } else if (currentOrientation === 'landscape' && orientation === 1) {
-          console.log('⚠️ Orientation mismatch detected! Correcting to LANDSCAPE (3)');
           setSpecificOrientation(3);
         } else {
           setSpecificOrientation(orientation);
@@ -984,7 +919,6 @@ export default function CameraScreen({ route, navigation }) {
     if (mode === 'after') {
       const activeBeforePhoto = getActiveBeforePhoto();
       if (activeBeforePhoto && activeBeforePhoto.cameraViewMode) {
-        console.log('Setting after camera view mode to match before photo:', activeBeforePhoto.cameraViewMode);
         setCameraViewMode(activeBeforePhoto.cameraViewMode);
       } else {
         // Fallback to device orientation if no cameraViewMode saved
@@ -996,12 +930,6 @@ export default function CameraScreen({ route, navigation }) {
   // Log when selectedBeforePhoto changes in after mode
   useEffect(() => {
     if (mode === 'after' && selectedBeforePhoto) {
-      console.log('📸 Selected before photo changed:', {
-        name: selectedBeforePhoto.name,
-        orientation: selectedBeforePhoto.orientation,
-        deviceOrientation,
-        willShowWarning: selectedBeforePhoto.orientation !== deviceOrientation
-      });
     }
   }, [selectedBeforePhoto, mode, deviceOrientation]);
 
@@ -1061,7 +989,6 @@ export default function CameraScreen({ route, navigation }) {
         await handleAfterPhoto(photo.uri);
       }
     } catch (error) {
-      console.error('Error taking picture:', error);
       Alert.alert('Error', 'Failed to take picture');
     } finally {
       setIsCapturing(false);
@@ -1070,12 +997,9 @@ export default function CameraScreen({ route, navigation }) {
 
   // Helper function to add label to photo
   const addLabelToPhoto = async (uri, labelText) => {
-    console.log('addLabelToPhoto called - showLabels:', showLabels, 'labelText:', labelText);
-    console.log('⚠️ LABELS TEMPORARILY DISABLED FOR DEBUGGING - returning original URI');
     return uri; // Temporarily disabled
     
     if (!showLabels) {
-      console.log('Labels disabled, returning original URI');
       return uri;
     }
 
@@ -1083,8 +1007,6 @@ export default function CameraScreen({ route, navigation }) {
       // Get image dimensions
       return new Promise((resolve) => {
         Image.getSize(uri, async (width, height) => {
-          console.log('Image dimensions:', width, 'x', height);
-          console.log('Setting temp photo state for label capture');
           setTempPhotoDimensions({ width, height });
           setTempPhotoUri(uri);
           setTempPhotoLabel(labelText);
@@ -1092,7 +1014,6 @@ export default function CameraScreen({ route, navigation }) {
           // Wait for next frame to ensure view is rendered
           setTimeout(async () => {
             try {
-              console.log('Attempting to capture labeled view, ref exists:', !!labelViewRef.current);
               if (labelViewRef.current) {
                 const capturedUri = await captureRef(labelViewRef, {
                   format: 'jpg',
@@ -1100,20 +1021,17 @@ export default function CameraScreen({ route, navigation }) {
                   width,
                   height
                 });
-                console.log('Successfully captured labeled photo:', capturedUri);
                 setTempPhotoUri(null);
                 setTempPhotoLabel(null);
                 setTempPhotoDimensions({ width: 1080, height: 1920 });
                 resolve(capturedUri);
               } else {
-                console.log('Label view ref not found, returning original URI');
                 setTempPhotoUri(null);
                 setTempPhotoLabel(null);
                 setTempPhotoDimensions({ width: 1080, height: 1920 });
                 resolve(uri);
               }
             } catch (error) {
-              console.error('Error adding label to photo:', error);
               setTempPhotoUri(null);
               setTempPhotoLabel(null);
               setTempPhotoDimensions({ width: 1080, height: 1920 });
@@ -1121,12 +1039,10 @@ export default function CameraScreen({ route, navigation }) {
             }
           }, 300);
         }, (error) => {
-          console.error('Error getting image size:', error);
           resolve(uri);
         });
       });
     } catch (error) {
-      console.error('Error in addLabelToPhoto:', error);
       return uri;
     }
   };
@@ -1143,8 +1059,6 @@ export default function CameraScreen({ route, navigation }) {
 
       // Capture device orientation (actual phone orientation)
       const currentOrientation = deviceOrientation;
-      console.log('Saving before photo with orientation:', currentOrientation, 'Device:', deviceOrientation, 'Camera view mode:', cameraViewMode);
-
       // Add to photos with device orientation AND camera view mode
       const newPhoto = {
         id: Date.now(),
@@ -1178,9 +1092,7 @@ export default function CameraScreen({ route, navigation }) {
             };
             await addPhoto(updatedPhoto);
             setSelectedBeforePhoto(updatedPhoto);
-            console.log('✅ Labeled before photo saved in background');
           } catch (error) {
-            console.warn('⚠️ Label processing failed:', error?.message);
           }
         })();
       }
@@ -1188,7 +1100,6 @@ export default function CameraScreen({ route, navigation }) {
       // Stay in before mode to allow taking more photos
       // User can close camera to see photos in home grid
     } catch (error) {
-      console.error('Error saving before photo:', error);
       Alert.alert('Error', 'Failed to save photo');
     }
   };
@@ -1204,15 +1115,11 @@ export default function CameraScreen({ route, navigation }) {
       }
 
       const beforePhotoId = activeBeforePhoto.id;
-      console.log('Taking after photo for:', activeBeforePhoto.name, 'ID:', beforePhotoId);
-
       // If replacing existing photos, delete them first
       if (existingAfterPhoto) {
-        console.log('Deleting old after photo:', existingAfterPhoto.id);
         await deletePhoto(existingAfterPhoto.id);
       }
       if (existingCombinedPhoto) {
-        console.log('Deleting old combined photo:', existingCombinedPhoto.id);
         await deletePhoto(existingCombinedPhoto.id);
       }
 
@@ -1236,8 +1143,6 @@ export default function CameraScreen({ route, navigation }) {
         orientation: activeBeforePhoto.orientation || deviceOrientation,
         cameraViewMode: activeBeforePhoto.cameraViewMode || 'portrait'
       };
-
-      console.log('Adding after photo with beforePhotoId:', beforePhotoId);
       await addPhoto(newAfterPhoto);
 
       // Process label in background if enabled (non-blocking)
@@ -1254,9 +1159,7 @@ export default function CameraScreen({ route, navigation }) {
               uri: labeledSavedUri
             };
             await addPhoto(updatedAfterPhoto);
-            console.log('✅ Labeled after photo saved in background');
           } catch (error) {
-            console.warn('⚠️ Label processing failed:', error?.message);
           }
         })();
       }
@@ -1290,7 +1193,6 @@ export default function CameraScreen({ route, navigation }) {
             const topH = Math.round(totalW * r1h);
             const bottomH = totalH - topH;
             dimsLocal = { width: totalW, height: totalH, topH, bottomH };
-            console.log('🟩 Stack base dims:', { totalW, totalH, topH, bottomH, r1h, r2h });
           } else {
             // SIDE-BY-SIDE: widths split based on height-normalized ratios
             const r1w = aSize.w / aSize.h;
@@ -1300,26 +1202,20 @@ export default function CameraScreen({ route, navigation }) {
             const leftW = Math.round(totalW * (r1w / denom));
             const rightW = totalW - leftW;
             dimsLocal = { width: totalW, height: totalH, leftW, rightW };
-            console.log('🟩 Side base dims:', { totalW, totalH, leftW, rightW, r1w, r2w });
           }
 
           setSideBaseDims(dimsLocal);
           setSideBasePair({ beforeUri: activeBeforePhoto.uri, afterUri: savedUri, isLandscapePair });
 
           // Allow mount (short)
-          console.log('🟩 Side base waiting for mount...');
           await new Promise((r) => setTimeout(r, 60));
-          console.log('🟩 Side base mount complete');
-
           // Prefetch images to improve load reliability
           try {
             await Promise.all([
               Image.prefetch(activeBeforePhoto.uri),
               Image.prefetch(savedUri)
             ]);
-            console.log('🟩 Side base images prefetched');
           } catch (pfErr) {
-            console.warn('⚠️ Side base prefetch failed:', pfErr?.message);
           }
           // Brief wait for images to load; don't block long
           const start = Date.now();
@@ -1327,18 +1223,14 @@ export default function CameraScreen({ route, navigation }) {
           while (!(sideLoadedA && sideLoadedB) && (Date.now() - start) < maxWaitMs) {
             await new Promise((r) => setTimeout(r, 20));
           }
-          console.log('🟩 Side base load flags:', { sideLoadedA, sideLoadedB, hasRef: !!sideBaseRef.current });
-
           // Capture without altering proportions
           if (sideBaseRef.current) {
-            console.log('📸 Side base capturing with size:', dimsLocal.width, 'x', dimsLocal.height);
             const capUri = await captureRef(sideBaseRef, {
               format: 'jpg',
               quality: 0.95,
               width: dimsLocal.width,
               height: dimsLocal.height
             });
-            console.log('📸 Side base captured URI:', capUri);
             const safeName = (activeBeforePhoto.name || 'Photo').replace(/\s+/g, '_');
             const baseType = isLandscapePair ? 'STACK' : 'SIDE';
             const projectIdSuffix = activeProjectId ? `_P${activeProjectId}` : '';
@@ -1347,8 +1239,6 @@ export default function CameraScreen({ route, navigation }) {
               `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_${baseType}_${Date.now()}${projectIdSuffix}.jpg`,
               activeProjectId || null
             );
-            console.log(`✅ Base (${baseType}) saved to device:`, firstSaved);
-
             // In LETTERBOX, also save the SIDE-BY-SIDE variant in addition to STACK
             if (isLetterbox) {
               try {
@@ -1360,28 +1250,19 @@ export default function CameraScreen({ route, navigation }) {
                 const leftWLB = Math.round(totalW * (r1wLB / denomLB));
                 const rightWLB = totalW - leftWLB;
                 const sideDimsLB = { width: totalW, height: totalHLB, leftW: leftWLB, rightW: rightWLB };
-                console.log('🟩 Letterbox extra side-by-side dims:', { totalW, totalHLB, leftWLB, rightWLB, r1wLB, r2wLB });
-
                 // Reset load flags and mount the side-by-side renderer
                 setSideLoadedA(false);
                 setSideLoadedB(false);
                 setSideBaseDims(sideDimsLB);
                 setSideBasePair({ beforeUri: activeBeforePhoto.uri, afterUri: savedUri, isLandscapePair: false });
-
-                console.log('🟩 Letterbox side-by-side waiting for mount...');
                 await new Promise((r) => setTimeout(r, 60));
-                console.log('🟩 Letterbox side-by-side mount complete');
-
                 // Brief wait for images to load
                 const startLB = Date.now();
                 const maxWaitMsLB = 300;
                 while (!(sideLoadedA && sideLoadedB) && (Date.now() - startLB) < maxWaitMsLB) {
                   await new Promise((r) => setTimeout(r, 20));
                 }
-                console.log('🟩 Letterbox side-by-side load flags:', { sideLoadedA, sideLoadedB, hasRef: !!sideBaseRef.current });
-
                 if (sideBaseRef.current) {
-                  console.log('📸 Letterbox side-by-side capturing with size:', sideDimsLB.width, 'x', sideDimsLB.height);
                   const capUriLB = await captureRef(sideBaseRef, {
                     format: 'jpg',
                     quality: 0.95,
@@ -1394,19 +1275,14 @@ export default function CameraScreen({ route, navigation }) {
                     `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}${projectIdSuffix}.jpg`,
                     activeProjectId || null
                   );
-                  console.log('✅ Letterbox side-by-side base saved to device:', secondSaved);
                 } else {
-                  console.warn('⚠️ Letterbox side-by-side capture skipped: missing ref');
                 }
               } catch (eLB) {
-                console.warn('⚠️ Letterbox side-by-side base save failed:', eLB?.message);
               }
             }
           } else {
-            console.warn('⚠️ Side base capture skipped: missing ref');
           }
         } catch (e) {
-          console.warn('⚠️ Side-by-side base save failed:', e?.message);
         } finally {
           setSideBasePair(null);
           setSideBaseDims(null);
@@ -1417,7 +1293,6 @@ export default function CameraScreen({ route, navigation }) {
 
       // If we're replacing an existing combined photo, navigate to PhotoEditor to recreate it
       if (existingCombinedPhoto) {
-        console.log('Navigating to PhotoEditor to recreate combined photo');
         navigation.navigate('PhotoEditor', {
           beforePhoto: activeBeforePhoto,
           afterPhoto: newAfterPhoto
@@ -1427,15 +1302,10 @@ export default function CameraScreen({ route, navigation }) {
 
       // Auto-advance to next unpaired photo (immediate)
       const remainingUnpaired = getUnpairedBeforePhotos(activeBeforePhoto.room);
-      console.log('Remaining unpaired photos:', remainingUnpaired.length);
-
       // Filter out the photo we just paired to ensure we don't count it
       const nextUnpaired = remainingUnpaired.filter(p => p.id !== beforePhotoId);
-      console.log('Next unpaired after filtering:', nextUnpaired.length);
-
       if (nextUnpaired.length > 0) {
         // Select the next unpaired photo
-        console.log('Moving to next photo:', nextUnpaired[0].name);
         setSelectedBeforePhoto(nextUnpaired[0]);
       } else {
         // All photos paired, go back to main grid
@@ -1457,7 +1327,6 @@ export default function CameraScreen({ route, navigation }) {
         );
       }
     } catch (error) {
-      console.error('Error saving after photo:', error);
       Alert.alert('Error', 'Failed to save photo');
     }
   };
@@ -1484,21 +1353,12 @@ export default function CameraScreen({ route, navigation }) {
     
     const activeBeforePhoto = getActiveBeforePhoto();
     if (!activeBeforePhoto) {
-      console.log('🔍 No active before photo for orientation check');
       return false;
     }
     
     const beforeOrientation = activeBeforePhoto.orientation || 'portrait';
     // In after mode, device orientation must match before photo orientation
     const mismatch = beforeOrientation !== deviceOrientation;
-    
-    console.log('🔍 Orientation check:', {
-      photoName: activeBeforePhoto.name,
-      beforeOrientation,
-      deviceOrientation,
-      mismatch
-    });
-    
     return mismatch;
   };
 
@@ -1528,7 +1388,6 @@ export default function CameraScreen({ route, navigation }) {
         {/* Orientation mismatch warning */}
         {(() => {
           const mismatch = isOrientationMismatch();
-          console.log('⚠️ Rendering warning check:', { mismatch, showEnlargedGallery, mode });
           return mismatch;
         })() && (
           <View style={styles.orientationWarning}>
@@ -1546,7 +1405,6 @@ export default function CameraScreen({ route, navigation }) {
           {/* Letterbox container for landscape mode */}
           {(() => {
             const showLetterbox = deviceOrientation === 'landscape';
-            console.log('Camera render - Letterbox check:', { cameraViewMode, deviceOrientation, showLetterbox });
             return showLetterbox;
           })() ? (
             <View style={[
@@ -1645,7 +1503,6 @@ export default function CameraScreen({ route, navigation }) {
         <TouchableOpacity
           style={styles.closeButtonTopRight}
           onPress={() => {
-            console.log('Close button pressed - going back');
             navigation.goBack();
           }}
           activeOpacity={0.7}
@@ -1663,7 +1520,6 @@ export default function CameraScreen({ route, navigation }) {
                 
                 if (activePhoto) {
                   const photoOrientation = activePhoto.orientation || 'portrait';
-                  console.log('Thumbnail - Photo orientation:', photoOrientation, 'Photo:', activePhoto.name, 'Room:', room);
                   return (
                 <TouchableOpacity
                       style={[
@@ -1673,7 +1529,6 @@ export default function CameraScreen({ route, navigation }) {
                   activeOpacity={1}
                   onPress={() => {
                     const newMode = cameraViewMode === 'portrait' ? 'landscape' : 'portrait';
-                    console.log('Toggling camera view mode from thumbnail:', newMode);
                     setCameraViewMode(newMode);
                   }}
                       onPressIn={handleThumbnailPressIn}
@@ -1698,7 +1553,6 @@ export default function CameraScreen({ route, navigation }) {
                       activeOpacity={0.7}
                       onPress={() => {
                         const newMode = cameraViewMode === 'portrait' ? 'landscape' : 'portrait';
-                        console.log('Toggling camera view mode from empty placeholder:', newMode);
                         setCameraViewMode(newMode);
                       }}
                     />
@@ -1786,7 +1640,6 @@ export default function CameraScreen({ route, navigation }) {
                     const offsetX = event.nativeEvent.contentOffset.x;
                     const index = Math.round(offsetX / 112);
                     if (photos[index]) {
-                      console.log('Gallery scrolled - auto-selecting:', photos[index].name);
                       setSelectedBeforePhoto(photos[index]);
                     }
                   }
@@ -1810,7 +1663,6 @@ export default function CameraScreen({ route, navigation }) {
                       
                       // Start long press timer for full-screen
                       longPressGalleryTimer.current = setTimeout(() => {
-                        console.log('Half-screen gallery - long press, showing full screen:', photo.name);
                         setEnlargedGalleryPhoto(photo);
                       }, 300);
                     }}
@@ -1825,26 +1677,22 @@ export default function CameraScreen({ route, navigation }) {
                       
                       // If full-screen photo is showing, close it
                       if (enlargedGalleryPhoto) {
-                        console.log('Half-screen gallery - releasing full screen');
                         setEnlargedGalleryPhoto(null);
                       }
                       // If it was a quick tap (< 300ms)
                       else if (pressDuration < 300) {
                         if (mode === 'before') {
                           // Before mode: tap opens enlarged carousel immediately
-                          console.log('Before mode - quick tap, opening enlarged carousel:', photo.name);
                           setEnlargedGalleryIndex(index);
                           setShowEnlargedGallery(true);
                         } else if (mode === 'after') {
                           // After mode: first tap selects, second tap (on already selected) opens enlarged carousel
                           if (selectedBeforePhoto?.id === photo.id) {
                             // Already selected - open enlarged carousel
-                            console.log('After mode - tapping selected photo, opening enlarged carousel:', photo.name);
                             setEnlargedGalleryIndex(index);
                             setShowEnlargedGallery(true);
                           } else {
                             // Not selected yet - just select it
-                            console.log('After mode - selecting photo:', photo.name);
                             setSelectedBeforePhoto(photo);
                           }
                         }
@@ -1890,7 +1738,6 @@ export default function CameraScreen({ route, navigation }) {
             <TouchableOpacity
               style={styles.enlargedGalleryCloseButton}
               onPress={() => {
-                console.log('Closing enlarged gallery');
                 // Clear both states immediately
                 setEnlargedGalleryPhoto(null);
                 setShowEnlargedGallery(false);
@@ -1905,7 +1752,6 @@ export default function CameraScreen({ route, navigation }) {
         onPress={async () => {
                 const currentPhoto = photos[enlargedGalleryIndex];
                 if (!currentPhoto) return;
-                console.log('Deleting photo:', currentPhoto.name);
                 await deletePhoto(currentPhoto.id);
 
                 // Close enlarged gallery and refresh
@@ -1934,7 +1780,6 @@ export default function CameraScreen({ route, navigation }) {
                   const offsetX = event.nativeEvent.contentOffset.x;
                   const index = Math.round(offsetX / dimensions.width);
                   if (photos[index]) {
-                    console.log('📸 Enlarged gallery scrolled - auto-selecting:', photos[index].name);
                     setSelectedBeforePhoto(photos[index]);
                   }
                 }
@@ -1949,7 +1794,6 @@ export default function CameraScreen({ route, navigation }) {
                     
                     // Start long press timer for full-screen
                     longPressGalleryTimer.current = setTimeout(() => {
-                      console.log('Long press - showing full screen:', photo.name);
                       setEnlargedGalleryPhoto(photo);
                     }, 300);
                   }}
@@ -1964,12 +1808,10 @@ export default function CameraScreen({ route, navigation }) {
                     
                     // If full-screen photo is showing, close it on release
                     if (enlargedGalleryPhoto) {
-                      console.log('Released - closing full screen');
                       setEnlargedGalleryPhoto(null);
                     } 
                     // If it was a quick tap (< 300ms) and in after mode, select the photo
                     else if (pressDuration < 300 && mode === 'after') {
-                      console.log('Quick tap - selecting photo:', photo.name);
                       setSelectedBeforePhoto(photo);
                       setEnlargedGalleryIndex(index);
                     }
@@ -1989,10 +1831,6 @@ export default function CameraScreen({ route, navigation }) {
                       
                       // Calculate width to fit height while maintaining camera aspect
                       const photoWidth = containerHeight * cameraAspect;
-                      
-                      console.log('Enlarged carousel photo - containerHeight:', containerHeight.toFixed(0), 
-                        'cameraAspect:', cameraAspect.toFixed(2), 'photoWidth:', photoWidth.toFixed(0));
-                      
                       return (
                         <View style={{
                           width: photoWidth,
@@ -2107,7 +1945,6 @@ export default function CameraScreen({ route, navigation }) {
               style={styles.carouselBackground}
               activeOpacity={1}
               onPress={() => {
-                console.log('Carousel background tapped - closing');
                 setShowCarousel(false);
               }}
             />
@@ -2160,7 +1997,6 @@ export default function CameraScreen({ route, navigation }) {
               <TouchableOpacity
                 style={styles.carouselCloseButton}
                 onPress={() => {
-                  console.log('Carousel close button pressed - closing carousel');
                   setShowCarousel(false);
                 }}
               >
@@ -2203,9 +2039,6 @@ export default function CameraScreen({ route, navigation }) {
           const referenceWidth = 1920;
           const screenWidth = Dimensions.get('window').width;
           const scaleFactor = referenceWidth / screenWidth;
-          
-          console.log('📏 Camera label scale factor (1920 reference):', { referenceWidth, screenWidth, scaleFactor });
-          
           return (
             <PhotoLabel
               label={tempPhotoLabel}

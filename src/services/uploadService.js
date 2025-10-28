@@ -12,8 +12,6 @@ import * as FileSystem from 'expo-file-system/legacy';
  */
 async function fileUriToBase64(fileUri) {
   try {
-    console.log('📸 Reading file:', fileUri);
-
     // Read the file as base64 (using string encoding type)
     let base64;
 
@@ -29,11 +27,9 @@ async function fileUriToBase64(fileUri) {
     for (const candidate of candidates) {
       try {
         if (candidate !== fileUri) {
-          console.warn('⚠️ Primary read failed, retrying with fallback URI:', candidate);
         }
         base64 = await FileSystem.readAsStringAsync(candidate, { encoding: 'base64' });
         if (base64) {
-          console.log('✅ File converted to base64, length:', base64.length);
           return `data:image/jpeg;base64,${base64}`;
         }
       } catch (err) {
@@ -46,11 +42,9 @@ async function fileUriToBase64(fileUri) {
       const source = candidates[0];
       const fileName = (source.split('/').pop() || `tmp_${Date.now()}.jpg`).replace(/\?.*$/, '');
       const dest = `${FileSystem.cacheDirectory}${Date.now()}_${fileName}`;
-      console.warn('⚠️ Copying to cache for read:', dest);
       await FileSystem.copyAsync({ from: source, to: dest });
       base64 = await FileSystem.readAsStringAsync(dest, { encoding: 'base64' });
       if (base64) {
-        console.log('✅ File converted to base64 from cache, length:', base64.length);
         return `data:image/jpeg;base64,${base64}`;
       }
     } catch (copyErr) {
@@ -61,7 +55,6 @@ async function fileUriToBase64(fileUri) {
     if (lastError) throw lastError;
     throw new Error('Unknown file read error');
   } catch (error) {
-    console.error('❌ Error converting file to base64:', error);
     throw new Error('Failed to read image file');
   }
 }
@@ -107,11 +100,6 @@ export async function uploadPhoto({
   flat = false
 }) {
   try {
-    console.log(`📤 Starting upload: ${filename}, type: ${type}, format: ${format}`);
-    console.log(`📍 Location: ${location}`);
-    console.log(`🔗 Script URL: ${scriptUrl}`);
-    console.log(`📁 Folder ID: ${folderId}`);
-
     if (!scriptUrl || !folderId) {
       throw new Error('Missing Google Drive configuration. Please set Script URL and Folder ID in Settings.');
     }
@@ -124,10 +112,8 @@ export async function uploadPhoto({
     let base64DataUrl = imageDataUrl;
     if (!imageDataUrl.startsWith('data:')) {
       const normalized = normalizeFileUri(imageDataUrl);
-      console.log('🔄 Converting URI to base64 (normalized):', normalized.substring(0, 60));
       base64DataUrl = await fileUriToBase64(normalized);
     } else {
-      console.log('✅ Already a data URL, length:', imageDataUrl.length);
     }
 
     // Extract just the base64 string (remove data:image/jpeg;base64, prefix if present)
@@ -135,9 +121,6 @@ export async function uploadPhoto({
     if (base64DataUrl.includes('base64,')) {
       base64String = base64DataUrl.split('base64,')[1];
     }
-
-    console.log(`📊 Base64 string length: ${base64String.length}`);
-
     // Prepare form data
     const formData = new FormData();
     formData.append('folderId', folderId);
@@ -153,9 +136,6 @@ export async function uploadPhoto({
     formData.append('location', location);
     formData.append('cleanerName', cleanerName);
     formData.append('image', base64String);
-
-    console.log(`🚀 Uploading to Google Drive...`);
-
     // Upload to Google Drive (ensure flat flag reaches GAS via URL as well)
     const shouldFlat = flat || (typeof globalThis.__UPLOAD_FLAT_MODE === 'boolean' && globalThis.__UPLOAD_FLAT_MODE);
     const targetUrl = shouldFlat
@@ -168,24 +148,15 @@ export async function uploadPhoto({
       // Pass abort signal if provided to support cancellation
       ...(abortSignal ? { signal: abortSignal } : {})
     });
-
-    console.log(`📥 Response status: ${response.status}`);
-
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ HTTP error! status: ${response.status}, body:`, errorText);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
 
     const result = await response.json();
-    console.log(`📋 Upload result for ${location}:`, result);
-
     if (result.success) {
-      console.log(`✅ Upload successful: ${filename} to ${location}`);
       return result;
     } else {
-      console.error(`❌ Upload failed for ${location}: ${result.message}`);
-      console.error(`❌ Full error response:`, result);
       throw new Error(result.message || 'Upload failed');
     }
   } catch (error) {
@@ -193,17 +164,7 @@ export async function uploadPhoto({
     const message = (error && error.message) || '';
     const isAbort = `${name} ${message}`.toLowerCase().includes('abort');
     if (isAbort) {
-      console.warn(`⏹️ Upload aborted: ${filename} for ${location}`);
     } else {
-      console.error(`❌ Upload error for ${filename} to ${location}:`, error);
-      console.error(`❌ Error details:`, {
-        name: error.name,
-        message: error.message,
-        stack: error.stack,
-        location,
-        scriptUrl,
-        folderId
-      });
     }
     throw error;
   }
@@ -260,7 +221,6 @@ export async function uploadPhotoBatch(photos, config) {
   // Process each batch
   for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
     if (abortSignal?.aborted) {
-      console.warn('🔴 Upload cancelled before starting batch', batchIndex + 1);
       break;
     }
     const batch = batches[batchIndex];
@@ -310,7 +270,6 @@ export async function uploadPhotoBatch(photos, config) {
           // Report progress when this upload completes
           if (onProgress) {
             completedUploads++;
-            console.log(`📊 Progress update: ${completedUploads}/${total} (${Math.round((completedUploads/total)*100)}%)`);
             onProgress(completedUploads, total);
           }
           return { success: true, result, photo };
@@ -319,7 +278,6 @@ export async function uploadPhotoBatch(photos, config) {
           // Still report progress even on failure
           if (onProgress) {
             completedUploads++;
-            console.log(`📊 Progress update (error): ${completedUploads}/${total} (${Math.round((completedUploads/total)*100)}%)`);
             onProgress(completedUploads, total);
           }
           return { success: false, error, photo };
@@ -332,7 +290,6 @@ export async function uploadPhotoBatch(photos, config) {
     // Process results
     results.forEach((result) => {
       if (result.status === 'fulfilled' && result.value.success) {
-        console.log(`✅ Batch upload success: ${result.value.photo?.filename || 'unknown'}`);
         successful.push(result.value);
       } else {
         const isRejected = result.status === 'rejected';
@@ -340,13 +297,8 @@ export async function uploadPhotoBatch(photos, config) {
         const rawMsg = typeof errorInfo.error === 'string' ? errorInfo.error : (errorInfo.error?.message || '');
         const isAbort = (rawMsg || '').toLowerCase().includes('abort');
         if (isAbort) {
-          console.warn(`⏹️ Upload aborted${errorInfo.photo?.filename ? ` for: ${errorInfo.photo.filename}` : ''}`);
           // Do not treat aborted uploads as failures in the results list
         } else {
-          console.error(`❌ Batch upload failed:`, {
-            filename: errorInfo.photo?.filename,
-            error: rawMsg || errorInfo.error
-          });
           failed.push(errorInfo);
         }
       }
@@ -359,7 +311,6 @@ export async function uploadPhotoBatch(photos, config) {
 
     // If cancelled, stop scheduling further batches
     if (abortSignal?.aborted) {
-      console.warn('🔴 Upload cancelled after batch', batchIndex + 1);
       break;
     }
 

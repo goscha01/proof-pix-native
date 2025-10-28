@@ -13,14 +13,14 @@ const SettingsContext = createContext();
 export const useSettings = () => {
   const context = useContext(SettingsContext);
   if (!context) {
-    console.error('useSettings must be used within SettingsProvider');
+
     throw new Error('useSettings must be used within SettingsProvider');
   }
   return context;
 };
 
 export const SettingsProvider = ({ children }) => {
-  // console.log('SettingsProvider initialized');
+  // 
   
   const [showLabels, setShowLabels] = useState(true);
   const [userName, setUserName] = useState('');
@@ -51,12 +51,12 @@ export const SettingsProvider = ({ children }) => {
       }
       
       // EMERGENCY: Clear all corrupted custom rooms data
-      // console.log('EMERGENCY: Clearing all custom rooms data due to corruption');
+      // 
       await AsyncStorage.removeItem(CUSTOM_ROOMS_KEY);
       setCustomRooms(null);
       
     } catch (error) {
-      console.error('Error loading settings:', error);
+
     } finally {
       setLoading(false);
     }
@@ -75,7 +75,7 @@ export const SettingsProvider = ({ children }) => {
       };
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
     } catch (error) {
-      console.error('Error saving settings:', error);
+
     }
   };
 
@@ -112,25 +112,25 @@ export const SettingsProvider = ({ children }) => {
   // Custom rooms management (temporarily global for stability)
   const saveCustomRooms = async (rooms) => {
     try {
-      // console.log('SettingsContext: Saving custom rooms:', rooms.map(r => r.name));
-      // console.log('SettingsContext: Saving custom rooms IDs:', rooms.map(r => r.id));
+      // );
+      // );
       if (rooms && rooms.length > 0) {
         await AsyncStorage.setItem(CUSTOM_ROOMS_KEY, JSON.stringify(rooms));
         setCustomRooms(rooms);
-        // console.log('SettingsContext: customRooms state updated');
+        // 
       } else {
         await AsyncStorage.removeItem(CUSTOM_ROOMS_KEY);
         setCustomRooms(null);
-        // console.log('SettingsContext: customRooms state cleared');
+        // 
       }
     } catch (error) {
-      console.error('Error saving custom rooms:', error);
+
     }
   };
 
   const getRooms = () => {
     const result = customRooms || ROOMS;
-    // console.log('SettingsContext: getRooms called, customRooms:', customRooms?.map(r => r.name) || 'null', 'result:', result.map(r => r.name));
+    //  || 'null', 'result:', result.map(r => r.name));
     return result;
   };
 
@@ -151,7 +151,7 @@ export const SettingsProvider = ({ children }) => {
       setEnabledFolders({ before: true, after: true, combined: true });
       setCustomRooms(null);
     } catch (error) {
-      console.error('Error resetting user data:', error);
+
     }
   };
 

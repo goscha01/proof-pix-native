@@ -33,7 +33,6 @@ export async function loadUploadedPhotos() {
     }
     return new Set();
   } catch (error) {
-    console.error('Error loading uploaded photos:', error);
     return new Set();
   }
 }
@@ -46,9 +45,7 @@ export async function saveUploadedPhotos(uploadedPhotos) {
   try {
     const keys = Array.from(uploadedPhotos);
     await AsyncStorage.setItem(UPLOADED_PHOTOS_KEY, JSON.stringify(keys));
-    console.log('💾 Uploaded photos tracker saved:', keys.length, 'photos');
   } catch (error) {
-    console.error('Error saving uploaded photos:', error);
   }
 }
 
@@ -69,7 +66,6 @@ export async function markPhotosAsUploaded(photos, albumName) {
     
     await saveUploadedPhotos(uploadedPhotos);
   } catch (error) {
-    console.error('Error marking photos as uploaded:', error);
   }
 }
 
@@ -88,16 +84,12 @@ export async function filterNewPhotos(photos, albumName) {
       const isUploaded = uploadedPhotos.has(key);
       
       if (isUploaded) {
-        console.log('📋 Skipping already uploaded photo:', photo.filename || photo.name);
       }
       
       return !isUploaded;
     });
-    
-    console.log(`📊 Filtered ${photos.length} photos to ${newPhotos.length} new photos`);
     return newPhotos;
   } catch (error) {
-    console.error('Error filtering new photos:', error);
     return photos; // Return all photos if filtering fails
   }
 }
@@ -108,9 +100,7 @@ export async function filterNewPhotos(photos, albumName) {
 export async function clearUploadedPhotos() {
   try {
     await AsyncStorage.removeItem(UPLOADED_PHOTOS_KEY);
-    console.log('🗑️ Uploaded photos tracker cleared');
   } catch (error) {
-    console.error('Error clearing uploaded photos:', error);
   }
 }
 
@@ -123,7 +113,6 @@ export async function getUploadedPhotosCount() {
     const uploadedPhotos = await loadUploadedPhotos();
     return uploadedPhotos.size;
   } catch (error) {
-    console.error('Error getting uploaded photos count:', error);
     return 0;
   }
 }

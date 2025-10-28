@@ -50,7 +50,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
     }
     
     const result = { captureWidth, captureHeight };
-    console.log('📏 Capture dimensions calculated:', { imageSize, ratio, result });
+
     return result;
   }, [imageSize]);
 
@@ -68,8 +68,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
       // If labels are enabled, capture the view (image + label)
       if (showLabels && photo.mode && captureDimensions) {
         try {
-          console.log('🖼️ Attempting to capture view with label, dimensions:', captureDimensions);
-          
+
           // Capture the hidden view which has exact image dimensions (no white padding)
           const capturedUri = await captureRef(captureViewRef, {
             format: 'jpg',
@@ -80,10 +79,9 @@ export default function PhotoDetailScreen({ route, navigation }) {
           const tempFileName = `${photo.room}_${photo.name}_${photo.mode}_labeled_${Date.now()}.jpg`;
           tempUri = `${FileSystem.cacheDirectory}${tempFileName}`;
           await FileSystem.copyAsync({ from: capturedUri, to: tempUri });
-          console.log('✅ Copied captured image to cache:', tempUri);
+
         } catch (error) {
-          console.error('❌ Error capturing view:', error);
-          console.error('Error details:', JSON.stringify(error, null, 2));
+
           // Fall back to original image if capture fails
           const tempFileName = `${photo.room}_${photo.name}_${photo.mode}_${Date.now()}.jpg`;
           tempUri = `${FileSystem.cacheDirectory}${tempFileName}`;
@@ -106,9 +104,9 @@ export default function PhotoDetailScreen({ route, navigation }) {
       const result = await Share.share(shareOptions);
       
       if (result.action === Share.sharedAction) {
-        console.log('Photo shared successfully');
+
       } else if (result.action === Share.dismissedAction) {
-        console.log('Share dialog dismissed');
+
       }
       
       // Clean up temporary file after sharing
@@ -116,13 +114,13 @@ export default function PhotoDetailScreen({ route, navigation }) {
         const fileInfo = await FileSystem.getInfoAsync(tempUri);
         if (fileInfo.exists) {
           await FileSystem.deleteAsync(tempUri, { idempotent: true });
-          console.log('🧹 Cleaned up temporary file');
+
         }
       } catch (cleanupError) {
-        console.warn('Could not clean up temporary file:', cleanupError);
+
       }
     } catch (error) {
-      console.error('Error sharing photo:', error);
+
       Alert.alert('Error', 'Failed to share photo');
     } finally {
       setSharing(false);
@@ -192,7 +190,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
           resizeMode="contain"
           onLoad={(event) => {
             const { width, height } = event.nativeEvent.source;
-            console.log('📐 Image loaded with dimensions:', { width, height });
+
             setImageSize({ width, height });
           }}
         />
@@ -262,8 +260,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
             const referenceWidth = 1920; // Landscape photo width reference
             const screenWidth = width;
             const scaleFactor = referenceWidth / screenWidth;
-            console.log('📏 Label scale factor (1920 reference):', { referenceWidth, screenWidth, scaleFactor });
-            
+
             return (
               <PhotoLabel
                 label={photo.mode.toUpperCase()}

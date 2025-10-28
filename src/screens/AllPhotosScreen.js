@@ -113,7 +113,6 @@ export default function AllPhotosScreen({ navigation, route }) {
       }
       setSelectedFormats(prev => ({ ...prev, [key]: !prev[key] }));
     } catch (e) {
-      console.warn('Format toggle error:', e?.message);
     }
   };
 
@@ -124,34 +123,9 @@ export default function AllPhotosScreen({ navigation, route }) {
       longPressTriggered.current = true;
       if (photoSet) {
         // Show combined preview with both photos
-        console.log('📸 Setting fullScreenPhotoSet:', {
-          name: photoSet.name,
-          room: photoSet.room,
-          beforePhoto: {
-            id: photoSet.before?.id,
-            uri: photoSet.before?.uri,
-            name: photoSet.before?.name,
-            timestamp: photoSet.before?.timestamp,
-            projectId: photoSet.before?.projectId
-          },
-          afterPhoto: {
-            id: photoSet.after?.id,
-            uri: photoSet.after?.uri,
-            name: photoSet.after?.name,
-            timestamp: photoSet.after?.timestamp,
-            projectId: photoSet.after?.projectId
-          }
-        });
         setFullScreenPhotoSet(photoSet);
       } else {
         // Show single photo
-        console.log('📸 Setting fullScreenPhoto:', {
-          id: photo?.id,
-          uri: photo?.uri,
-          name: photo?.name,
-          timestamp: photo?.timestamp,
-          projectId: photo?.projectId
-        });
         setFullScreenPhoto(photo);
       }
     }, 300);
@@ -191,7 +165,6 @@ export default function AllPhotosScreen({ navigation, route }) {
         const threshold = 100; // Swipe down at least 100px
         
         if (dy > threshold) {
-          console.log('All Photos - swipe down detected, going back');
           navigation.goBack();
         }
       }
@@ -219,9 +192,7 @@ export default function AllPhotosScreen({ navigation, route }) {
       const result = await Share.share(shareOptions);
       
       if (result.action === Share.sharedAction) {
-        console.log('Photo shared successfully');
       } else if (result.action === Share.dismissedAction) {
-        console.log('Share dialog dismissed');
       }
       
       // Clean up temporary file after sharing
@@ -229,13 +200,10 @@ export default function AllPhotosScreen({ navigation, route }) {
         const fileInfo = await FileSystem.getInfoAsync(tempUri);
         if (fileInfo.exists) {
           await FileSystem.deleteAsync(tempUri, { idempotent: true });
-          console.log('🧹 Cleaned up temporary file');
         }
       } catch (cleanupError) {
-        console.warn('Could not clean up temporary file:', cleanupError);
       }
     } catch (error) {
-      console.error('Error sharing photo:', error);
       Alert.alert('Error', 'Failed to share photo');
     } finally {
       setSharing(false);
@@ -269,9 +237,7 @@ export default function AllPhotosScreen({ navigation, route }) {
       const result = await Share.share(shareOptions);
       
       if (result.action === Share.sharedAction) {
-        console.log('Combined photo shared successfully');
       } else if (result.action === Share.dismissedAction) {
-        console.log('Share dialog dismissed');
       }
       
       // Clean up temporary file after sharing
@@ -279,13 +245,10 @@ export default function AllPhotosScreen({ navigation, route }) {
         const fileInfo = await FileSystem.getInfoAsync(tempUri);
         if (fileInfo.exists) {
           await FileSystem.deleteAsync(tempUri, { idempotent: true });
-          console.log('🧹 Cleaned up temporary file');
         }
       } catch (cleanupError) {
-        console.warn('Could not clean up temporary file:', cleanupError);
       }
     } catch (error) {
-      console.error('Error sharing combined photo:', error);
       Alert.alert('Error', 'Failed to share photo');
     } finally {
       setSharing(false);
@@ -294,12 +257,9 @@ export default function AllPhotosScreen({ navigation, route }) {
 
   const startSharingWithOptions = async () => {
     try {
-        console.log('🚀 Starting share process...');
         setSharing(true);
         setShareOptionsVisible(false); // Close the modal immediately
         const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
-        console.log('📸 Source photos:', sourcePhotos.length);
-
         if (sourcePhotos.length === 0) {
             Alert.alert('No Photos', 'There are no photos in this project to share.');
             return;
@@ -309,8 +269,6 @@ export default function AllPhotosScreen({ navigation, route }) {
             (selectedShareTypes.before && p.mode === PHOTO_MODES.BEFORE) ||
             (selectedShareTypes.after && p.mode === PHOTO_MODES.AFTER)
         );
-        console.log('📦 Items to share:', itemsToShare.length, selectedShareTypes);
-
         if (itemsToShare.length === 0) {
             Alert.alert('No Photos Selected', 'Please select at least one photo type to share.');
             return;
@@ -319,29 +277,18 @@ export default function AllPhotosScreen({ navigation, route }) {
         const projectName = projects.find(p => p.id === activeProjectId)?.name || 'Shared-Photos';
         const zipFileName = `${projectName.replace(/\s+/g, '_')}_${Date.now()}.zip`;
         const zipPath = FileSystem.cacheDirectory + zipFileName;
-        console.log('📁 Creating ZIP:', zipFileName);
-
         const zip = new JSZip();
-        console.log('📦 JSZip created');
-
         for (const item of itemsToShare) {
             const filename = item.uri.split('/').pop();
-            console.log('📄 Adding file to ZIP:', filename);
             const content = await FileSystem.readAsStringAsync(item.uri, {
                 encoding: FileSystem.EncodingType.Base64,
             });
             zip.file(filename, content, { base64: true });
         }
-
-        console.log('🔄 Generating ZIP...');
         const zipBase64 = await zip.generateAsync({ type: 'base64' });
-        console.log('💾 Writing ZIP to file...');
-
         await FileSystem.writeAsStringAsync(zipPath, zipBase64, {
             encoding: FileSystem.EncodingType.Base64,
         });
-
-        console.log('📤 Sharing ZIP file...');
         await Share.share({
             url: zipPath,
             title: `Share ${projectName} Photos`,
@@ -354,10 +301,7 @@ export default function AllPhotosScreen({ navigation, route }) {
           photoCount: itemsToShare.length,
           sharedTypes: Object.keys(selectedShareTypes).filter(k => selectedShareTypes[k]),
         });
-        console.log('✅ Share completed successfully');
-
     } catch (error) {
-        console.error('Sharing error:', error);
         Alert.alert('Error', 'Failed to prepare photos for sharing.');
     } finally {
         setSharing(false);
@@ -524,7 +468,6 @@ export default function AllPhotosScreen({ navigation, route }) {
               return;
             }
           } catch (e) {
-            console.warn('Original combined scan failed:', e?.message);
             Alert.alert('Error', 'Failed to find original combined images');
             return;
           }
@@ -578,9 +521,6 @@ export default function AllPhotosScreen({ navigation, route }) {
                   format: 'jpg',
                   quality: 0.9
                 });
-
-                console.log(`📸 Captured ${templateKey} for ${pair.before.name}, URI:`, uri?.substring(0, 60));
-
                 if (uri) {
                   combinedItems.push({
                     uri: uri,
@@ -592,7 +532,6 @@ export default function AllPhotosScreen({ navigation, route }) {
                   });
                 }
               } catch (error) {
-                console.error(`❌ Failed to capture ${templateKey} for ${pair.before.name}:`, error);
               }
 
               renderCount++;
@@ -979,26 +918,8 @@ export default function AllPhotosScreen({ navigation, route }) {
                   style={styles.fullScreenHalfImage}
                   resizeMode="cover"
                   onError={(error) => {
-                    console.error('❌ Failed to load BEFORE image:', {
-                      uri: fullScreenPhotoSet.before.uri,
-                      photo: {
-                        id: fullScreenPhotoSet.before.id,
-                        name: fullScreenPhotoSet.before.name,
-                        timestamp: fullScreenPhotoSet.before.timestamp,
-                        projectId: fullScreenPhotoSet.before.projectId
-                      },
-                      error: error.nativeEvent.error
-                    });
                   }}
                   onLoad={() => {
-                    console.log('✅ Successfully loaded BEFORE image:', {
-                      uri: fullScreenPhotoSet.before.uri,
-                      photo: {
-                        id: fullScreenPhotoSet.before.id,
-                        name: fullScreenPhotoSet.before.name,
-                        timestamp: fullScreenPhotoSet.before.timestamp
-                      }
-                    });
                   }}
                 />
                 {/* Show BEFORE label only if showLabels is true */}
@@ -1012,26 +933,8 @@ export default function AllPhotosScreen({ navigation, route }) {
                   style={styles.fullScreenHalfImage}
                   resizeMode="cover"
                   onError={(error) => {
-                    console.error('❌ Failed to load AFTER image:', {
-                      uri: fullScreenPhotoSet.after.uri,
-                      photo: {
-                        id: fullScreenPhotoSet.after.id,
-                        name: fullScreenPhotoSet.after.name,
-                        timestamp: fullScreenPhotoSet.after.timestamp,
-                        projectId: fullScreenPhotoSet.after.projectId
-                      },
-                      error: error.nativeEvent.error
-                    });
                   }}
                   onLoad={() => {
-                    console.log('✅ Successfully loaded AFTER image:', {
-                      uri: fullScreenPhotoSet.after.uri,
-                      photo: {
-                        id: fullScreenPhotoSet.after.id,
-                        name: fullScreenPhotoSet.after.name,
-                        timestamp: fullScreenPhotoSet.after.timestamp
-                      }
-                    });
                   }}
                 />
                 {/* Show AFTER label only if showLabels is true */}

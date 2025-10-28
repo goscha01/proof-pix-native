@@ -28,7 +28,6 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const getDefaultTemplate = () => {
     const phoneOrientation = beforePhoto.orientation || 'portrait';
     const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
-    console.log('PhotoEditor - Phone orientation:', phoneOrientation, 'Camera view mode:', cameraViewMode);
     // Prefer original layout first
     if (phoneOrientation === 'landscape' || cameraViewMode === 'landscape') {
       return 'original-stack';
@@ -44,7 +43,6 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const { showLabels } = useSettings();
   
   // Debug: Log showLabels value
-  console.log('PhotoEditorScreen - showLabels:', showLabels);
   const templateTypeRef = useRef(templateType);
   const [originalBaseUris, setOriginalBaseUris] = useState({ stack: null, side: null });
   const [originalImageSize, setOriginalImageSize] = useState(null); // { width, height }
@@ -71,18 +69,6 @@ export default function PhotoEditorScreen({ route, navigation }) {
         // Calculate the position of the current button
         const buttonPosition = currentIndex * (buttonWidth + gap);
         const scrollPosition = Math.max(0, buttonPosition - centerOffset + (buttonWidth / 2));
-        
-        console.log('📱 Scroll Debug:', {
-          activeIndex: currentIndex,
-          templateType,
-          buttonPosition,
-          scrollPosition,
-          screenWidth,
-          centerOffset,
-          buttonWidth,
-          gap
-        });
-        
         templateScrollRef.current.scrollTo({
           x: scrollPosition,
           animated: true
@@ -102,20 +88,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
         const projectIdSuffix = projectId ? `_P${projectId}` : '';
         const prefixStack = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
         const prefixSide = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
-        
-        console.log('🔍 Searching for original base images:', {
-          room: beforePhoto.room,
-          name: beforePhoto.name,
-          safeName,
-          projectId,
-          prefixStack,
-          prefixSide,
-          dir
-        });
-        
         const entries = await FileSystem.readDirectoryAsync(dir);
-        console.log('📁 Directory entries found:', entries.length);
-        
         // Helper function to extract timestamp from filename
         const extractTimestamp = (filename) => {
           // Match timestamp before project ID suffix if present
@@ -134,7 +107,6 @@ export default function PhotoEditorScreen({ route, navigation }) {
           }
           
           if (matches.length === 0) {
-            console.log(`📅 No files found with prefix "${prefix}" and projectId "${projectId}"`);
             return null;
           }
           
@@ -148,7 +120,6 @@ export default function PhotoEditorScreen({ route, navigation }) {
               newest = name;
             }
           }
-          console.log(`📅 Found ${matches.length} files with prefix "${prefix}" and projectId "${projectId}", selected newest: ${newest} (timestamp: ${newestTs})`);
           return newest ? `${dir}${newest}` : null;
         };
         
@@ -156,19 +127,15 @@ export default function PhotoEditorScreen({ route, navigation }) {
         const side = findNewestFile(prefixSide);
         
         if (stack) {
-          console.log('✅ Selected newest STACK base:', stack);
         }
         if (side) {
-          console.log('✅ Selected newest SIDE base:', side);
         }
         
         if (!stack && !side) {
-          console.log('⚠️ No original base images found for:', beforePhoto.name);
         }
         
         setOriginalBaseUris({ stack, side });
       } catch (e) {
-        console.error('❌ Error locating original base images:', e);
       }
     })();
   }, [beforePhoto]);
@@ -177,18 +144,13 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const handleSwipeChangeTemplate = (direction) => {
     const templates = getAvailableTemplates();
     const currentIndex = templates.findIndex(([key]) => key === templateTypeRef.current);
-    
-    console.log('Swipe detected:', direction, 'Current:', templateTypeRef.current, 'Index:', currentIndex, 'Total:', templates.length);
-    
     if (direction === 'left' && currentIndex < templates.length - 1) {
       // Swipe left - next template
       const nextTemplate = templates[currentIndex + 1][0];
-      console.log('Setting next template:', nextTemplate);
       setTemplateType(nextTemplate);
     } else if (direction === 'right' && currentIndex > 0) {
       // Swipe right - previous template
       const prevTemplate = templates[currentIndex - 1][0];
-      console.log('Setting previous template:', prevTemplate);
       setTemplateType(prevTemplate);
     }
   };
@@ -269,8 +231,6 @@ export default function PhotoEditorScreen({ route, navigation }) {
     const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
     const allTemplates = Object.entries(TEMPLATE_CONFIGS);
     const originals = getOriginalTemplateConfigs();
-    console.log('Filtering templates - Phone:', phoneOrientation, 'Camera view:', cameraViewMode);
-
     // Build base list filtered by layout
     let filtered;
     if (cameraViewMode === 'landscape') {
@@ -370,9 +330,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
       const result = await Share.share(shareOptions);
       
       if (result.action === Share.sharedAction) {
-        console.log('Photo shared successfully');
       } else if (result.action === Share.dismissedAction) {
-        console.log('Share dialog dismissed');
       }
       
       // Clean up temporary file after sharing
@@ -380,13 +338,10 @@ export default function PhotoEditorScreen({ route, navigation }) {
         const fileInfo = await FileSystem.getInfoAsync(tempUri);
         if (fileInfo.exists) {
           await FileSystem.deleteAsync(tempUri, { idempotent: true });
-          console.log('🧹 Cleaned up temporary file');
         }
       } catch (cleanupError) {
-        console.warn('Could not clean up temporary file:', cleanupError);
       }
     } catch (error) {
-      console.error('Error sharing combined photo:', error);
       Alert.alert('Error', 'Failed to share combined photo');
     } finally {
       setSaving(false);
@@ -426,24 +381,6 @@ export default function PhotoEditorScreen({ route, navigation }) {
     // If an original base is selected and available, display the saved image (no cropping)
     if ((templateType === 'original-stack' && originalBaseUris.stack) || (templateType === 'original-side' && originalBaseUris.side)) {
       const uri = templateType === 'original-stack' ? originalBaseUris.stack : originalBaseUris.side;
-      console.log('🖼️ Rendering ORIGINAL base image:', {
-        templateType,
-        uri,
-        photoSize: originalImageSize,
-        beforePhoto: {
-          id: beforePhoto.id,
-          uri: beforePhoto.uri,
-          name: beforePhoto.name,
-          timestamp: beforePhoto.timestamp
-        },
-        afterPhoto: {
-          id: afterPhoto.id,
-          uri: afterPhoto.uri,
-          name: afterPhoto.name,
-          timestamp: afterPhoto.timestamp
-        }
-      });
-      
       // Fit inside max box while preserving original aspect
       const maxW = 350;
       const maxH = 500;
@@ -467,18 +404,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
             style={{ width: '100%', height: '100%' }} 
             resizeMode="contain"
             onError={(error) => {
-              console.error('❌ Failed to load ORIGINAL base image:', {
-                uri,
-                templateType,
-                error: error.nativeEvent.error
-              });
             }}
             onLoad={() => {
-              console.log('✅ Successfully loaded ORIGINAL base image:', {
-                uri,
-                templateType,
-                photoSize: originalImageSize
-              });
             }}
           />
           {/* Show labels overlay on original images if showLabels is true */}
@@ -503,23 +430,6 @@ export default function PhotoEditorScreen({ route, navigation }) {
         </View>
       );
     }
-    
-    console.log('🖼️ Rendering DYNAMIC combined preview:', {
-      templateType,
-      beforePhoto: {
-        id: beforePhoto.id,
-        uri: beforePhoto.uri,
-        name: beforePhoto.name,
-        timestamp: beforePhoto.timestamp
-      },
-      afterPhoto: {
-        id: afterPhoto.id,
-        uri: afterPhoto.uri,
-        name: afterPhoto.name,
-        timestamp: afterPhoto.timestamp
-      }
-    });
-
     return (
       <View
         ref={combinedRef}
@@ -539,24 +449,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
             style={styles.halfImage}
             resizeMode="cover"
             onError={(error) => {
-              console.error('❌ Failed to load BEFORE in combined:', {
-                uri: beforePhoto.uri,
-                photo: {
-                  id: beforePhoto.id,
-                  name: beforePhoto.name,
-                  timestamp: beforePhoto.timestamp
-                },
-                error: error.nativeEvent.error
-              });
             }}
             onLoad={() => {
-              console.log('✅ Successfully loaded BEFORE in combined:', {
-                uri: beforePhoto.uri,
-                photo: {
-                  id: beforePhoto.id,
-                  name: beforePhoto.name
-                }
-              });
             }}
           />
           {/* Show BEFORE label only if showLabels is true */}
@@ -571,24 +465,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
             style={styles.halfImage}
             resizeMode="cover"
             onError={(error) => {
-              console.error('❌ Failed to load AFTER in combined:', {
-                uri: afterPhoto.uri,
-                photo: {
-                  id: afterPhoto.id,
-                  name: afterPhoto.name,
-                  timestamp: afterPhoto.timestamp
-                },
-                error: error.nativeEvent.error
-              });
             }}
             onLoad={() => {
-              console.log('✅ Successfully loaded AFTER in combined:', {
-                uri: afterPhoto.uri,
-                photo: {
-                  id: afterPhoto.id,
-                  name: afterPhoto.name
-                }
-              });
             }}
           />
           {/* Show AFTER label only if showLabels is true */}

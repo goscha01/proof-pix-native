@@ -36,7 +36,6 @@ export const PhotoProvider = ({ children }) => {
   useEffect(() => {
     const handleAppStateChange = (nextAppState) => {
       if (nextAppState === 'active') {
-        console.log('🔄 App became active, reloading data...');
         (async () => {
           await loadPhotos();
           await loadProjectsList();
@@ -86,8 +85,8 @@ export const PhotoProvider = ({ children }) => {
       });
     });
 
-    // console.log('nameMap:', nameMap);
-    // console.log('nameToBeforeId:', nameToBeforeId);
+    // 
+    // 
 
     // Reassign names: before photos get sequential names, after/combined photos use their before photo's name
     const updatedPhotos = photoList.map(photo => {
@@ -99,7 +98,7 @@ export const PhotoProvider = ({ children }) => {
       } else if (photo.mode === PHOTO_MODES.AFTER && photo.beforePhotoId) {
         // After photo uses the name of its paired before photo
         const newName = nameMap[photo.beforePhotoId] || photo.name;
-        // console.log('After photo old name:', photo.name, '-> new name:', newName);
+        // 
         return {
           ...photo,
           name: newName
@@ -109,7 +108,7 @@ export const PhotoProvider = ({ children }) => {
         // Find the before photo ID by the combined photo's current name
         const beforeId = nameToBeforeId[photo.name];
         const newName = nameMap[beforeId] || photo.name;
-        // console.log('Combined photo old name:', photo.name, 'beforeId:', beforeId, '-> new name:', newName);
+        // 
         return {
           ...photo,
           name: newName
@@ -129,40 +128,13 @@ export const PhotoProvider = ({ children }) => {
       // Filter out any photos with ph:// URIs (old data)
       const validPhotos = metadata.filter(photo => {
         if (photo.uri && photo.uri.startsWith('ph://')) {
-          console.warn('⚠️ Skipping photo with invalid URI:', {
-            uri: photo.uri,
-            photo: {
-              id: photo.id,
-              name: photo.name,
-              room: photo.room,
-              mode: photo.mode,
-              timestamp: photo.timestamp,
-              projectId: photo.projectId
-            }
-          });
           return false;
         }
         return true;
       });
-      
-      console.log('📸 Loaded photos from metadata:', {
-        totalMetadata: metadata.length,
-        validPhotos: validPhotos.length,
-        invalidPhotos: metadata.length - validPhotos.length,
-        photosSummary: validPhotos.map(p => ({
-          id: p.id,
-          name: p.name,
-          room: p.room,
-          mode: p.mode,
-          uriPrefix: p.uri?.substring(0, 50),
-          timestamp: p.timestamp,
-          projectId: p.projectId
-        }))
-      });
 
       // If we filtered out any photos, save the cleaned data
       if (validPhotos.length !== metadata.length) {
-        console.log(`🧹 Cleaned ${metadata.length - validPhotos.length} photos with invalid URIs`);
         await savePhotosMetadata(validPhotos);
       }
 
@@ -177,7 +149,6 @@ export const PhotoProvider = ({ children }) => {
 
       setPhotos(renamedPhotos);
     } catch (error) {
-      console.error('Error loading photos:', error);
     } finally {
       setLoading(false);
     }
@@ -188,7 +159,6 @@ export const PhotoProvider = ({ children }) => {
       const list = await loadProjects();
       setProjects(list);
     } catch (e) {
-      console.error('Error loading projects list:', e);
     }
   };
 
@@ -199,7 +169,6 @@ export const PhotoProvider = ({ children }) => {
       setPhotos(renamedPhotos);
       await savePhotosMetadata(renamedPhotos);
     } catch (error) {
-      console.error('Error saving photos:', error);
     }
   };
 
@@ -231,7 +200,6 @@ export const PhotoProvider = ({ children }) => {
     try {
         const beforePhoto = photos.find(p => p.id === beforePhotoId && p.mode === PHOTO_MODES.BEFORE);
         if (!beforePhoto) {
-            console.warn('Delete Photo Set: Before photo not found', beforePhotoId);
             return;
         }
 
@@ -256,7 +224,6 @@ export const PhotoProvider = ({ children }) => {
             try {
                 await FileSystem.deleteAsync(uri, { idempotent: true });
             } catch (e) {
-                console.warn(`Failed to delete local file: ${uri}`, e);
             }
         }
 
@@ -280,7 +247,6 @@ export const PhotoProvider = ({ children }) => {
         await savePhotos(newPhotos);
 
     } catch (error) {
-        console.error('Error deleting photo set:', error);
     }
   };
 
@@ -303,8 +269,6 @@ export const PhotoProvider = ({ children }) => {
     setProjects(prev => [project, ...prev]);
     
     // Reset custom rooms to default when new project is created
-    console.log('New project created, resetting custom rooms to default');
-    
     // Auto-assign only unassigned photos to the new project
     const unassigned = photos.filter(p => !p.projectId);
     if (unassigned.length > 0) {
@@ -327,13 +291,7 @@ export const PhotoProvider = ({ children }) => {
   const deleteProject = async (projectId, options = {}) => {
     const { deleteFromStorage = true } = options;
     const related = photos.filter(p => p.projectId === projectId);
-    console.log('🗂️ deleteProject start', { 
-      projectId, 
-      deleteFromStorage, 
-      relatedCount: related.length,
-      photos: related.map(p => ({ id: p.id, uri: p.uri, name: p.name }))
-    });
-    
+
     // Delete all photos for this project from device and metadata
     if (deleteFromStorage) {
       // 1) Delete local files directly (no media calls here to avoid per-asset prompts)
@@ -343,25 +301,16 @@ export const PhotoProvider = ({ children }) => {
         const uriStr = p?.uri;
         if (typeof uriStr === 'string' && uriStr.startsWith('file')) {
           filePaths.push(uriStr);
-          console.log('🗑️ Adding file path for deletion:', uriStr);
         }
         const fname = (uriStr || '').split('/').pop();
         if (fname) filenamesSet.add(fname);
       }
-      
-      console.log('🗑️ Files to delete:', { 
-        filePaths: filePaths.length, 
-        uniqueFilenames: filenamesSet.size,
-        filenames: Array.from(filenamesSet)
-      });
 
       try {
         for (const path of filePaths) {
           try {
             await FileSystem.deleteAsync(path, { idempotent: true });
-            console.log('🗑️ Deleted local file', { path });
           } catch (e) {
-            console.warn('⚠️ Local file delete failed', { path, error: e?.message });
           }
         }
       } catch {}
@@ -372,19 +321,14 @@ export const PhotoProvider = ({ children }) => {
       try {
         await deleteProjectAssets(projectId);
       } catch (projErr) {
-        console.warn('⚠️ Project asset delete error:', projErr?.message);
       }
     } else {
-      console.log('ℹ️ Skipping device file deletion for project', projectId);
     }
     // Remove only metadata for this project's photos
     const remaining = photos.filter(p => p.projectId !== projectId);
     await savePhotos(remaining);
-    console.log('🧹 Removed project photos from metadata', { projectId, remainingCount: remaining.length });
     await deleteProjectEntry(projectId);
-    console.log('✅ Project entry removed', { projectId });
     await loadProjectsList();
-    console.log('🔄 Projects list reloaded');
   };
 
   const getPhotosByRoom = (room) => {
@@ -439,7 +383,6 @@ export const PhotoProvider = ({ children }) => {
     getUnpairedBeforePhotos,
     refreshPhotos: loadPhotos,
     refreshAllData: useCallback(async () => {
-      console.log('🔄 Manual refresh all data triggered');
       await loadPhotos();
       await loadProjectsList();
     }, [])

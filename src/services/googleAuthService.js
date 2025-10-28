@@ -52,7 +52,6 @@ class GoogleAuthService {
     // Google requires HTTPS for Drive API scopes
     // Must use Expo's auth proxy for development
     const redirectUri = 'https://auth.expo.io/@goscha01/proof-pix-native';
-    console.log('[GoogleAuthService] Redirect URI:', redirectUri);
     return redirectUri;
   }
 
@@ -99,7 +98,6 @@ class GoogleAuthService {
             await this.refreshAccessToken(refreshToken);
             return true;
           } catch (error) {
-            console.error('[GoogleAuthService] Token refresh failed:', error);
             return false;
           }
         }
@@ -107,7 +105,6 @@ class GoogleAuthService {
 
       return false;
     } catch (error) {
-      console.error('[GoogleAuthService] Error checking sign-in status:', error);
       return false;
     }
   }
@@ -118,52 +115,28 @@ class GoogleAuthService {
    */
   async signIn() {
     try {
-      console.log('[GoogleAuthService] Starting sign-in flow...');
-
       // Build the authorization URL manually
       const authUrl = this.buildAuthUrl();
-      console.log('[GoogleAuthService] Auth URL:', authUrl);
-
       // Use WebBrowser to open the auth URL
       const result = await WebBrowser.openAuthSessionAsync(
         authUrl,
         this.getRedirectUri()
       );
-
-      console.log('[GoogleAuthService] ===== AUTH RESULT =====');
-      console.log('[GoogleAuthService] Result type:', result.type);
-      console.log('[GoogleAuthService] Result URL:', result.url);
-      console.log('[GoogleAuthService] Full result:', JSON.stringify(result, null, 2));
-      console.log('[GoogleAuthService] ========================');
-
       if (result.type === 'success' && result.url) {
-        console.log('[GoogleAuthService] ✅ Auth succeeded! Parsing URL...');
-
         // Parse the URL to get the authorization code
         try {
           const url = new URL(result.url);
-          console.log('[GoogleAuthService] Parsed URL host:', url.host);
-          console.log('[GoogleAuthService] Parsed URL pathname:', url.pathname);
-          console.log('[GoogleAuthService] Parsed URL search:', url.search);
-
           const code = url.searchParams.get('code');
           const error = url.searchParams.get('error');
 
           if (error) {
-            console.error('[GoogleAuthService] ❌ Error in URL:', error);
             throw new Error(`OAuth error: ${error}`);
           }
 
           if (!code) {
-            console.error('[GoogleAuthService] ❌ No code in URL params');
-            console.error('[GoogleAuthService] Available params:', Array.from(url.searchParams.keys()).join(', '));
             throw new Error('No authorization code received');
           }
-
-          console.log('[GoogleAuthService] ✅ Got authorization code (length:', code.length, ')');
-
           // Exchange code for tokens manually
-          console.log('[GoogleAuthService] 🔄 Exchanging code for tokens...');
           const tokenResponse = await fetch(this.discovery.tokenEndpoint, {
             method: 'POST',
             headers: {
@@ -176,20 +149,12 @@ class GoogleAuthService {
               grant_type: 'authorization_code',
             }).toString(),
           });
-
-          console.log('[GoogleAuthService] Token response status:', tokenResponse.status);
-
           if (!tokenResponse.ok) {
             const errorText = await tokenResponse.text();
-            console.error('[GoogleAuthService] ❌ Token exchange failed:', errorText);
             throw new Error('Failed to exchange authorization code for tokens');
           }
 
           const tokenResult = await tokenResponse.json();
-          console.log('[GoogleAuthService] ✅ Token exchange successful');
-          console.log('[GoogleAuthService] Has access_token:', !!tokenResult.access_token);
-          console.log('[GoogleAuthService] Has refresh_token:', !!tokenResult.refresh_token);
-
           this.accessToken = tokenResult.access_token;
           this.refreshToken = tokenResult.refresh_token;
 
@@ -198,20 +163,13 @@ class GoogleAuthService {
           this.tokenExpiry = expiryTime;
 
           // Get user info
-          console.log('[GoogleAuthService] 🔄 Fetching user info...');
           const userInfo = await this.getUserInfo(tokenResult.access_token);
-          console.log('[GoogleAuthService] ✅ Got user info:', userInfo.email);
-
           // Store tokens and user info
           await this.storeAuthData(userInfo, {
             accessToken: tokenResult.access_token,
             refreshToken: tokenResult.refresh_token,
             expiresIn: tokenResult.expires_in,
           });
-
-          console.log('[GoogleAuthService] ✅✅✅ Sign-in successful! ✅✅✅');
-          console.log('[GoogleAuthService] User:', userInfo.email);
-
           return {
             userInfo: {
               user: userInfo,
@@ -222,24 +180,16 @@ class GoogleAuthService {
             },
           };
         } catch (parseError) {
-          console.error('[GoogleAuthService] ❌ Error parsing auth response:', parseError);
           throw parseError;
         }
       } else if (result.type === 'cancel') {
-        console.log('[GoogleAuthService] ⚠️ User cancelled sign-in');
         throw new Error('Sign-in was cancelled');
       } else if (result.type === 'dismiss') {
-        console.log('[GoogleAuthService] ⚠️ Browser dismissed');
         throw new Error('Sign-in was dismissed');
       } else {
-        console.error('[GoogleAuthService] ❌ Unexpected result type:', result.type);
         throw new Error('Sign-in failed: ' + result.type);
       }
     } catch (error) {
-      console.error('[GoogleAuthService] ❌❌❌ Sign-in error ❌❌❌');
-      console.error('[GoogleAuthService] Error type:', error.constructor.name);
-      console.error('[GoogleAuthService] Error message:', error.message);
-      console.error('[GoogleAuthService] Error stack:', error.stack);
       throw new Error('Failed to sign in with Google: ' + error.message);
     }
   }
@@ -262,7 +212,6 @@ class GoogleAuthService {
 
       return await response.json();
     } catch (error) {
-      console.error('[GoogleAuthService] Error getting user info:', error);
       throw error;
     }
   }
@@ -298,10 +247,7 @@ class GoogleAuthService {
       // Update stored token
       await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_TOKEN, data.access_token);
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
-
-      console.log('[GoogleAuthService] Token refreshed successfully');
     } catch (error) {
-      console.error('[GoogleAuthService] Token refresh error:', error);
       throw error;
     }
   }
@@ -318,7 +264,6 @@ class GoogleAuthService {
             method: 'POST',
           });
         } catch (error) {
-          console.warn('[GoogleAuthService] Token revocation failed:', error);
         }
       }
 
@@ -326,10 +271,7 @@ class GoogleAuthService {
       this.accessToken = null;
       this.refreshToken = null;
       this.tokenExpiry = null;
-
-      console.log('[GoogleAuthService] Sign-out successful');
     } catch (error) {
-      console.error('[GoogleAuthService] Sign-out error:', error);
       throw error;
     }
   }
@@ -346,7 +288,6 @@ class GoogleAuthService {
       }
       return null;
     } catch (error) {
-      console.error('[GoogleAuthService] Error getting current user:', error);
       return null;
     }
   }
@@ -396,7 +337,6 @@ class GoogleAuthService {
         idToken: null, // Not used for API calls
       };
     } catch (error) {
-      console.error('[GoogleAuthService] Error getting tokens:', error);
       throw new Error('Failed to get access tokens. Please sign in again.');
     }
   }
@@ -424,7 +364,6 @@ class GoogleAuthService {
 
       return response;
     } catch (error) {
-      console.error('[GoogleAuthService] Authenticated request error:', error);
       throw error;
     }
   }
@@ -446,7 +385,6 @@ class GoogleAuthService {
       const expiryTime = Date.now() + ((tokens.expiresIn || 3600) * 1000);
       await AsyncStorage.setItem(STORAGE_KEYS.TOKEN_EXPIRY, expiryTime.toString());
     } catch (error) {
-      console.error('[GoogleAuthService] Error storing auth data:', error);
     }
   }
 
@@ -463,7 +401,6 @@ class GoogleAuthService {
         STORAGE_KEYS.TOKEN_EXPIRY,
       ]);
     } catch (error) {
-      console.error('[GoogleAuthService] Error clearing auth data:', error);
     }
   }
 
@@ -483,7 +420,6 @@ class GoogleAuthService {
       }
       return null;
     } catch (error) {
-      console.error('[GoogleAuthService] Error getting stored user info:', error);
       return null;
     }
   }

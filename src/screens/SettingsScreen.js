@@ -268,7 +268,7 @@ export default function SettingsScreen({ navigation }) {
             <TouchableOpacity
               style={styles.customizeButton}
               onPress={() => {
-                console.log('Customize button pressed');
+
                 setShowRoomEditor(true);
               }}
             >
@@ -435,11 +435,11 @@ export default function SettingsScreen({ navigation }) {
         visible={showRoomEditor}
         onClose={() => setShowRoomEditor(false)}
         onSave={(rooms) => {
-          console.log('SettingsScreen: Saving rooms', rooms);
+
           saveCustomRooms(rooms);
           // Force a small delay to ensure state updates propagate
           setTimeout(() => {
-            console.log('SettingsScreen: Rooms saved, state should be updated');
+
           }, 100);
         }}
         initialRooms={customRooms}

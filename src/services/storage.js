@@ -23,7 +23,6 @@ export const loadPhotosMetadata = async () => {
     }
     return [];
   } catch (error) {
-    console.error('Error loading photos metadata:', error);
     return [];
   }
 };
@@ -53,9 +52,7 @@ export const savePhotosMetadata = async (photos) => {
     }));
 
     await AsyncStorage.setItem(PHOTOS_METADATA_KEY, JSON.stringify(metadata));
-    console.log('💾 Metadata saved successfully');
   } catch (error) {
-    console.error('Error saving photos metadata:', error);
   }
 };
 
@@ -66,7 +63,6 @@ export const clearPhotos = async () => {
   try {
     await AsyncStorage.removeItem(PHOTOS_METADATA_KEY);
   } catch (error) {
-    console.error('Error clearing photos:', error);
   }
 };
 
@@ -75,15 +71,12 @@ export const clearPhotos = async () => {
  */
 export const savePhotoToDevice = async (uri, filename, projectId = null) => {
   try {
-    console.log('📱 Saving photo to device:', filename);
-
     // First, copy to app's document directory (for reliable access)
     const fileUri = `${FileSystem.documentDirectory}${filename}`;
     let finalFileUri = fileUri;
 
     // If the URI is already in our directory, use it directly
     if (uri.startsWith(FileSystem.documentDirectory)) {
-      console.log('📱 Photo already in document directory');
       finalFileUri = uri; // keep the original file path
     } else {
       // Copy to document directory
@@ -91,7 +84,6 @@ export const savePhotoToDevice = async (uri, filename, projectId = null) => {
         from: uri,
         to: fileUri
       });
-      console.log('📱 Photo copied to:', fileUri);
       finalFileUri = fileUri;
     }
 
@@ -109,8 +101,6 @@ export const savePhotoToDevice = async (uri, filename, projectId = null) => {
         } else {
           await MediaLibrary.addAssetsToAlbumAsync([asset], album, false);
         }
-        console.log('📱 Photo saved to media library');
-
         // Store a mapping from filename -> assetId for reliable deletion later
         try {
           const stored = await AsyncStorage.getItem(ASSET_ID_MAP_KEY);
@@ -120,13 +110,10 @@ export const savePhotoToDevice = async (uri, filename, projectId = null) => {
             const prev = map[justName];
             map[justName] = typeof prev === 'string' ? { id: asset.id, projectId } : { id: asset.id, projectId: prev?.projectId ?? projectId };
             await AsyncStorage.setItem(ASSET_ID_MAP_KEY, JSON.stringify(map));
-            console.log('🔗 Mapped asset ID for deletion', { filename: justName, assetId: asset.id, projectId });
           }
         } catch (mapErr) {
-          console.warn('⚠️ Failed to store asset map:', mapErr?.message);
         }
       } catch (mlError) {
-        console.warn('⚠️ Could not save to media library (Expo Go/permission):', mlError.message);
         // Android fallback: StorageAccessFramework prompt to save into user-selected folder (e.g., Pictures)
         if (Platform.OS === 'android' && FS?.StorageAccessFramework) {
           try {
@@ -139,24 +126,17 @@ export const savePhotoToDevice = async (uri, filename, projectId = null) => {
                 'image/jpeg'
               );
               await FileSystem.writeAsStringAsync(fileUriSAF, base64, { encoding: FileSystem.EncodingType.Base64 });
-              console.log('📱 Photo saved via SAF to user-selected directory');
             } else {
-              console.warn('⚠️ SAF directory permission not granted');
             }
           } catch (safError) {
-            console.warn('⚠️ SAF fallback failed:', safError.message);
           }
         }
       }
     } else {
-      console.warn('⚠️ Media library permission denied, photo saved to app only');
     }
-
-    console.log('📱 Photo saved successfully');
     // Return the file URI (not the ph:// URL from media library)
     return finalFileUri;
   } catch (error) {
-    console.error('Error saving photo to device:', error);
     throw error;
   }
 };
@@ -173,27 +153,21 @@ export const deletePhotoFromDevice = async (photo, options = {}) => {
 
     // Derive a filename for media library lookup
     const filename = (uri.split('/').pop() || '').split('?')[0];
-    console.log('🗑️ deletePhotoFromDevice start', { uri, filename });
-
     // 1) Delete from app documents directory (idempotent)
     try {
       if (uri.startsWith(FileSystem.documentDirectory)) {
         await FileSystem.deleteAsync(uri, { idempotent: true });
-        console.log('🗑️ Deleted from app storage', { uri });
       } else if (uri.startsWith('file://')) {
         // Try deleting other file:// targets as best-effort
         await FileSystem.deleteAsync(uri, { idempotent: true });
-        console.log('🗑️ Deleted file:// path', { uri });
       }
     } catch (fsErr) {
-      console.warn('⚠️ Failed deleting file from app storage:', uri, fsErr?.message);
     }
 
     // 2) Delete from media library (first by stored assetId, then fallbacks)
     try {
       const { status } = await MediaLibrary.requestPermissionsAsync();
       if (status !== 'granted') {
-        console.warn('⚠️ Media library permission not granted; skipping library delete');
         return;
       }
 
@@ -206,16 +180,13 @@ export const deletePhotoFromDevice = async (photo, options = {}) => {
         if (assetId) {
           try {
             await MediaLibrary.deleteAssetsAsync([assetId]);
-            console.log('🗑️ Deleted by assetId', { assetId, filename });
             delete map[filename];
             await AsyncStorage.setItem(ASSET_ID_MAP_KEY, JSON.stringify(map));
             return; // deletion done
           } catch (byIdErr) {
-            console.warn('⚠️ Delete by assetId failed, will fallback:', byIdErr?.message);
           }
         }
       } catch (mapDelErr) {
-        console.warn('⚠️ Asset ID map read failed:', mapDelErr?.message);
       }
 
       const findMatch = (assetsArr) => assetsArr.find((a) => {
@@ -245,26 +216,19 @@ export const deletePhotoFromDevice = async (photo, options = {}) => {
       if (match) {
         try {
           await MediaLibrary.deleteAssetsAsync([match]);
-          console.log('🗑️ Deleted from media library', { assetFilename: match.filename, id: match.id });
         } catch (delErr) {
-          console.warn('⚠️ Direct delete failed:', delErr?.message);
           if (album) {
             try {
               await MediaLibrary.removeAssetsFromAlbumAsync([match], album, false);
-              console.log('🗑️ Removed from album only', { assetFilename: match.filename, id: match.id });
             } catch (remErr) {
-              console.warn('⚠️ Album removal also failed:', remErr?.message);
             }
           }
         }
       } else {
-        console.log('ℹ️ No matching media asset found for filename', filename);
       }
     } catch (mlErr) {
-      console.warn('⚠️ Media library delete failed:', mlErr?.message);
     }
   } catch (error) {
-    console.error('Error deleting photo from device:', error);
   }
 };
 
@@ -294,11 +258,8 @@ export const deleteAssetsByFilenames = async (filenames, projectIdFilter = null)
   try {
     if (!Array.isArray(filenames) || filenames.length === 0) return;
     const uniqueNames = Array.from(new Set(filenames.filter(Boolean)));
-    console.log('🗑️ Batch media delete start', { count: uniqueNames.length });
-
     const { status } = await MediaLibrary.requestPermissionsAsync();
     if (status !== 'granted') {
-      console.warn('⚠️ Media library permission not granted; skipping batch delete');
       return;
     }
 
@@ -343,18 +304,14 @@ export const deleteAssetsByFilenames = async (filenames, projectIdFilter = null)
     if (ids.length > 0) {
       try {
         await MediaLibrary.deleteAssetsAsync(ids);
-        console.log('🗑️ Batch media deleted', { count: ids.length });
         // Clean mapping
         for (const name of uniqueNames) delete map[name];
         await setAssetIdMap(map);
       } catch (err) {
-        console.warn('⚠️ Batch media delete failed:', err?.message);
       }
     } else {
-      console.log('ℹ️ No media assets matched for batch delete');
     }
   } catch (e) {
-    console.warn('⚠️ deleteAssetsByFilenames error:', e?.message);
   }
 };
 
@@ -367,7 +324,6 @@ export const deleteAssetsByPrefixes = async (prefixes, projectIdFilter = null) =
     if (!Array.isArray(prefixes) || prefixes.length === 0) return;
     const { status } = await MediaLibrary.requestPermissionsAsync();
     if (status !== 'granted') {
-      console.warn('⚠️ Media library permission not granted; skipping prefix batch delete');
       return;
     }
     const map = await getAssetIdMap();
@@ -385,12 +341,10 @@ export const deleteAssetsByPrefixes = async (prefixes, projectIdFilter = null) =
       if (id && (!projectIdFilter || (pid && pid === projectIdFilter))) ids.push(id);
     });
     if (ids.length === 0) {
-      console.log('ℹ️ No asset IDs matched for prefixes');
       return;
     }
     try {
       await MediaLibrary.deleteAssetsAsync(ids);
-      console.log('🗑️ Batch media deleted by prefixes', { count: ids.length });
       // Clean mapping entries
       for (const key of Object.keys(map)) {
         if (!keyMatches(key)) continue;
@@ -400,10 +354,8 @@ export const deleteAssetsByPrefixes = async (prefixes, projectIdFilter = null) =
       }
       await setAssetIdMap(map);
     } catch (e) {
-      console.warn('⚠️ Prefix batch delete failed:', e?.message);
     }
   } catch (e) {
-    console.warn('⚠️ deleteAssetsByPrefixes error:', e?.message);
   }
 };
 
@@ -413,15 +365,11 @@ export const deleteAssetsByPrefixes = async (prefixes, projectIdFilter = null) =
  */
 export const deleteProjectAssets = async (projectId) => {
   try {
-    console.log('🗑️ deleteProjectAssets starting for project:', projectId);
     if (!projectId) {
-      console.log('⚠️ No projectId provided');
       return;
     }
     
     const map = await getAssetIdMap();
-    console.log('🗑️ Asset map total entries:', Object.keys(map).length);
-    
     const filenames = [];
     const assetIds = [];
     for (const [name, entry] of Object.entries(map)) {
@@ -430,65 +378,42 @@ export const deleteProjectAssets = async (projectId) => {
       if (pid && pid === projectId) {
         filenames.push(name);
         if (id) assetIds.push(id);
-        console.log('🗑️ Found project asset:', { name, id, projectId: pid });
       }
     }
-
-    console.log('🗑️ Project assets summary:', { 
-      projectId, 
-      totalFilenames: filenames.length, 
-      totalAssetIds: assetIds.length,
-      filenames,
-      assetIds 
-    });
-
     // Delete media assets in a single batch
     if (assetIds.length > 0) {
       try {
         const { status } = await MediaLibrary.requestPermissionsAsync();
-        console.log('🗑️ Media library permission status:', status);
         if (status === 'granted') {
           await MediaLibrary.deleteAssetsAsync(assetIds);
-          console.log('✅ Deleted media assets by project', { projectId, count: assetIds.length, assetIds });
         } else {
-          console.warn('⚠️ Media library permission not granted, cannot delete');
         }
       } catch (e) {
-        console.error('❌ Project media batch delete failed:', { error: e?.message, assetIds });
       }
     } else {
-      console.log('ℹ️ No asset IDs found for project, skipping media deletion');
     }
 
     // Delete local doc files by filename
     try {
       const dir = FileSystem.documentDirectory;
-      console.log('🗑️ Attempting to delete local files from:', dir);
       if (dir) {
         for (const name of filenames) {
           const full = `${dir}${name}`;
-          console.log('🗑️ Attempting to delete local file:', full);
           try {
             await FileSystem.deleteAsync(full, { idempotent: true });
-            console.log('✅ Deleted project local file:', full);
           } catch (e) {
-            console.warn('⚠️ Failed to delete local file:', full, 'Error:', e?.message);
           }
         }
       } else {
-        console.warn('⚠️ No document directory available');
       }
     } catch (e) {
-      console.error('❌ Error deleting local files:', e?.message);
     }
 
     // Clean the map
     const newMap = { ...map };
     for (const name of filenames) delete newMap[name];
     await setAssetIdMap(newMap);
-    console.log('✅ Cleaned asset map, removed', filenames.length, 'entries for project:', projectId);
   } catch (e) {
-    console.error('❌ deleteProjectAssets error:', e?.message, e);
   }
 };
 
@@ -522,20 +447,17 @@ export const purgeAllDevicePhotos = async () => {
           try {
             await FileSystem.deleteAsync(full, { idempotent: true });
           } catch (delErr) {
-            console.warn('⚠️ Failed deleting file in app dir:', full, delErr?.message);
           }
         }
       }
     }
   } catch (fsListErr) {
-    console.warn('⚠️ Failed listing app directory for purge:', fsListErr?.message);
   }
 
   // 2) Delete all assets inside the ProofPix album
   try {
     const { status } = await MediaLibrary.requestPermissionsAsync();
     if (status !== 'granted') {
-      console.warn('⚠️ Media library permission denied; skipping album purge');
       return;
     }
 
@@ -562,16 +484,13 @@ export const purgeAllDevicePhotos = async () => {
       try {
         await MediaLibrary.deleteAssetsAsync(toDelete);
       } catch (mlChangeErr) {
-        console.warn('⚠️ Bulk delete failed, trying album removal:', mlChangeErr?.message);
         try {
           await MediaLibrary.removeAssetsFromAlbumAsync(toDelete, album, false);
         } catch (remErr) {
-          console.warn('⚠️ Album removal failed:', remErr?.message);
         }
       }
     }
   } catch (mlErr) {
-    console.warn('⚠️ Media library purge failed:', mlErr?.message);
   }
 };
 
@@ -583,12 +502,8 @@ export const deleteAssetsBatch = async ({ filenames = [], prefixes = [] }) => {
   try {
     const uniqueNames = Array.from(new Set(filenames.filter(Boolean)));
     if (uniqueNames.length === 0 && prefixes.length === 0) return;
-
-    console.log('🗑️ Unified batch delete start', { filenames: uniqueNames.length, prefixes: prefixes.length });
-
     const { status } = await MediaLibrary.requestPermissionsAsync();
     if (status !== 'granted') {
-      console.warn('⚠️ Media library permission not granted; skipping batch delete');
       return;
     }
 
@@ -658,8 +573,6 @@ export const deleteAssetsBatch = async ({ filenames = [], prefixes = [] }) => {
     if (ids.length > 0) {
       try {
         await MediaLibrary.deleteAssetsAsync(ids);
-        console.log('🗑️ Unified batch media deleted', { count: ids.length });
-        
         // Clean mapping
         const newMap = { ...map };
         for (const key of keysToDeleteFromMap) {
@@ -668,13 +581,10 @@ export const deleteAssetsBatch = async ({ filenames = [], prefixes = [] }) => {
         await setAssetIdMap(newMap);
 
       } catch (err) {
-        console.warn('⚠️ Unified batch media delete failed:', err?.message);
       }
     } else {
-      console.log('ℹ️ No media assets matched for unified batch delete');
     }
   } catch (e) {
-    console.warn('⚠️ deleteAssetsBatch error:', e?.message);
   }
 };
 
@@ -689,7 +599,6 @@ export const loadProjects = async () => {
     const saved = await AsyncStorage.getItem(PROJECTS_KEY);
     return saved ? JSON.parse(saved) : [];
   } catch (e) {
-    console.error('Error loading projects:', e);
     return [];
   }
 };
@@ -701,7 +610,6 @@ export const saveProjects = async (projects) => {
   try {
     await AsyncStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
   } catch (e) {
-    console.error('Error saving projects:', e);
   }
 };
 
@@ -757,7 +665,6 @@ export const getStoredUserData = async () => {
     }
     return {};
   } catch (error) {
-    console.error('Error getting user data:', error);
     return {};
   }
 };
@@ -774,7 +681,6 @@ export const saveUserData = async (cleaner, location) => {
     };
     await AsyncStorage.setItem(USER_PREFS_KEY, JSON.stringify(userData));
   } catch (error) {
-    console.error('Error saving user data:', error);
   }
 };
 
@@ -789,7 +695,6 @@ export const loadSettings = async () => {
     }
     return {};
   } catch (error) {
-    console.error('Error loading settings:', error);
     return {};
   }
 };
@@ -803,7 +708,6 @@ export const saveSettings = async (settings) => {
     const updated = { ...existing, ...settings };
     await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
   } catch (error) {
-    console.error('Error saving settings:', error);
   }
 };
 
@@ -833,7 +737,6 @@ export const getUniqueUploadAlbumName = async (baseName) => {
 
     return albumName;
   } catch (e) {
-    console.warn('⚠️ getUniqueUploadAlbumName failed, using base name:', e?.message);
     return baseName;
   }
 };

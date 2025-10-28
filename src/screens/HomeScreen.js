@@ -67,19 +67,19 @@ export default function HomeScreen({ navigation }) {
   const [rooms, setRooms] = useState(() => getRooms());
   
   useEffect(() => {
-    // console.log('HomeScreen: useEffect triggered, customRooms length:', customRooms?.length || 0);
+    // 
     const newRooms = getRooms();
-    // console.log('HomeScreen: useEffect updating rooms, customRooms:', customRooms?.map(r => r.name) || 'null', 'newRooms:', newRooms.map(r => r.name));
+    //  || 'null', 'newRooms:', newRooms.map(r => r.name));
     setRooms(newRooms);
   }, [customRooms]);
 
   // Debug logging
   // useEffect(() => {
-  //   console.log('HomeScreen: rooms updated:', rooms.map(r => r.name));
+  //   );
   // }, [rooms]);
 
   // useEffect(() => {
-  //   console.log('HomeScreen: customRooms updated:', customRooms?.map(r => r.name) || 'null');
+  //    || 'null');
   // }, [customRooms]);
 
   const handleRoomLongPress = (room, event) => {
@@ -95,9 +95,6 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleDuplicateFolder = async (room) => {
-    console.log('=== DUPLICATION STARTED ===');
-    console.log('Duplicating room:', room);
-    
     // Generate duplicate name
     const generateDuplicateName = (baseName, existingRooms) => {
       // Extract base name without numbers (e.g., "Kitchen 2" -> "Kitchen")
@@ -141,19 +138,9 @@ export default function HomeScreen({ navigation }) {
     
     const updatedRooms = [...rooms];
     updatedRooms.splice(insertIndex, 0, newRoom);
-    
-    console.log('Duplicating room:', room.name, 'inserting at index:', insertIndex);
-    console.log('Updated rooms:', updatedRooms.map(r => r.name));
-    console.log('Updated rooms IDs:', updatedRooms.map(r => r.id));
-    
     // Save the duplicate to custom rooms immediately
-    console.log('Calling saveCustomRooms with:', updatedRooms.length, 'rooms');
     await saveCustomRooms(updatedRooms);
-    console.log('saveCustomRooms completed');
-    console.log('=== DUPLICATION COMPLETED ===');
-    
     // Switch to the new duplicated room immediately
-    console.log('Switching to duplicated room:', newRoom.name);
     setCurrentRoom(newRoom.id);
     
     // Open the room editor in edit mode for the new duplicate
@@ -191,9 +178,6 @@ export default function HomeScreen({ navigation }) {
               const currentIndex = rooms.findIndex(r => r.id === room.id);
               const isDeletingCurrentRoom = currentRoom.id === room.id;
               let newCurrentRoom;
-              
-              console.log('Deleting room:', room.name, 'at index:', currentIndex, 'isCurrentRoom:', isDeletingCurrentRoom);
-              
               if (updatedRooms.length > 0) {
                 if (isDeletingCurrentRoom) {
                   // If deleting the current room, go to the room to the left (or last if deleting first)
@@ -206,8 +190,6 @@ export default function HomeScreen({ navigation }) {
                   // If not deleting current room, keep the current room
                   newCurrentRoom = rooms.find(r => r.id === currentRoom.id);
                 }
-                
-                console.log('Switching to room:', newCurrentRoom?.name || 'none');
                 saveCustomRooms(updatedRooms);
                 if (newCurrentRoom) {
                   setCurrentRoom(newCurrentRoom.id);
@@ -239,7 +221,6 @@ export default function HomeScreen({ navigation }) {
     if (rooms && rooms.length > 0) {
       const currentRoomExists = rooms.some(room => room.id === currentRoom);
       if (!currentRoomExists) {
-        console.log('Current room not found in rooms, switching to first room:', rooms[0].id);
         setCurrentRoom(rooms[0].id);
       }
     }
@@ -259,16 +240,13 @@ export default function HomeScreen({ navigation }) {
       const activeProjectExists = projects.some(p => p.id === activeProjectId);
       if (!activeProjectExists) {
         // Active project no longer exists, select the first available project
-        console.log('🔄 Active project no longer exists, selecting first available project');
         setActiveProject(projects[0].id);
       }
     } else if (projects.length > 0 && !activeProjectId) {
       // No active project but projects exist, select the first one
-      console.log('🔄 No active project but projects exist, selecting first project');
       setActiveProject(projects[0].id);
     } else if (projects.length === 0 && activeProjectId) {
       // No projects exist but activeProjectId is set, clear it
-      console.log('🔄 No projects exist but activeProjectId is set, clearing it');
       setActiveProject(null);
     }
   }, [projects, activeProjectId]);
@@ -353,7 +331,6 @@ export default function HomeScreen({ navigation }) {
           setCombinedBaseUris(uriMap);
         }
       } catch (e) {
-        console.error('Error loading combined base images:', e);
       }
     })();
     
@@ -422,7 +399,6 @@ export default function HomeScreen({ navigation }) {
               setCombinedBaseUris(uriMap);
             }
           } catch (e) {
-            console.error('Error loading combined base images:', e);
           }
         })();
       }, 600); // Long debounce to avoid interfering with other screens
@@ -452,7 +428,7 @@ export default function HomeScreen({ navigation }) {
 
   // Debug logging for circular rooms
   // useEffect(() => {
-  //   console.log('HomeScreen: circularRooms updated:', circularRooms.map(r => r.name));
+  //   );
   // }, [circularRooms]);
 
   // Update ref when currentRoom changes
@@ -513,7 +489,6 @@ export default function HomeScreen({ navigation }) {
 
   // Handle double tap - show full screen with swipe navigation
   const handleDoubleTap = (photo, beforePhoto = null, afterPhoto = null) => {
-    console.log('🔄 Double tap detected!');
     // Double tap detected - show full screen with swipe navigation
     const allPhotos = [];
     
@@ -521,13 +496,6 @@ export default function HomeScreen({ navigation }) {
     const beforePhotos = getBeforePhotos(currentRoom);
     const afterPhotos = getAfterPhotos(currentRoom);
     const combinedPhotos = getCombinedPhotos(currentRoom);
-    
-    console.log('🔄 Room photos:', {
-      beforePhotos: beforePhotos.length,
-      afterPhotos: afterPhotos.length,
-      combinedPhotos: combinedPhotos.length
-    });
-    
     // Create a map of before photos to their corresponding after photos
     const beforeToAfterMap = new Map();
     afterPhotos.forEach(afterPhoto => {
@@ -557,11 +525,6 @@ export default function HomeScreen({ navigation }) {
       }
     });
     
-    console.log('🔄 All photos array:', {
-      totalPhotos: allPhotos.length,
-      photos: allPhotos.map(p => ({ id: p.id, name: p.name, type: p.type }))
-    });
-    
     // Find the index of the tapped photo
     let photoIndex = 0;
     if (photo) {
@@ -569,12 +532,6 @@ export default function HomeScreen({ navigation }) {
     } else if (beforePhoto) {
       photoIndex = allPhotos.findIndex(p => p.id === beforePhoto.id);
     }
-    
-    console.log('🔄 Photo index:', {
-      photoIndex,
-      tappedPhoto: photo ? photo.name : beforePhoto?.name
-    });
-    
     if (photoIndex >= 0) {
       setFullScreenPhotos(allPhotos);
       setFullScreenIndex(photoIndex);
@@ -588,14 +545,7 @@ export default function HomeScreen({ navigation }) {
 
   // Handle swipe navigation in full screen
   const handleSwipeNavigation = (direction) => {
-    console.log('🔄 handleSwipeNavigation called:', {
-      direction,
-      fullScreenPhotosLength: fullScreenPhotos.length,
-      currentIndex: fullScreenIndex
-    });
-    
     if (fullScreenPhotos.length === 0) {
-      console.log('🔄 No photos to navigate');
       return;
     }
     
@@ -605,30 +555,13 @@ export default function HomeScreen({ navigation }) {
     } else if (direction === 'right') {
       newIndex = fullScreenIndex === 0 ? fullScreenPhotos.length - 1 : fullScreenIndex - 1;
     }
-    
-    console.log('🔄 Navigation:', {
-      from: fullScreenIndex,
-      to: newIndex,
-      direction
-    });
-    
     setFullScreenIndex(newIndex);
     const newPhoto = fullScreenPhotos[newIndex];
-    
-    console.log('🔄 New photo for navigation:', {
-      type: newPhoto.type,
-      name: newPhoto.name,
-      hasBeforePhoto: !!newPhoto.beforePhoto,
-      hasAfterPhoto: !!newPhoto.afterPhoto
-    });
-    
     // Set the appropriate view based on photo type
     if (newPhoto.type === 'combined' || newPhoto.type === 'split') {
-      console.log('🔄 Setting combined/split photo view');
       setFullScreenPhotoSet({ before: newPhoto.beforePhoto, after: newPhoto.afterPhoto });
       setFullScreenPhoto(null);
     } else {
-      console.log('🔄 Setting single photo view');
       setFullScreenPhoto(newPhoto);
       setFullScreenPhotoSet(null);
     }
@@ -636,7 +569,7 @@ export default function HomeScreen({ navigation }) {
 
   // PanResponder for room switching - recreate when rooms change
   const panResponder = useMemo(() => {
-    // console.log('🔄 Room PanResponder recreated with rooms:', rooms.map(r => r.id));
+    // );
     return PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
@@ -650,28 +583,21 @@ export default function HomeScreen({ navigation }) {
       },
       onPanResponderGrant: () => {
         // Gesture started
-        console.log('PanResponder: Gesture started');
       },
       onPanResponderRelease: (evt, gestureState) => {
         const swipeThreshold = 50;
         const currentIndex = rooms.findIndex(r => r.id === currentRoomRef.current);
-        
-        console.log('Swipe detected - currentRoom:', currentRoomRef.current, 'rooms:', rooms.map(r => r.id), 'currentIndex:', currentIndex);
-        
         if (currentIndex === -1) {
-          console.log('ERROR: Current room not found in rooms array!');
           return;
         }
         
         if (gestureState.dx > swipeThreshold) {
           // Swipe right - go to previous room (circular)
           const newIndex = currentIndex > 0 ? currentIndex - 1 : rooms.length - 1;
-          console.log('Swipe right - switching to:', rooms[newIndex].id);
           setCurrentRoom(rooms[newIndex].id);
         } else if (gestureState.dx < -swipeThreshold) {
           // Swipe left - go to next room (circular)
           const newIndex = currentIndex < rooms.length - 1 ? currentIndex + 1 : 0;
-          console.log('Swipe left - switching to:', rooms[newIndex].id);
           setCurrentRoom(rooms[newIndex].id);
         }
         
@@ -687,7 +613,6 @@ export default function HomeScreen({ navigation }) {
   const fullScreenPanResponder = useMemo(() => {
     return PanResponder.create({
       onStartShouldSetPanResponder: () => {
-        console.log('🔄 Full screen PanResponder: onStartShouldSetPanResponder');
         swipeStartX.current = null;
         return false;
       },
@@ -696,48 +621,27 @@ export default function HomeScreen({ navigation }) {
         if (fullScreenPhoto || fullScreenPhotoSet) {
           const isHorizontalSwipe = Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) > 30;
           const isVerticalSwipe = Math.abs(gestureState.dy) > Math.abs(gestureState.dx) && Math.abs(gestureState.dy) > 30;
-          
-          console.log('🔄 Full screen swipe detection:', {
-            dx: gestureState.dx,
-            dy: gestureState.dy,
-            isHorizontalSwipe,
-            isVerticalSwipe,
-            fullScreenPhotosLength: fullScreenPhotos.length,
-            hasPhotos: fullScreenPhotos.length > 1
-          });
-          
           if (isHorizontalSwipe && fullScreenPhotos.length > 1 && !swipeStartX.current) {
             swipeStartX.current = gestureState.dx;
           }
           
           // Activate for both horizontal (carousel) and vertical (close) swipes
           const shouldActivate = isHorizontalSwipe || isVerticalSwipe;
-          console.log('🔄 Should activate PanResponder:', shouldActivate);
           return shouldActivate;
         }
         return false;
       },
       onPanResponderRelease: (evt, gestureState) => {
         const swipeThreshold = 50;
-        
-        console.log('🔄 Full screen PanResponder release:', {
-          dx: gestureState.dx,
-          dy: gestureState.dy,
-          fullScreenPhotosLength: fullScreenPhotos.length
-        });
-        
         // Check for horizontal swipes (carousel navigation)
         if (gestureState.dx > swipeThreshold && fullScreenPhotos.length > 1) {
-          console.log('🔄 Swipe right detected - going to previous photo');
           handleSwipeNavigation('right');
         } else if (gestureState.dx < -swipeThreshold && fullScreenPhotos.length > 1) {
-          console.log('🔄 Swipe left detected - going to next photo');
           handleSwipeNavigation('left');
         }
         
         // Check for vertical swipes (close preview)
         if (Math.abs(gestureState.dy) > swipeThreshold) {
-          console.log('🔄 Vertical swipe detected - closing preview');
           handleLongPressEnd();
         }
         
@@ -747,7 +651,7 @@ export default function HomeScreen({ navigation }) {
   }, [fullScreenPhoto, fullScreenPhotoSet, fullScreenPhotos.length, handleSwipeNavigation, handleLongPressEnd]);
 
   // Debug: Log when PanResponder is created
-  // console.log('🔄 Full screen PanResponder created:', fullScreenPanResponder);
+  // 
 
   useEffect(() => {
     // No-op: projects come from context
@@ -961,20 +865,12 @@ export default function HomeScreen({ navigation }) {
                 if (!longPressTriggered.current && !isSwiping.current) {
                   tapCount.current += 1;
                   const now = Date.now();
-                  
-                  console.log('🔄 Tap detected:', {
-                    tapCount: tapCount.current,
-                    now,
-                    lastTap: lastTap.current
-                  });
-                  
                   if (tapCount.current === 1) {
                     // First tap - wait for potential second tap
                     lastTap.current = now;
                     setTimeout(() => {
                       if (tapCount.current === 1 && lastTap.current) {
                         // Single tap confirmed
-                        console.log('🔄 Single tap confirmed - navigating to camera');
                         navigation.navigate('Camera', {
                           mode: 'after',
                           beforePhoto,
@@ -988,7 +884,6 @@ export default function HomeScreen({ navigation }) {
                     }, 300);
                   } else if (tapCount.current === 2) {
                     // Double tap confirmed
-                    console.log('🔄 Double tap confirmed!');
                     handleDoubleTap(combinedPhoto, beforePhoto, afterPhoto);
                     tapCount.current = 0;
                     lastTap.current = null;
@@ -1025,20 +920,12 @@ export default function HomeScreen({ navigation }) {
                 if (!longPressTriggered.current && !isSwiping.current) {
                   tapCount.current += 1;
                   const now = Date.now();
-                  
-                  console.log('🔄 Split tap detected:', {
-                    tapCount: tapCount.current,
-                    now,
-                    lastTap: lastTap.current
-                  });
-                  
                   if (tapCount.current === 1) {
                     // First tap - wait for potential second tap
                     lastTap.current = now;
                     setTimeout(() => {
                       if (tapCount.current === 1 && lastTap.current) {
                         // Single tap confirmed
-                        console.log('🔄 Single tap confirmed on split - navigating to camera');
                         navigation.navigate('Camera', {
                           mode: 'after',
                           beforePhoto,
@@ -1051,7 +938,6 @@ export default function HomeScreen({ navigation }) {
                     }, 300);
                   } else if (tapCount.current === 2) {
                     // Double tap confirmed
-                    console.log('🔄 Double tap confirmed on split!');
                     handleDoubleTap(null, beforePhoto, afterPhoto);
                     tapCount.current = 0;
                     lastTap.current = null;
@@ -1082,20 +968,12 @@ export default function HomeScreen({ navigation }) {
               if (!longPressTriggered.current && !isSwiping.current) {
                 tapCount.current += 1;
                 const now = Date.now();
-                
-                console.log('🔄 Before-only tap detected:', {
-                  tapCount: tapCount.current,
-                  now,
-                  lastTap: lastTap.current
-                });
-                
                 if (tapCount.current === 1) {
                   // First tap - wait for potential second tap
                   lastTap.current = now;
                   setTimeout(() => {
                     if (tapCount.current === 1 && lastTap.current) {
                       // Single tap confirmed
-                      console.log('🔄 Single tap confirmed on before-only - navigating to camera');
                       navigation.navigate('Camera', {
                         mode: 'after',
                         beforePhoto,
@@ -1107,7 +985,6 @@ export default function HomeScreen({ navigation }) {
                   }, 300);
                 } else if (tapCount.current === 2) {
                   // Double tap confirmed
-                  console.log('🔄 Double tap confirmed on before-only!');
                   handleDoubleTap(beforePhoto);
                   tapCount.current = 0;
                   lastTap.current = null;
@@ -1505,12 +1382,12 @@ export default function HomeScreen({ navigation }) {
           setRoomEditorMode('customize');
         }}
         onSave={(rooms) => {
-          // console.log('HomeScreen: Received rooms from RoomEditor:', rooms);
+          // 
           saveCustomRooms(rooms);
           
           // If we were editing a specific room, stay on that room after saving
           if (contextMenuRoom) {
-            // console.log('HomeScreen: Staying on edited room:', contextMenuRoom.name);
+            // 
             setCurrentRoom(contextMenuRoom.id);
           }
           

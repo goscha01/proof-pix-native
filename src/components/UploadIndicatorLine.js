@@ -21,30 +21,17 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
       const upload = activeUploads[0];
       const { current, total } = upload.progress;
       const width = total > 0 ? (current / total) * 100 : 0;
-      // console.log('🔍 getProgressWidth DETAILED:', {
-      //   uploadId: upload.id,
-      //   current,
-      //   total,
-      //   width,
-      //   uploadProgress: upload.progress,
-      //   hasActiveUploads,
-      //   activeUploadsLength: activeUploads.length,
-      //   widthString: `${width}%`
-      // });
+      // 
       return width;
     }
-    // console.log('🔍 getProgressWidth: No active uploads');
+    // 
     return 0;
   };
 
   // Debug logging
   // useEffect(() => {
   //   const progressWidth = getProgressWidth();
-  //   console.log('📊 UploadIndicatorLine: Progress update', {
-  //     current: hasActiveUploads ? activeUploads[0].progress.current : 0,
-  //     total: hasActiveUploads ? activeUploads[0].progress.total : 0,
-  //     progressWidth
-  //   });
+  //   
   // }, [hasActiveUploads, activeUploads, uploadStatus]);
 
   useEffect(() => {
@@ -73,7 +60,7 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
   }, [showIndicator, animatedValue]);
 
   if (!showIndicator) {
-    // console.log('📊 UploadIndicatorLine: Not showing indicator');
+    // 
     return null;
   }
 
@@ -91,14 +78,14 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
       const upload = activeUploads[0];
       const { current, total } = upload.progress;
       const text = `${current}/${total}`; // Shorter text
-      // console.log('🔍 getPhotoCountText:', { current, total, text, hasActiveUploads });
+      // 
       return text;
     } else if (hasQueuedUploads) {
       const text = `${queueLength} queued`; // Shorter text
-      // console.log('🔍 getPhotoCountText queued:', { queueLength, text });
+      // 
       return text;
     }
-    // console.log('🔍 getPhotoCountText: No text');
+    // 
     return '';
   };
 
@@ -117,8 +104,7 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
     outputRange: [0.6, 1],
   });
 
-  // console.log('🔍 UploadIndicatorLine: RENDERING DETAILED', {
-  //   color: getIndicatorColor(),
+  // ,
   //   progressWidth: getProgressWidth(),
   //   showIndicator,
   //   hasActiveUploads,
@@ -134,7 +120,7 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
       key={`upload-indicator-${hasActiveUploads ? activeUploads[0]?.id : 'none'}-${hasActiveUploads ? activeUploads[0]?.progress?.current : 0}`}
       style={styles.container}
       onPress={() => {
-        // console.log('📊 UploadIndicatorLine: Pressed');
+        // 
         onPress && onPress();
       }}
       activeOpacity={0.7}
@@ -142,9 +128,7 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
       <View 
         style={styles.indicatorContainer}
         onLayout={(event) => {
-          // console.log('🔍 INDICATOR CONTAINER LAYOUT:', {
-          //   layout: event.nativeEvent.layout,
-          //   progressWidth: getProgressWidth(),
+          // ,
           //   hasActiveUploads
           // });
         }}
@@ -155,9 +139,7 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
             { backgroundColor: '#E0E0E0' } // Ensure background is visible
           ]}
           onLayout={(event) => {
-            // console.log('🔍 PROGRESS LINE CONTAINER LAYOUT:', {
-            //   layout: event.nativeEvent.layout,
-            //   progressWidth: getProgressWidth(),
+            // ,
             //   widthPercent: `${getProgressWidth()}%`
             // });
           }}
@@ -176,8 +158,7 @@ const UploadIndicatorLine = ({ uploadStatus, onPress }) => {
                 }
               ]} 
               onLayout={(event) => {
-                // console.log('🔍 PROGRESS FILL LAYOUT:', {
-                //   width: `${getProgressWidth()}%`,
+                // }%`,
                 //   backgroundColor: getIndicatorColor(),
                 //   layout: event.nativeEvent.layout,
                 //   progressWidth: getProgressWidth()

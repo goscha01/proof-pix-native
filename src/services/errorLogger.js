@@ -39,12 +39,10 @@ export const logError = async (error, context = {}) => {
 
     // Also log to console in development
     if (__DEV__) {
-      console.error('🔴 Error logged:', errorLog);
     }
 
     return errorLog;
   } catch (loggingError) {
-    console.error('Failed to log error:', loggingError);
   }
 };
 
@@ -56,7 +54,6 @@ export const getErrorLogs = async () => {
     const logs = await AsyncStorage.getItem(ERROR_LOG_KEY);
     return logs ? JSON.parse(logs) : [];
   } catch (error) {
-    console.error('Failed to get error logs:', error);
     return [];
   }
 };
@@ -69,7 +66,6 @@ export const clearErrorLogs = async () => {
     await AsyncStorage.removeItem(ERROR_LOG_KEY);
     return true;
   } catch (error) {
-    console.error('Failed to clear error logs:', error);
     return false;
   }
 };
@@ -101,7 +97,6 @@ export const exportErrorLogs = async () => {
       logsCount: logs.length
     };
   } catch (error) {
-    console.error('Failed to export error logs:', error);
     return { success: false, message: error.message };
   }
 };
@@ -136,7 +131,6 @@ ${JSON.stringify(log.context, null, 2)}
       `.trim();
     }).join('\n\n');
   } catch (error) {
-    console.error('Failed to format error logs:', error);
     return 'Failed to format error logs';
   }
 };
@@ -188,7 +182,6 @@ export const getErrorStats = async () => {
 
     return stats;
   } catch (error) {
-    console.error('Failed to get error stats:', error);
     return null;
   }
 };
