@@ -297,23 +297,37 @@ export default function HomeScreen({ navigation }) {
             return match ? parseInt(match[1], 10) : 0;
           };
 
-          // Find newest combined base images
-          const prefixes = [
-            `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`,
-            `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`
-          ];
-          
+          // Find newest combined base images - prioritize STACK over SIDE
+          const stackPrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
+          const sidePrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
+
           let newestUri = null;
           let newestTs = -1;
-          
-          for (const prefix of prefixes) {
-            const matches = entries.filter(name => {
-              if (!name.startsWith(prefix)) return false;
+
+          // First, try to find STACK variant
+          const stackMatches = entries.filter(name => {
+            if (!name.startsWith(stackPrefix)) return false;
+            if (projectId && !name.includes(projectIdSuffix)) return false;
+            return true;
+          });
+
+          for (const filename of stackMatches) {
+            const ts = extractTimestamp(filename);
+            if (ts > newestTs) {
+              newestTs = ts;
+              newestUri = `${dir}${filename}`;
+            }
+          }
+
+          // Only use SIDE if no STACK found
+          if (!newestUri) {
+            const sideMatches = entries.filter(name => {
+              if (!name.startsWith(sidePrefix)) return false;
               if (projectId && !name.includes(projectIdSuffix)) return false;
               return true;
             });
-            
-            for (const filename of matches) {
+
+            for (const filename of sideMatches) {
               const ts = extractTimestamp(filename);
               if (ts > newestTs) {
                 newestTs = ts;
@@ -366,22 +380,37 @@ export default function HomeScreen({ navigation }) {
                 return match ? parseInt(match[1], 10) : 0;
               };
 
-              const prefixes = [
-                `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`,
-                `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`
-              ];
-              
+              // Prioritize STACK over SIDE variant
+              const stackPrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
+              const sidePrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
+
               let newestUri = null;
               let newestTs = -1;
-              
-              for (const prefix of prefixes) {
-                const matches = entries.filter(name => {
-                  if (!name.startsWith(prefix)) return false;
+
+              // First, try to find STACK variant
+              const stackMatches = entries.filter(name => {
+                if (!name.startsWith(stackPrefix)) return false;
+                if (projectId && !name.includes(projectIdSuffix)) return false;
+                return true;
+              });
+
+              for (const filename of stackMatches) {
+                const ts = extractTimestamp(filename);
+                if (ts > newestTs) {
+                  newestTs = ts;
+                  newestUri = `${dir}${filename}`;
+                }
+              }
+
+              // Only use SIDE if no STACK found
+              if (!newestUri) {
+                const sideMatches = entries.filter(name => {
+                  if (!name.startsWith(sidePrefix)) return false;
                   if (projectId && !name.includes(projectIdSuffix)) return false;
                   return true;
                 });
-                
-                for (const filename of matches) {
+
+                for (const filename of sideMatches) {
                   const ts = extractTimestamp(filename);
                   if (ts > newestTs) {
                     newestTs = ts;

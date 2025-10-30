@@ -7,7 +7,8 @@
       "Bash(npx react-native:*)",
       "Bash(node -c:*)",
       "Bash(npx eslint:*)",
-      "Bash(git log:*)"
+      "Bash(git log:*)",
+      "Read(//c/**)"
     ],
     "deny": [],
     "ask": []
