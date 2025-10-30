@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Text } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -15,6 +15,7 @@ import AllPhotosScreen from './src/screens/AllPhotosScreen';
 import PhotoDetailScreen from './src/screens/PhotoDetailScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import FirstLoadScreen from './src/screens/FirstLoadScreen';
+import InviteScreen from './src/screens/InviteScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -93,17 +94,24 @@ function AppNavigator() {
           animation: 'slide_from_right'
         }}
       />
+      <Stack.Screen 
+        name="Invite" 
+        component={InviteScreen}
+        options={{
+          presentation: 'modal',
+          animation: 'fade'
+        }}
+      />
     </Stack.Navigator>
   );
 }
 
 // Linking configuration for deep links (OAuth redirect)
 const linking = {
-  prefixes: ['com.proofpix.app://', 'https://auth.expo.io/@goscha01/proof-pix-native'],
+  prefixes: ['proofpix://'],
   config: {
     screens: {
-      Home: '',
-      Settings: 'settings',
+      Invite: 'invite/:token',
     },
   },
 };
@@ -115,7 +123,7 @@ export default function App() {
         <SettingsProvider>
           <AdminProvider>
             <PhotoProvider>
-              <NavigationContainer linking={linking}>
+              <NavigationContainer linking={linking} fallback={<Text>Loading...</Text>}>
                 <AppNavigator />
               </NavigationContainer>
             </PhotoProvider>

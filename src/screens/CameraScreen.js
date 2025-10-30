@@ -950,7 +950,7 @@ export default function CameraScreen({ route, navigation }) {
     if (route.params?.beforePhoto) {
       setSelectedBeforePhoto(route.params.beforePhoto);
     }
-    analyticsService.logEvent('CameraScreen_Open', { mode: route.params?.mode || 'before' });
+    // analyticsService.logEvent('CameraScreen_Open', { mode: route.params?.mode || 'before' });
   }, [route.params]);
 
   useEffect(() => {
@@ -1053,6 +1053,10 @@ export default function CameraScreen({ route, navigation }) {
       const photoNumber = roomPhotos.length + 1;
       const photoName = `${room.charAt(0).toUpperCase() + room.slice(1)} ${photoNumber}`;
 
+      // Get the actual dimensions of the captured photo to calculate the correct aspect ratio
+      const { width, height } = await ImageManipulator.manipulateAsync(uri, [], {});
+      const actualAspectRatio = width > height ? `${width}:${height}` : `${height}:${width}`;
+
       // Save original photo to device immediately (no label delay)
       const savedUri = await savePhotoToDevice(uri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`, activeProjectId || null);
 
@@ -1066,7 +1070,7 @@ export default function CameraScreen({ route, navigation }) {
         mode: PHOTO_MODES.BEFORE,
         name: photoName,
         timestamp: Date.now(),
-        aspectRatio: cameraViewMode === 'landscape' ? '4:3' : '2:3',
+        aspectRatio: actualAspectRatio, // Use the real aspect ratio
         orientation: currentOrientation,
         cameraViewMode: cameraViewMode // Save the camera view mode
       };
@@ -1138,7 +1142,7 @@ export default function CameraScreen({ route, navigation }) {
         name: activeBeforePhoto.name,
         timestamp: Date.now(),
         beforePhotoId: beforePhotoId,
-        aspectRatio: activeBeforePhoto.aspectRatio || '4:3',
+        aspectRatio: activeBeforePhoto.aspectRatio, // Inherit the real aspect ratio
         orientation: activeBeforePhoto.orientation || deviceOrientation,
         cameraViewMode: activeBeforePhoto.cameraViewMode || 'portrait'
       };
@@ -2247,16 +2251,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold'
   },
   cameraContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: '#000',
-    justifyContent: 'center',
+    flex: 1,
+    backgroundColor: 'black',
   },
   camera: {
-    flex: 1
+    ...StyleSheet.absoluteFillObject,
+  },
+  cameraOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'black',
+    opacity: 0.5,
   },
   beforePhotoOverlay: {
     position: 'absolute',
@@ -3023,6 +3027,11 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 9/16,
     overflow: 'hidden',
+    alignSelf: 'center',
+  },
+  shutterButtonContainer: {
+    position: 'absolute',
+    bottom: 40,
     alignSelf: 'center',
   },
 });

@@ -171,6 +171,61 @@ export async function uploadPhoto({
 }
 
 /**
+ * Upload a single photo as a team member using an invite token.
+ * This is a simplified version of uploadPhoto for team members.
+ * @param {Object} params - Upload parameters
+ * @param {string} params.imageDataUrl - Base64 data URL of the image
+ * @param {string} params.filename - Filename for the uploaded image
+ * @param {string} params.scriptUrl - Google Apps Script URL
+ * @param {string} params.token - The invite token for authorization
+ * @returns {Promise<Object>} - Upload result
+ */
+export async function uploadPhotoAsTeamMember({
+  imageDataUrl,
+  filename,
+  scriptUrl,
+  token,
+}) {
+  try {
+    if (!scriptUrl || !token) {
+      throw new Error('Missing script URL or invite token.');
+    }
+
+    let base64String = imageDataUrl;
+    if (imageDataUrl.includes('base64,')) {
+      base64String = imageDataUrl.split('base64,')[1];
+    }
+
+    const targetUrl = `${scriptUrl}?token=${token}`;
+    const body = JSON.stringify({
+      filename: filename,
+      contentBase64: base64String,
+    });
+
+    const response = await fetch(targetUrl, {
+      method: 'POST',
+      body,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    const result = await response.json();
+    if (result.success) {
+      return result;
+    } else {
+      throw new Error(result.error || 'Upload failed');
+    }
+  } catch (error) {
+    throw error;
+  }
+}
+
+/**
  * Upload multiple photos in batches
  * @param {Array} photos - Array of photo objects with upload parameters
  * @param {Object} config - Upload configuration

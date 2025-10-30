@@ -705,7 +705,12 @@ export default function AllPhotosScreen({ navigation, route }) {
     if (photoType === 'combined' && !photo && photoSet.before && photoSet.after) {
       const phoneOrientation = photoSet.before.orientation || 'portrait';
       const cameraViewMode = photoSet.before.cameraViewMode || 'portrait';
-      const isLandscape = phoneOrientation === 'landscape' || cameraViewMode === 'landscape';
+      
+      const isLetterbox = photoSet.before.templateType === 'letterbox' || (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
+      const isTrueLandscape = phoneOrientation === 'landscape';
+      
+      // For thumbnails, both should be stacked to fit the square aspect ratio.
+      const useStackedLayout = isTrueLandscape || isLetterbox;
 
       return (
         <TouchableOpacity
@@ -720,7 +725,7 @@ export default function AllPhotosScreen({ navigation, route }) {
           }}
           onLongPress={() => handleLongPressStart(null, photoSet)}
         >
-          <View style={[styles.combinedThumbnail, isLandscape ? styles.stackedThumbnail : styles.sideBySideThumbnail]}>
+          <View style={[styles.combinedThumbnail, useStackedLayout ? styles.stackedThumbnail : styles.sideBySideThumbnail]}>
             <Image source={{ uri: photoSet.before.uri }} style={styles.halfImage} resizeMode="cover" />
             <Image source={{ uri: photoSet.after.uri }} style={styles.halfImage} resizeMode="cover" />
           </View>
@@ -907,9 +912,15 @@ export default function AllPhotosScreen({ navigation, route }) {
               collapsable={false}
               style={[
               styles.fullScreenCombinedPreview,
-              (fullScreenPhotoSet.before.orientation === 'landscape' || fullScreenPhotoSet.before.cameraViewMode === 'landscape')
-                ? styles.fullScreenStacked
-                : styles.fullScreenSideBySide
+              (() => {
+                const phoneOrientation = fullScreenPhotoSet.before.orientation || 'portrait';
+                const cameraViewMode = fullScreenPhotoSet.before.cameraViewMode || 'portrait';
+                const isLetterbox = fullScreenPhotoSet.before.templateType === 'letterbox' || (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
+                
+                // In the enlarged view, only letterbox photos should be stacked.
+                // True landscape and portrait photos are better side-by-side.
+                return isLetterbox ? styles.fullScreenStacked : styles.fullScreenSideBySide;
+              })()
             ]}>
               <View style={styles.fullScreenHalf}>
                 <Image

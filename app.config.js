@@ -11,7 +11,7 @@ export default {
     userInterfaceStyle: "light",
     newArchEnabled: true,
     backgroundColor: "#000000",
-    scheme: "com.proofpix.app",
+    scheme: "proofpix",
     splash: {
       image: "./assets/PP_logo_app.png",
       resizeMode: "contain",

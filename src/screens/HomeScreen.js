@@ -606,7 +606,7 @@ export default function HomeScreen({ navigation }) {
         }, 100);
       }
     });
-  }, [rooms, currentRoomRef.current, setCurrentRoom]);
+  }, [rooms]);
 
   // PanResponder for full screen swipe navigation
   const fullScreenPanResponder = useMemo(() => {
@@ -905,10 +905,16 @@ export default function HomeScreen({ navigation }) {
           );
         } else {
           // Has after photo but no combined yet - show split preview, tap to retake after
-          // Landscape phone OR landscape camera view = stacked (top/bottom)
           const phoneOrientation = beforePhoto.orientation || 'portrait';
           const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
-          const isLandscape = phoneOrientation === 'landscape' || cameraViewMode === 'landscape';
+          
+          // A photo is "letterbox" if the phone is portrait but the camera view was landscape.
+          const isLetterbox = beforePhoto.templateType === 'letterbox' || (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
+          // A photo is "true landscape" if the phone itself was held horizontally.
+          const isTrueLandscape = phoneOrientation === 'landscape';
+          
+          // For square thumbnails, both letterbox and landscape should be stacked to fit best.
+          const useStackedLayout = isTrueLandscape || isLetterbox;
 
           gridItems.push(
             <TouchableOpacity
@@ -946,7 +952,7 @@ export default function HomeScreen({ navigation }) {
               onPressIn={() => handleLongPressStart(null, beforePhoto, afterPhoto)}
               onPressOut={handleLongPressEnd}
             >
-              <View style={[styles.splitPreview, isLandscape ? styles.stackedPreview : styles.sideBySidePreview]}>
+              <View style={[styles.splitPreview, useStackedLayout ? styles.stackedPreview : styles.sideBySidePreview]}>
                 <Image source={{ uri: beforePhoto.uri }} style={styles.halfPreviewImage} resizeMode="cover" />
                 <Image source={{ uri: afterPhoto.uri }} style={styles.halfPreviewImage} resizeMode="cover" />
               </View>

@@ -8,6 +8,7 @@ const STORAGE_KEYS = {
   ADMIN_SCRIPT_ID: '@admin_script_id',
   ADMIN_INVITE_TOKENS: '@admin_invite_tokens',
   ADMIN_PLAN_LIMIT: '@admin_plan_limit',
+  ADMIN_USER_MODE: '@admin_user_mode',
 };
 
 const AdminContext = createContext();
@@ -25,6 +26,7 @@ export function AdminProvider({ children }) {
   const [inviteTokens, setInviteTokens] = useState([]);
   const [planLimit, setPlanLimit] = useState(5); // Default plan limit
   const [isLoading, setIsLoading] = useState(true);
+  const [userMode, setUserMode] = useState(null); // 'individual' or 'admin'
 
   // Load saved admin data on mount
   useEffect(() => {
@@ -46,27 +48,33 @@ export function AdminProvider({ children }) {
         // Load user info
         const user = await googleAuthService.getStoredUserInfo();
         setUserInfo(user);
+        
+        // Load user mode
+        const storedMode = await AsyncStorage.getItem(STORAGE_KEYS.ADMIN_USER_MODE);
+        setUserMode(storedMode);
 
-        // Load admin-specific data
-        const [
-          storedFolderId,
-          storedScriptUrl,
-          storedScriptId,
-          storedTokens,
-          storedPlanLimit,
-        ] = await AsyncStorage.multiGet([
-          STORAGE_KEYS.ADMIN_FOLDER_ID,
-          STORAGE_KEYS.ADMIN_SCRIPT_URL,
-          STORAGE_KEYS.ADMIN_SCRIPT_ID,
-          STORAGE_KEYS.ADMIN_INVITE_TOKENS,
-          STORAGE_KEYS.ADMIN_PLAN_LIMIT,
-        ]);
+        // Load admin-specific data only if in admin mode
+        if (storedMode === 'admin') {
+          const [
+            storedFolderId,
+            storedScriptUrl,
+            storedScriptId,
+            storedTokens,
+            storedPlanLimit,
+          ] = await AsyncStorage.multiGet([
+            STORAGE_KEYS.ADMIN_FOLDER_ID,
+            STORAGE_KEYS.ADMIN_SCRIPT_URL,
+            STORAGE_KEYS.ADMIN_SCRIPT_ID,
+            STORAGE_KEYS.ADMIN_INVITE_TOKENS,
+            STORAGE_KEYS.ADMIN_PLAN_LIMIT,
+          ]);
 
-        setFolderId(storedFolderId[1]);
-        setScriptUrl(storedScriptUrl[1]);
-        setScriptId(storedScriptId[1]);
-        setInviteTokens(storedTokens[1] ? JSON.parse(storedTokens[1]) : []);
-        setPlanLimit(storedPlanLimit[1] ? parseInt(storedPlanLimit[1]) : 5);
+          setFolderId(storedFolderId[1]);
+          setScriptUrl(storedScriptUrl[1]);
+          setScriptId(storedScriptId[1]);
+          setInviteTokens(storedTokens[1] ? JSON.parse(storedTokens[1]) : []);
+          setPlanLimit(storedPlanLimit[1] ? parseInt(storedPlanLimit[1]) : 5);
+        }
       }
     } catch (error) {
     } finally {
@@ -75,15 +83,63 @@ export function AdminProvider({ children }) {
   };
 
   /**
-   * Sign in with Google
+   * Sign in for admin (team) use
    */
-  const signIn = async () => {
+  const adminSignIn = async () => {
     try {
-      const { userInfo: user } = await googleAuthService.signIn();
-      setIsAuthenticated(true);
-      setUserInfo(user);
-      return { success: true };
+      console.log("Admin sign-in process started...");
+      const result = await googleAuthService.signInAsAdmin();
+      console.log("Received response from Google Sign-In service:", JSON.stringify(result, null, 2));
+
+      if (result && result.error) {
+        console.log('Sign-in failed with error:', result.error);
+        return { success: false, error: result.error };
+      }
+
+      if (result && result.userInfo) {
+        console.log("Sign-in successful, user info found.");
+        setIsAuthenticated(true);
+        setUserInfo(result.userInfo);
+        await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_USER_MODE, 'admin');
+        setUserMode('admin');
+        return { success: true };
+      }
+
+      throw new Error("Invalid or unexpected response from googleAuthService");
     } catch (error) {
+      console.log("Unexpected error in admin sign-in flow:", error.message);
+      setIsAuthenticated(false);
+      return { success: false, error: error.message };
+    }
+  };
+
+  /**
+   * Sign in for individual use
+   */
+  const individualSignIn = async () => {
+    try {
+      console.log("Individual sign-in process started...");
+      const result = await googleAuthService.signInAsIndividual();
+      console.log("Received response from Google Sign-In service:", JSON.stringify(result, null, 2));
+
+      if (result && result.error) {
+        console.log('Sign-in failed with error:', result.error);
+        return { success: false, error: result.error };
+      }
+
+      if (result && result.userInfo) {
+        console.log("Sign-in successful, user info found.");
+        setIsAuthenticated(true);
+        setUserInfo(result.userInfo);
+        await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_USER_MODE, 'individual');
+        setUserMode('individual');
+        return { success: true };
+      }
+
+      throw new Error("Invalid or unexpected response from googleAuthService");
+    } catch (error) {
+      console.log("Unexpected error in individual sign-in flow:", error.message);
+      setIsAuthenticated(false);
       return { success: false, error: error.message };
     }
   };
@@ -223,9 +279,11 @@ export function AdminProvider({ children }) {
     inviteTokens,
     planLimit,
     isLoading,
+    userMode,
 
     // Actions
-    signIn,
+    adminSignIn,
+    individualSignIn,
     signOut,
     saveFolderId,
     saveScriptInfo,
