@@ -814,9 +814,12 @@ export default function CameraScreen({ route, navigation }) {
     };
   }, []);
 
-  // Update camera view mode when device orientation changes
+  // Update camera view mode when device orientation changes - Android only
   useEffect(() => {
-    setCameraViewMode(deviceOrientation);
+    // Only auto-sync on Android; iOS uses manual toggle only
+    if (Platform.OS === 'android') {
+      setCameraViewMode(deviceOrientation);
+    }
   }, [deviceOrientation]);
 
   // Handle screen focus/blur to re-check permissions and settings
@@ -1059,6 +1062,28 @@ export default function CameraScreen({ route, navigation }) {
 
       // Capture device orientation (actual phone orientation)
       const currentOrientation = deviceOrientation;
+      // Calculate aspect ratio based on camera mode and platform
+      let aspectRatio;
+      if (Platform.OS === 'android') {
+        // Android: use cameraViewMode toggle - landscape mode uses 16:9 letterbox, portrait uses 9:16
+        aspectRatio = cameraViewMode === 'landscape' ? '16:9' : '9:16';
+      } else {
+        // iOS:
+        if (cameraViewMode === 'landscape') {
+          // Letterbox mode enabled: use 4:3 (matches letterboxCamera style)
+          aspectRatio = '4:3';
+        } else {
+          // No letterbox: calculate from actual screen dimensions
+          const screenWidth = dimensions.width;
+          const screenHeight = dimensions.height;
+          const ratio = deviceOrientation === 'landscape'
+            ? screenWidth / screenHeight  // landscape orientation: wider / narrower
+            : screenHeight / screenWidth; // portrait orientation: taller / wider
+          // Format as string with 2 decimal places, e.g., "2.16:1" or "2.17:1"
+          aspectRatio = `${ratio.toFixed(2)}:1`;
+        }
+      }
+
       // Add to photos with device orientation AND camera view mode
       const newPhoto = {
         id: Date.now(),
@@ -1067,7 +1092,7 @@ export default function CameraScreen({ route, navigation }) {
         mode: PHOTO_MODES.BEFORE,
         name: photoName,
         timestamp: Date.now(),
-        aspectRatio: cameraViewMode === 'landscape' ? '4:3' : '2:3',
+        aspectRatio: aspectRatio,
         orientation: currentOrientation,
         cameraViewMode: cameraViewMode // Save the camera view mode
       };
@@ -1404,7 +1429,7 @@ export default function CameraScreen({ route, navigation }) {
       <View style={styles.cameraContainer}>
           {/* Letterbox container for landscape mode */}
           {(() => {
-            const showLetterbox = deviceOrientation === 'landscape';
+            const showLetterbox = cameraViewMode === 'landscape';
             return showLetterbox;
           })() ? (
             <View style={[
