@@ -17,6 +17,7 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import FirstLoadScreen from './src/screens/FirstLoadScreen';
 import InviteScreen from './src/screens/InviteScreen';
 import JoinTeamScreen from './src/screens/JoinTeamScreen';
+import GoogleSignUpScreen from './src/screens/GoogleSignUpScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -108,6 +109,13 @@ function AppNavigator() {
         component={JoinTeamScreen}
         options={{
           title: 'Join Team',
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen
+        name="GoogleSignUp"
+        component={GoogleSignUpScreen}
+        options={{
           animation: 'slide_from_right'
         }}
       />

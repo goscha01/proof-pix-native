@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { useAdmin } from '../context/AdminContext';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { COLORS } from '../constants/rooms';
+import { FONTS } from '../constants/fonts';
 
 export default function JoinTeamScreen({ navigation }) {
   const [inviteCode, setInviteCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { isAuthenticated } = useAdmin();
+  const insets = useSafeAreaInsets();
 
   const handleJoinTeam = () => {
     if (!inviteCode.trim()) {
@@ -38,90 +42,109 @@ export default function JoinTeamScreen({ navigation }) {
     navigation.navigate('Home');
   };
 
+  const handleGoBack = () => {
+    navigation.goBack();
+  };
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      style={styles.container}
-    >
-      <View style={styles.content}>
-        <Text style={styles.title}>Join a Team</Text>
-        <Text style={styles.subtitle}>
-          Enter the invite code your team admin shared with you
-        </Text>
+    <SafeAreaView style={styles.container}>
+      <TouchableOpacity
+        style={[styles.backButton, { top: insets.top, left: insets.left + 10 }]}
+        onPress={handleGoBack}
+      >
+        <Text style={styles.backButtonText}>&larr; Back</Text>
+      </TouchableOpacity>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={{ flex: 1 }}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContent}>
+          <View style={styles.formContainer}>
+            <Text style={styles.title}>Join a Team</Text>
+            <Text style={styles.subtitle}>
+              Enter the invite code your team admin shared with you
+            </Text>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Enter invite code"
-          value={inviteCode}
-          onChangeText={setInviteCode}
-          autoCapitalize="none"
-          autoCorrect={false}
-          returnKeyType="done"
-          onSubmitEditing={handleJoinTeam}
-        />
+            <TextInput
+              style={styles.input}
+              placeholder="Enter invite code"
+              value={inviteCode}
+              onChangeText={setInviteCode}
+              autoCapitalize="none"
+              autoCorrect={false}
+              returnKeyType="done"
+              onSubmitEditing={handleJoinTeam}
+            />
 
-        <TouchableOpacity
-          style={styles.joinButton}
-          onPress={handleJoinTeam}
-          disabled={isLoading}
-        >
-          <Text style={styles.joinButtonText}>
-            {isLoading ? 'Joining...' : 'Join Team'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.skipButton}
-          onPress={handleSkip}
-        >
-          <Text style={styles.skipButtonText}>Skip - Use Individually</Text>
-        </TouchableOpacity>
-
-        <View style={styles.helpBox}>
-          <Text style={styles.helpText}>
-            Don't have an invite code? Ask your team administrator to generate one in Settings → Team Invites.
-          </Text>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+            <TouchableOpacity
+              style={styles.joinButton}
+              onPress={handleJoinTeam}
+              disabled={isLoading}
+            >
+              <Text style={styles.joinButtonText}>
+                {isLoading ? 'Joining...' : 'Join Team'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          
+          <View style={styles.logoContainer}>
+            <Image
+              source={require('../../assets/PP_logo_app.png')}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+            <Text style={styles.appTitle}>ProofPix</Text>
+            <Text style={styles.appSubtitle}>Before & After Photo Management</Text>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#F2C31B',
   },
-  content: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'center',
+  scrollContent: {
+    flexGrow: 1,
+    justifyContent: 'space-between',
+    paddingHorizontal: 30,
+    paddingVertical: 30,
+  },
+  formContainer: {
+    width: '100%',
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    marginBottom: 8,
+    fontSize: 22,
+    fontWeight: '600',
+    color: '#000000',
     textAlign: 'center',
+    marginBottom: 12,
+    marginTop: 40, // Add margin to avoid overlap with back button
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#333',
     marginBottom: 32,
     textAlign: 'center',
   },
   input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 16,
+    borderWidth: 2,
+    borderColor: COLORS.BORDER,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     fontSize: 16,
+    backgroundColor: 'white',
+    color: COLORS.TEXT,
     marginBottom: 16,
-    backgroundColor: '#f9f9f9',
   },
   joinButton: {
-    backgroundColor: '#007bff',
+    backgroundColor: '#000',
     padding: 16,
-    borderRadius: 8,
+    borderRadius: 12,
     alignItems: 'center',
     marginBottom: 12,
   },
@@ -130,26 +153,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
-  skipButton: {
-    padding: 16,
-    alignItems: 'center',
+  backButton: {
+    position: 'absolute',
+    padding: 10,
+    zIndex: 10,
   },
-  skipButtonText: {
-    color: '#007bff',
+  backButtonText: {
+    color: '#000',
     fontSize: 15,
+    fontWeight: '600',
   },
-  helpBox: {
-    marginTop: 32,
-    padding: 16,
-    backgroundColor: '#f0f8ff',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#b3d9ff',
+  logoContainer: {
+    alignItems: 'center',
+    marginTop: 30,
   },
-  helpText: {
-    fontSize: 14,
-    color: '#0066cc',
+  logo: {
+    width: 120,
+    height: 120,
+    marginBottom: 0,
+    marginRight: 5,
+  },
+  appTitle: {
+    fontSize: FONTS.XXXLARGE,
+    fontWeight: FONTS.BOLD,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+    color: '#000000',
+    marginBottom: 0,
+  },
+  appSubtitle: {
+    fontSize: 16,
+    color: '#333333',
     textAlign: 'center',
-    lineHeight: 20,
+    marginTop: 0,
   },
 });

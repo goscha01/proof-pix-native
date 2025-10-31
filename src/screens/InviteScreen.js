@@ -1,118 +1,79 @@
-import React from 'react';
-import { View, Text, StyleSheet, Alert } from 'react-native';
-import CameraScreen from './CameraScreen';
-import { uploadPhotoAsTeamMember } from '../services/uploadService';
-import UploadCompletionModal from '../components/UploadCompletionModal';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
+import { useAdmin } from '../context/AdminContext';
 
 export default function InviteScreen({ route, navigation }) {
   const { token, scriptUrl } = route.params || {};
-  const [modalVisible, setModalVisible] = React.useState(false);
-  const [lastPhoto, setLastPhoto] = React.useState(null);
+  const { joinTeam } = useAdmin();
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  // This function will be passed to the CameraScreen to be called after a photo is taken.
-  const handlePictureTaken = async (photo) => {
-    if (!token || !scriptUrl) {
-      Alert.alert(
-        'Invalid Invite Link',
-        'This invite link is missing necessary information. Please ask your team admin for a new link.'
-      );
-      return;
-    }
-
-    try {
-      // The photo object from the camera includes the base64 data
-      const imageDataUrl = `data:image/jpeg;base64,${photo.base64}`;
-      const filename = `team-upload-${new Date().toISOString()}.jpg`;
-
-      // Use the dedicated upload service for team members
-      const response = await uploadPhotoAsTeamMember({
-        imageDataUrl,
-        filename,
-        scriptUrl,
-        token,
-      });
-
-      if (response && response.success) {
-        setLastPhoto({ uri: photo.uri });
-        setModalVisible(true);
-      } else {
-        // The response from the Apps Script might contain a specific error message
-        const errorMessage = response?.error || 'Unknown error occurred during upload.';
-        Alert.alert('Upload Failed', errorMessage);
+  useEffect(() => {
+    const processInvite = async () => {
+      if (!token || !scriptUrl) {
+        setError('This invite link is invalid or incomplete. Please request a new link from your administrator.');
+        setIsLoading(false);
+        return;
       }
-    } catch (error) {
-      console.error('Error uploading photo as team member:', error);
-      Alert.alert('Upload Error', 'An unexpected error occurred. Please try again.');
-    }
-  };
 
-  const handleModalClose = () => {
-    setModalVisible(false);
-    setLastPhoto(null);
-  };
-  
-  const handleRetake = () => {
-    setModalVisible(false);
-    setLastPhoto(null);
-  };
-  
-  const handleNewPhoto = () => {
-    setModalVisible(false);
-    setLastPhoto(null);
-  };
+      try {
+        const result = await joinTeam(token, scriptUrl);
+        if (result.success) {
+          // Navigate to home screen and reset the stack
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Home' }],
+          });
+        } else {
+          setError(result.error || 'An unknown error occurred while trying to join the team.');
+          setIsLoading(false);
+        }
+      } catch (e) {
+        setError('An unexpected error occurred. Please try again.');
+        setIsLoading(false);
+      }
+    };
 
+    processInvite();
+  }, [token, scriptUrl, joinTeam, navigation]);
 
-  if (!token || !scriptUrl) {
+  if (isLoading) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={styles.errorText}>This invite link is invalid or incomplete.</Text>
-        <Text style={styles.errorSubText}>Please request a new link from your administrator.</Text>
+      <View style={styles.container}>
+        <ActivityIndicator size="large" color="#007bff" />
+        <Text style={styles.loadingText}>Joining team...</Text>
       </View>
     );
   }
 
-  return (
-    <>
-      <CameraScreen
-        navigation={navigation}
-        route={{
-          params: {
-            onPictureTaken: handlePictureTaken,
-            // Pass a special mode to tell the camera screen this is for a team upload.
-            // This can be used to customize the UI if needed (e.g., hide certain buttons).
-            mode: 'team',
-          },
-        }}
-      />
-      <UploadCompletionModal
-        visible={modalVisible}
-        onClose={handleModalClose}
-        onRetake={handleRetake}
-        onNewPhoto={handleNewPhoto}
-        photo={lastPhoto}
-        isTeamMember={true}
-      />
-    </>
-  );
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
+  }
+
+  return null; // Should not be reached
 }
 
 const styles = StyleSheet.create({
-  errorContainer: {
+  container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
     backgroundColor: '#fff',
   },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#333',
+  },
   errorText: {
     fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
-    marginBottom: 10,
-  },
-  errorSubText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
+    color: 'red',
   },
 });

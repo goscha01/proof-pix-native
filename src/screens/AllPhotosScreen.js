@@ -20,6 +20,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
+import { useAdmin } from '../context/AdminContext'; // Import useAdmin
 import { COLORS, PHOTO_MODES, ROOMS, TEMPLATE_CONFIGS, TEMPLATE_TYPES } from '../constants/rooms';
 import { CroppedThumbnail } from '../components/CroppedThumbnail';
 import PhotoLabel from '../components/PhotoLabel';
@@ -44,6 +45,7 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
   const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels } = useSettings();
+  const { userMode, teamInfo } = useAdmin(); // Get userMode and teamInfo
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
@@ -317,7 +319,17 @@ export default function AllPhotosScreen({ navigation, route }) {
   };
 
   const handleUploadPhotos = async () => {
-    // Get location-based configuration
+    // Handle team member upload
+    if (userMode === 'team_member') {
+      if (teamInfo && teamInfo.scriptUrl && teamInfo.token) {
+        setOptionsVisible(true); // Open options modal for team member
+      } else {
+        Alert.alert('Error', 'Team information is missing. Please re-join the team.');
+      }
+      return;
+    }
+
+    // Get location-based configuration for admin/individual
     const config = getLocationConfig(location);
 
     // Check if Google Drive is configured
@@ -357,6 +369,31 @@ export default function AllPhotosScreen({ navigation, route }) {
 
   const startUploadWithOptions = async () => {
     try {
+      if (userMode === 'team_member') {
+        // Team Member Upload Logic
+        const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+        const itemsToUpload = sourcePhotos.filter(p =>
+          (selectedTypes.before && p.mode === PHOTO_MODES.BEFORE) ||
+          (selectedTypes.after && p.mode === PHOTO_MODES.AFTER)
+        );
+
+        if (itemsToUpload.length === 0) {
+          Alert.alert('No Photos Selected', 'Please select at least one photo type to upload.');
+          return;
+        }
+
+        setOptionsVisible(false);
+        startBackgroundUpload({
+          items: itemsToUpload,
+          teamInfo: teamInfo,
+          uploadType: 'team',
+          albumName: `Team Upload ${new Date().toLocaleDateString()}` // Generic name
+        });
+        setShowUploadDetails(true);
+        return;
+      }
+
+      // Admin/Individual Upload Logic
       const config = getLocationConfig(location);
       // Always generate album name based on current location, not project's original location
       const albumName = createAlbumName(userName, location);
@@ -636,7 +673,8 @@ export default function AllPhotosScreen({ navigation, route }) {
         albumName,
         location,
         userName,
-        flat: !useFolderStructure
+        flat: !useFolderStructure,
+        uploadType: 'standard',
       });
 
       // Show upload modal immediately

@@ -1,4 +1,4 @@
-import { uploadPhotoBatch } from './uploadService';
+import { uploadPhotoBatch, uploadPhotoAsTeamMember } from './uploadService';
 import { markPhotosAsUploaded } from './uploadTracker';
 
 class BackgroundUploadService {
@@ -64,7 +64,11 @@ class BackgroundUploadService {
 
     while (this.uploadQueue.length > 0) {
       const upload = this.uploadQueue.shift();
-      await this.processUpload(upload);
+      if (upload.uploadType === 'team') {
+        await this.processTeamUpload(upload);
+      } else {
+        await this.processUpload(upload);
+      }
     }
 
     this.isProcessing = false;
@@ -125,6 +129,57 @@ class BackgroundUploadService {
       upload.error = error.message || 'Upload failed';
       
       // Remove from active uploads
+      this.activeUploads.delete(upload.id);
+      this.notifyListeners();
+    }
+  }
+
+  async processTeamUpload(upload) {
+    try {
+      upload.status = 'uploading';
+      upload.startTime = Date.now();
+      upload.progress = { current: 0, total: upload.items.length };
+      this.activeUploads.set(upload.id, upload);
+      this.notifyListeners();
+
+      const { items, teamInfo } = upload;
+      const successful = [];
+      const failed = [];
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        try {
+          // Team member uploads don't use albums, so we pass a generic identifier
+          const filename = `team-upload-${item.name}-${Date.now()}.jpg`;
+          const result = await uploadPhotoAsTeamMember({
+            imageDataUrl: item.uri,
+            filename: filename,
+            scriptUrl: teamInfo.scriptUrl,
+            token: teamInfo.token,
+          });
+
+          successful.push({ photo: item, result });
+        } catch (error) {
+          failed.push({ photo: item, error });
+        }
+        upload.progress = { current: i + 1, total: items.length };
+        this.notifyListeners();
+      }
+
+      // In team mode, we don't use the same persistent upload tracking
+      // because there's no "album" concept to check against for duplicates.
+      
+      upload.status = 'completed';
+      upload.endTime = Date.now();
+      upload.result = { successful, failed };
+      this.completedUploads.set(upload.id, upload);
+      this.activeUploads.delete(upload.id);
+      this.notifyListeners();
+
+    } catch (error) {
+      upload.status = 'failed';
+      upload.endTime = Date.now();
+      upload.error = error.message || 'Team upload failed';
       this.activeUploads.delete(upload.id);
       this.notifyListeners();
     }

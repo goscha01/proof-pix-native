@@ -9,6 +9,7 @@ const STORAGE_KEYS = {
   ADMIN_INVITE_TOKENS: '@admin_invite_tokens',
   ADMIN_PLAN_LIMIT: '@admin_plan_limit',
   ADMIN_USER_MODE: '@admin_user_mode',
+  TEAM_MEMBER_INFO: '@team_member_info', // For team members
 };
 
 const AdminContext = createContext();
@@ -26,7 +27,8 @@ export function AdminProvider({ children }) {
   const [inviteTokens, setInviteTokens] = useState([]);
   const [planLimit, setPlanLimit] = useState(5); // Default plan limit
   const [isLoading, setIsLoading] = useState(true);
-  const [userMode, setUserMode] = useState(null); // 'individual' or 'admin'
+  const [userMode, setUserMode] = useState(null); // 'individual', 'admin', or 'team_member'
+  const [teamInfo, setTeamInfo] = useState(null); // { scriptUrl, token }
 
   // Load saved admin data on mount
   useEffect(() => {
@@ -81,6 +83,12 @@ export function AdminProvider({ children }) {
         setScriptId(storedScriptId[1]);
         setInviteTokens(storedTokens[1] ? JSON.parse(storedTokens[1]) : []);
         setPlanLimit(storedPlanLimit[1] ? parseInt(storedPlanLimit[1]) : 5);
+      } else if (storedMode === 'team_member') {
+        // Load team member info
+        const storedTeamInfo = await AsyncStorage.getItem(STORAGE_KEYS.TEAM_MEMBER_INFO);
+        if (storedTeamInfo) {
+          setTeamInfo(JSON.parse(storedTeamInfo));
+        }
       }
     } catch (error) {
     } finally {
@@ -151,6 +159,24 @@ export function AdminProvider({ children }) {
   };
 
   /**
+   * Join a team as a member
+   */
+  const joinTeam = async (token, scriptUrl) => {
+    try {
+      const newTeamInfo = { token, scriptUrl };
+      await AsyncStorage.setItem(STORAGE_KEYS.TEAM_MEMBER_INFO, JSON.stringify(newTeamInfo));
+      await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_USER_MODE, 'team_member');
+      setTeamInfo(newTeamInfo);
+      setUserMode('team_member');
+      // No Google Sign-In for team members, so auth status is not changed
+      return { success: true };
+    } catch (error) {
+      console.error("Error joining team:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  /**
    * Sign out
    */
   const signOut = async () => {
@@ -163,6 +189,10 @@ export function AdminProvider({ children }) {
       setScriptUrl(null);
       setScriptId(null);
       setInviteTokens([]);
+      setTeamInfo(null);
+      setUserMode(null);
+      await AsyncStorage.removeItem(STORAGE_KEYS.ADMIN_USER_MODE);
+      await AsyncStorage.removeItem(STORAGE_KEYS.TEAM_MEMBER_INFO);
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -248,6 +278,7 @@ export function AdminProvider({ children }) {
         STORAGE_KEYS.ADMIN_SCRIPT_ID,
         STORAGE_KEYS.ADMIN_INVITE_TOKENS,
         STORAGE_KEYS.ADMIN_PLAN_LIMIT,
+        STORAGE_KEYS.TEAM_MEMBER_INFO,
       ]);
     } catch (error) {
       throw error;
@@ -286,12 +317,14 @@ export function AdminProvider({ children }) {
     planLimit,
     isLoading,
     userMode,
+    teamInfo,
     isGoogleSignInAvailable: googleAuthService.isAvailable(),
 
     // Actions
     adminSignIn,
     individualSignIn,
     signOut,
+    joinTeam,
     saveFolderId,
     saveScriptInfo,
     addInviteToken,
