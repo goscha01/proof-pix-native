@@ -182,24 +182,62 @@ class GoogleScriptService {
           inviteTokens: tokens,
         },
       ],
-      devMode: false,
+      devMode: true, // Use devMode to avoid deployment delays
     };
 
-    const response = await googleAuthService.makeAuthenticatedRequest(url, {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
+    console.log('updateInviteTokens - Making request to:', url);
+    console.log('updateInviteTokens - Request body:', JSON.stringify(body, null, 2));
 
-    if (!response.ok) {
-      throw new Error('Failed to update script properties.');
+    // Retry logic with exponential backoff for newly created scripts
+    let lastError;
+    const maxRetries = 3;
+    const retryDelays = [2000, 5000, 10000]; // 2s, 5s, 10s
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        if (i > 0) {
+          console.log(`updateInviteTokens - Retry attempt ${i + 1}/${maxRetries} after ${retryDelays[i - 1]}ms delay...`);
+          await new Promise(resolve => setTimeout(resolve, retryDelays[i - 1]));
+        }
+
+        const response = await googleAuthService.makeAuthenticatedRequest(url, {
+          method: 'POST',
+          body: JSON.stringify(body),
+        });
+
+        console.log('updateInviteTokens - Response status:', response.status);
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('updateInviteTokens - Error response:', errorText);
+
+          // If 404, it might be propagation delay - retry
+          if (response.status === 404 && i < maxRetries - 1) {
+            console.log('updateInviteTokens - Script not found, likely propagation delay. Will retry...');
+            lastError = new Error(`Script not ready yet (attempt ${i + 1}/${maxRetries})`);
+            continue;
+          }
+
+          throw new Error(`Failed to update script properties. Status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        console.log('updateInviteTokens - Response data:', JSON.stringify(data, null, 2));
+
+        if (data.error) {
+          throw new Error(data.error.message);
+        }
+
+        return data.response.result;
+      } catch (error) {
+        lastError = error;
+        if (i === maxRetries - 1) {
+          throw lastError;
+        }
+      }
     }
 
-    const data = await response.json();
-    if (data.error) {
-      throw new Error(data.error.message);
-    }
-
-    return data.response.result;
+    throw lastError || new Error('Failed to update invite tokens after retries');
   }
 }
 

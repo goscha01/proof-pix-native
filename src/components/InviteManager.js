@@ -26,13 +26,17 @@ export default function InviteManager() {
 
     const newToken = generateInviteToken();
     const newTokens = [...inviteTokens, newToken];
-    
+
     try {
+      console.log('Generating invite token...', { scriptId, newToken });
       await googleScriptService.updateInviteTokens(scriptId, newTokens);
+      console.log('Updated script tokens, now saving locally...');
       await addInviteToken(newToken);
+      console.log('Invite token generated successfully');
       Alert.alert('Invite Generated', `A new invite has been created. You can now share it with your team member.`);
     } catch (error) {
-      Alert.alert('Error', 'Failed to generate invite token. Please try again.');
+      console.error('Failed to generate invite token:', error);
+      Alert.alert('Error', `Failed to generate invite token: ${error.message}`);
     }
   };
 
