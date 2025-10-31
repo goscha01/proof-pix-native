@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import googleAuthService from '../services/googleAuthService';
+import { useSettings } from './SettingsContext';
 
 const STORAGE_KEYS = {
   ADMIN_FOLDER_ID: '@admin_folder_id',
@@ -19,6 +20,7 @@ const AdminContext = createContext();
  * Manages admin-specific state for Google Drive integration
  */
 export function AdminProvider({ children }) {
+  const { updateUserPlan } = useSettings();
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
   const [folderId, setFolderId] = useState(null);
@@ -42,28 +44,21 @@ export function AdminProvider({ children }) {
     try {
       setIsLoading(true);
 
-      // Check authentication status
-      // Wrapped in try-catch for Expo Go compatibility
-      try {
-        const isSignedIn = await googleAuthService.isSignedIn();
-        setIsAuthenticated(isSignedIn);
-
-        if (isSignedIn) {
-          // Load user info
-          const user = await googleAuthService.getStoredUserInfo();
-          setUserInfo(user);
-        }
-      } catch (googleError) {
-        console.log('Google Sign-in not available (Expo Go):', googleError.message);
+      // NEW LOGIC: Trust stored data as the source of truth for session state.
+      const storedUser = await googleAuthService.getStoredUserInfo();
+      if (storedUser) {
+        setUserInfo(storedUser);
+        setIsAuthenticated(true);
+      } else {
         setIsAuthenticated(false);
       }
-
+      
       // Load user mode
       const storedMode = await AsyncStorage.getItem(STORAGE_KEYS.ADMIN_USER_MODE);
       setUserMode(storedMode);
 
-      // Load admin-specific data only if in admin mode
-      if (storedMode === 'admin') {
+      // Load admin-specific data only if in admin mode and authenticated
+      if (storedMode === 'admin' && storedUser) {
         const [
           storedFolderId,
           storedScriptUrl,
@@ -91,6 +86,9 @@ export function AdminProvider({ children }) {
         }
       }
     } catch (error) {
+      console.error("Failed to load admin data:", error);
+      setIsAuthenticated(false);
+      setUserInfo(null);
     } finally {
       setIsLoading(false);
     }
@@ -168,6 +166,7 @@ export function AdminProvider({ children }) {
       await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_USER_MODE, 'team_member');
       setTeamInfo(newTeamInfo);
       setUserMode('team_member');
+      await updateUserPlan('Team Member');
       // No Google Sign-In for team members, so auth status is not changed
       return { success: true };
     } catch (error) {

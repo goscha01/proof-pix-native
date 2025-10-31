@@ -9,7 +9,8 @@ try {
   GoogleSignin = googleSigninModule.GoogleSignin;
   statusCodes = googleSigninModule.statusCodes;
 } catch (error) {
-  console.log('Google Sign-in native module not available (running in Expo Go)');
+  // Log the actual error to help diagnose build/linking issues
+  console.error('Failed to load @react-native-google-signin/google-signin module:', error);
 }
 
 const STORAGE_KEYS = {
@@ -36,11 +37,18 @@ class GoogleAuthService {
    */
   checkAvailability() {
     if (!this.isAvailable()) {
-      throw new Error('Google Sign-in is not available in Expo Go. Please use a development build.');
+      throw new Error('Google Sign-in is not available. Please ensure you are running a development build and the module is correctly linked.');
     }
   }
   constructor() {
-    // Configuration is now done in the specific sign-in methods
+    if (this.isAvailable()) {
+      GoogleSignin.configure({
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+        // Scopes are now passed dynamically to the signIn method
+        offlineAccess: true,
+      });
+    }
   }
 
   /**
@@ -49,10 +57,7 @@ class GoogleAuthService {
    */
   async signInAsAdmin() {
     this.checkAvailability();
-    GoogleSignin.configure({
-      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-      scopes: [
+    const scopes = [
         'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/userinfo.profile',
         'https://www.googleapis.com/auth/drive.file',
@@ -60,11 +65,8 @@ class GoogleAuthService {
         'https://www.googleapis.com/auth/script.projects',
         'https://www.googleapis.com/auth/script.deployments',
         'https://www.googleapis.com/auth/script.external_request',
-      ],
-      offlineAccess: true,
-    });
-
-    return this.signIn();
+      ];
+    return this.signIn(scopes);
   }
 
   /**
@@ -73,33 +75,28 @@ class GoogleAuthService {
    */
   async signInAsIndividual() {
     this.checkAvailability();
-    GoogleSignin.configure({
-      webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-      iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-      scopes: [
+    const scopes = [
         'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/userinfo.profile',
         'https://www.googleapis.com/auth/drive.file',
-      ],
-      offlineAccess: true,
-    });
-
-    return this.signIn();
+      ];
+    return this.signIn(scopes);
   }
 
   /**
    * Generic sign-in process, called after configuration.
    * @private
    */
-  async signIn() {
+  async signIn(scopes = []) {
     try {
       await GoogleSignin.hasPlayServices();
-      const response = await GoogleSignin.signIn();
+      const response = await GoogleSignin.signIn({ scopes });
       console.log('Raw userInfo from Google Sign-In:', JSON.stringify(response, null, 2));
 
-      // The user object is nested inside response.data
-      if (response && response.data && response.data.user) {
-        const user = response.data.user;
+      // The user object can be in `response.user` (native) or `response.data.user` (web/Expo Go)
+      const user = response?.user || response?.data?.user;
+
+      if (user) {
         await this.storeUserInfo(user);
         return { userInfo: user };
       }
@@ -280,11 +277,7 @@ class GoogleAuthService {
     try {
       const data = await AsyncStorage.getItem(STORAGE_KEYS.ADMIN_USER_INFO);
       if (data) {
-        const userInfo = JSON.parse(data);
-        // Wrap in same format as before for compatibility
-        return {
-          user: userInfo,
-        };
+        return JSON.parse(data);
       }
       return null;
     } catch (error) {

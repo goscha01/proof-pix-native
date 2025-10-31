@@ -47,7 +47,7 @@ export default function HomeScreen({ navigation }) {
   const [selectedProjects, setSelectedProjects] = useState(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const { projects, getPhotosByProject, deleteProject, setActiveProject, activeProjectId, createProject, photos } = usePhotos();
-  const { userName, location } = useSettings();
+  const { userName, location, getRooms, userPlan } = useSettings();
   const { uploadStatus, cancelUpload, cancelAllUploads } = useBackgroundUpload();
   const [newProjectVisible, setNewProjectVisible] = useState(false);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
@@ -60,7 +60,7 @@ export default function HomeScreen({ navigation }) {
   const [combinedBaseUris, setCombinedBaseUris] = useState({}); // Cache for combined base image URIs
 
   // Get rooms from settings (custom or default)
-  const { getRooms, customRooms, saveCustomRooms, resetCustomRooms } = useSettings();
+  const { customRooms, saveCustomRooms, resetCustomRooms } = useSettings();
   
   // Make rooms reactive to customRooms changes using useState and useEffect
   const [rooms, setRooms] = useState(() => getRooms());
@@ -1075,13 +1075,18 @@ export default function HomeScreen({ navigation }) {
       {/* Background Upload Status - Removed old indicator */}
 
       <View style={styles.header}>
-        <Text style={styles.title}>ProofPix</Text>
-        <TouchableOpacity
-          style={styles.settingsButton}
-          onPress={() => navigation.navigate('Settings')}
-        >
-          <Text style={styles.settingsButtonText}>⚙️</Text>
-        </TouchableOpacity>
+        <View style={styles.headerLeft}>
+            <Text style={styles.appName}>ProofPix</Text>
+            <Text style={styles.tierName}>({userPlan.charAt(0).toUpperCase() + userPlan.slice(1)})</Text>
+        </View>
+        <View style={styles.headerRight}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('AllPhotos', { openManage: true })}>
+                <Text style={styles.iconText}>🗂️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Settings')}>
+                <Text style={styles.iconText}>⚙️</Text>
+            </TouchableOpacity>
+        </View>
       </View>
 
       {/* Active project name (tiny line under header) */}
@@ -1448,6 +1453,41 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     paddingTop: 10
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  appName: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.TEXT,
+  },
+  tierName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.GRAY,
+    marginLeft: 8,
+    alignSelf: 'flex-end',
+    paddingBottom: 2,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'white',
+    borderWidth: 2,
+    borderColor: COLORS.BORDER,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  iconText: {
+    fontSize: 20
   },
   title: {
     fontSize: FONTS.XXLARGE,

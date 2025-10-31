@@ -5,7 +5,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PhotoProvider } from './src/context/PhotoContext';
 import { SettingsProvider, useSettings } from './src/context/SettingsContext';
-import { AdminProvider } from './src/context/AdminContext';
+import { AdminProvider, useAdmin } from './src/context/AdminContext';
 
 // Screens
 import HomeScreen from './src/screens/HomeScreen';
@@ -18,26 +18,24 @@ import FirstLoadScreen from './src/screens/FirstLoadScreen';
 import InviteScreen from './src/screens/InviteScreen';
 import JoinTeamScreen from './src/screens/JoinTeamScreen';
 import GoogleSignUpScreen from './src/screens/GoogleSignUpScreen';
+import AuthLoadingScreen from './src/screens/AuthLoadingScreen';
 
 const Stack = createNativeStackNavigator();
 
 // Navigator component that uses settings
 function AppNavigator() {
-  const { userName, loading } = useSettings();
-
-  // Show loading screen while settings are loading
-  if (loading) {
-    return null; // Or a loading component
-  }
-
   return (
     <Stack.Navigator
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: '#000' }
       }}
-      initialRouteName={(!userName || userName.trim() === '') ? 'FirstLoad' : 'Home'}
+      initialRouteName="AuthLoading"
     >
+      <Stack.Screen 
+        name="AuthLoading" 
+        component={AuthLoadingScreen} 
+      />
       <Stack.Screen 
         name="FirstLoad" 
         component={FirstLoadScreen}

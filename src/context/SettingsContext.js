@@ -29,6 +29,7 @@ export const SettingsProvider = ({ children }) => {
   const [useFolderStructure, setUseFolderStructure] = useState(true);
   const [enabledFolders, setEnabledFolders] = useState({ before: true, after: true, combined: true });
   const [customRooms, setCustomRooms] = useState(null); // null means use default rooms
+  const [userPlan, setUserPlan] = useState('starter'); // Add userPlan state
   const [loading, setLoading] = useState(true);
 
   // Load settings on mount
@@ -48,6 +49,7 @@ export const SettingsProvider = ({ children }) => {
         setIsBusiness(settings.isBusiness ?? false);
         setUseFolderStructure(settings.useFolderStructure ?? true);
         setEnabledFolders(settings.enabledFolders ?? { before: true, after: true, combined: true });
+        setUserPlan(settings.userPlan ?? 'starter'); // Load userPlan
       }
       
       // EMERGENCY: Clear all corrupted custom rooms data
@@ -71,6 +73,7 @@ export const SettingsProvider = ({ children }) => {
         isBusiness,
         useFolderStructure,
         enabledFolders,
+        userPlan, // Add userPlan to saved settings
         ...newSettings
       };
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -85,10 +88,14 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ showLabels: newValue });
   };
 
-  const updateUserInfo = async (name, loc) => {
+  const updateUserInfo = async (name) => {
     setUserName(name);
-    setLocation(loc);
-    await saveSettings({ userName: name, location: loc });
+    await saveSettings({ userName: name });
+  };
+
+  const updateUserPlan = async (plan) => {
+    setUserPlan(plan);
+    await saveSettings({ userPlan: plan });
   };
 
   const toggleBusiness = async () => {
@@ -150,6 +157,7 @@ export const SettingsProvider = ({ children }) => {
       setUseFolderStructure(true);
       setEnabledFolders({ before: true, after: true, combined: true });
       setCustomRooms(null);
+      setUserPlan('starter'); // Reset plan on user data reset
     } catch (error) {
 
     }
@@ -172,7 +180,9 @@ export const SettingsProvider = ({ children }) => {
     customRooms,
     saveCustomRooms,
     getRooms,
-    resetCustomRooms
+    resetCustomRooms,
+    userPlan, // Expose userPlan
+    updateUserPlan, // Expose updateUserPlan
   };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

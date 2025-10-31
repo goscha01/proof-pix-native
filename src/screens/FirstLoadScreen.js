@@ -20,7 +20,7 @@ const { width, height } = Dimensions.get('window');
 
 export default function FirstLoadScreen({ navigation }) {
   const { individualSignIn } = useAdmin();
-  const { updateUserInfo } = useSettings();
+  const { updateUserInfo, updateUserPlan } = useSettings();
   const [userName, setUserName] = useState('');
   const [selection, setSelection] = useState(null); // 'team' or 'individual'
 
@@ -35,6 +35,7 @@ export default function FirstLoadScreen({ navigation }) {
   const handleSelectTeam = async () => {
     if (!validateName()) return;
     await updateUserInfo(userName.trim());
+    await updateUserPlan('Team Member');
     navigation.navigate('JoinTeam');
   };
 
@@ -45,6 +46,7 @@ export default function FirstLoadScreen({ navigation }) {
   };
 
   const handleSelectPlan = async (plan) => {
+    await updateUserPlan(plan);
     if (plan === 'starter') {
       // For Starter plan, go home without Google Sign-In
       navigation.replace('Home');
