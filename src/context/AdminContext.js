@@ -41,40 +41,46 @@ export function AdminProvider({ children }) {
       setIsLoading(true);
 
       // Check authentication status
-      const isSignedIn = await googleAuthService.isSignedIn();
-      setIsAuthenticated(isSignedIn);
+      // Wrapped in try-catch for Expo Go compatibility
+      try {
+        const isSignedIn = await googleAuthService.isSignedIn();
+        setIsAuthenticated(isSignedIn);
 
-      if (isSignedIn) {
-        // Load user info
-        const user = await googleAuthService.getStoredUserInfo();
-        setUserInfo(user);
-        
-        // Load user mode
-        const storedMode = await AsyncStorage.getItem(STORAGE_KEYS.ADMIN_USER_MODE);
-        setUserMode(storedMode);
-
-        // Load admin-specific data only if in admin mode
-        if (storedMode === 'admin') {
-          const [
-            storedFolderId,
-            storedScriptUrl,
-            storedScriptId,
-            storedTokens,
-            storedPlanLimit,
-          ] = await AsyncStorage.multiGet([
-            STORAGE_KEYS.ADMIN_FOLDER_ID,
-            STORAGE_KEYS.ADMIN_SCRIPT_URL,
-            STORAGE_KEYS.ADMIN_SCRIPT_ID,
-            STORAGE_KEYS.ADMIN_INVITE_TOKENS,
-            STORAGE_KEYS.ADMIN_PLAN_LIMIT,
-          ]);
-
-          setFolderId(storedFolderId[1]);
-          setScriptUrl(storedScriptUrl[1]);
-          setScriptId(storedScriptId[1]);
-          setInviteTokens(storedTokens[1] ? JSON.parse(storedTokens[1]) : []);
-          setPlanLimit(storedPlanLimit[1] ? parseInt(storedPlanLimit[1]) : 5);
+        if (isSignedIn) {
+          // Load user info
+          const user = await googleAuthService.getStoredUserInfo();
+          setUserInfo(user);
         }
+      } catch (googleError) {
+        console.log('Google Sign-in not available (Expo Go):', googleError.message);
+        setIsAuthenticated(false);
+      }
+
+      // Load user mode
+      const storedMode = await AsyncStorage.getItem(STORAGE_KEYS.ADMIN_USER_MODE);
+      setUserMode(storedMode);
+
+      // Load admin-specific data only if in admin mode
+      if (storedMode === 'admin') {
+        const [
+          storedFolderId,
+          storedScriptUrl,
+          storedScriptId,
+          storedTokens,
+          storedPlanLimit,
+        ] = await AsyncStorage.multiGet([
+          STORAGE_KEYS.ADMIN_FOLDER_ID,
+          STORAGE_KEYS.ADMIN_SCRIPT_URL,
+          STORAGE_KEYS.ADMIN_SCRIPT_ID,
+          STORAGE_KEYS.ADMIN_INVITE_TOKENS,
+          STORAGE_KEYS.ADMIN_PLAN_LIMIT,
+        ]);
+
+        setFolderId(storedFolderId[1]);
+        setScriptUrl(storedScriptUrl[1]);
+        setScriptId(storedScriptId[1]);
+        setInviteTokens(storedTokens[1] ? JSON.parse(storedTokens[1]) : []);
+        setPlanLimit(storedPlanLimit[1] ? parseInt(storedPlanLimit[1]) : 5);
       }
     } catch (error) {
     } finally {
