@@ -1,16 +1,44 @@
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+// Try to import GoogleSignin, but handle gracefully if not available (Expo Go)
+let GoogleSignin = null;
+let statusCodes = null;
+
+try {
+  const googleSigninModule = require('@react-native-google-signin/google-signin');
+  GoogleSignin = googleSigninModule.GoogleSignin;
+  statusCodes = googleSigninModule.statusCodes;
+} catch (error) {
+  console.log('Google Sign-in native module not available (running in Expo Go)');
+}
 
 const STORAGE_KEYS = {
   ADMIN_USER_INFO: '@admin_user_info',
 };
 
 /**
- * Google Authentication Service for Admin Setup (Expo AuthSession version)
+ * Google Authentication Service for Admin Setup
  * Handles OAuth flow with necessary scopes for Drive API and Apps Script API
- * Works with Expo Go - no native modules required
+ * Gracefully handles Expo Go environment where native modules are not available
  */
 class GoogleAuthService {
+  /**
+   * Check if Google Sign-in is available (native module loaded)
+   * @returns {boolean}
+   */
+  isAvailable() {
+    return GoogleSignin !== null;
+  }
+
+  /**
+   * Throws an error if Google Sign-in is not available
+   * @private
+   */
+  checkAvailability() {
+    if (!this.isAvailable()) {
+      throw new Error('Google Sign-in is not available in Expo Go. Please use a development build.');
+    }
+  }
   constructor() {
     // Configuration is now done in the specific sign-in methods
   }
@@ -20,6 +48,7 @@ class GoogleAuthService {
    * This requests all necessary permissions for team features.
    */
   async signInAsAdmin() {
+    this.checkAvailability();
     GoogleSignin.configure({
       webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
@@ -43,6 +72,7 @@ class GoogleAuthService {
    * This requests only the basic permissions for uploading to their own drive.
    */
   async signInAsIndividual() {
+    this.checkAvailability();
     GoogleSignin.configure({
       webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
@@ -97,6 +127,9 @@ class GoogleAuthService {
    * @returns {Promise<boolean>}
    */
   async isSignedIn() {
+    if (!this.isAvailable()) {
+      return false;
+    }
     return await GoogleSignin.isSignedIn();
   }
 
@@ -105,6 +138,7 @@ class GoogleAuthService {
    * @private
    */
   async getUserInfo() {
+    this.checkAvailability();
     try {
       const currentUser = await GoogleSignin.getCurrentUser();
       return currentUser ? currentUser.user : null;
@@ -119,6 +153,7 @@ class GoogleAuthService {
    * necessary when scopes have changed.
    */
   async signOut() {
+    this.checkAvailability();
     try {
       // Revoke access to ensure all permissions are cleared from the token
       await GoogleSignin.revokeAccess();
@@ -158,6 +193,9 @@ class GoogleAuthService {
    * @returns {Promise<object|null>}
    */
   async getCurrentUser() {
+    if (!this.isAvailable()) {
+      return null;
+    }
     try {
       const userInfo = await GoogleSignin.getCurrentUser();
       return userInfo ? userInfo.user : null;
@@ -171,6 +209,7 @@ class GoogleAuthService {
    * @returns {Promise<{accessToken, idToken}>}
    */
   async getTokens() {
+    this.checkAvailability();
     try {
       const tokens = await GoogleSignin.getTokens();
       return {
@@ -189,6 +228,7 @@ class GoogleAuthService {
    * @returns {Promise<Response>} The response from the request.
    */
   async makeAuthenticatedRequest(url, options = {}) {
+    this.checkAvailability();
     try {
       const { accessToken } = await GoogleSignin.getTokens();
 
