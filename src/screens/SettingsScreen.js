@@ -274,6 +274,14 @@ export default function SettingsScreen({ navigation }) {
                   Set Up a Team (Admin)
                 </Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.joinTeamButton}
+                onPress={() => navigation.navigate('JoinTeam')}
+              >
+                <Text style={styles.joinTeamButtonText}>
+                  Join an Existing Team
+                </Text>
+              </TouchableOpacity>
             </>
           ) : (
             <>
@@ -716,6 +724,19 @@ export default function SettingsScreen({ navigation }) {
         marginBottom: 8
       },
       googleSignInButtonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: '600'
+      },
+      joinTeamButton: {
+        backgroundColor: '#28a745',
+        borderRadius: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        marginTop: 8
+      },
+      joinTeamButtonText: {
         color: 'white',
         fontSize: 16,
         fontWeight: '600'

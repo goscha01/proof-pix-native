@@ -16,6 +16,7 @@ import PhotoDetailScreen from './src/screens/PhotoDetailScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import FirstLoadScreen from './src/screens/FirstLoadScreen';
 import InviteScreen from './src/screens/InviteScreen';
+import JoinTeamScreen from './src/screens/JoinTeamScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -94,12 +95,20 @@ function AppNavigator() {
           animation: 'slide_from_right'
         }}
       />
-      <Stack.Screen 
-        name="Invite" 
+      <Stack.Screen
+        name="Invite"
         component={InviteScreen}
         options={{
           presentation: 'modal',
           animation: 'fade'
+        }}
+      />
+      <Stack.Screen
+        name="JoinTeam"
+        component={JoinTeamScreen}
+        options={{
+          title: 'Join Team',
+          animation: 'slide_from_right'
         }}
       />
     </Stack.Navigator>
