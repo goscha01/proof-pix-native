@@ -24,7 +24,6 @@ import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
 import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS } from '../constants/rooms';
-import analyticsService from '../services/analyticsService';
 import PhotoLabel from '../components/PhotoLabel';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -960,7 +959,7 @@ export default function CameraScreen({ route, navigation }) {
     if (route.params?.beforePhoto) {
       setSelectedBeforePhoto(route.params.beforePhoto);
     }
-    analyticsService.logEvent('CameraScreen_Open', { mode: route.params?.mode || 'before' });
+    // Analytics removed for build compatibility
   }, [route.params]);
 
   useEffect(() => {
