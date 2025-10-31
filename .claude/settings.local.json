@@ -8,7 +8,13 @@
       "Bash(node -c:*)",
       "Bash(npx eslint:*)",
       "Bash(git log:*)",
-      "Read(//c/**)"
+      "Read(//c/**)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npx expo:*)",
+      "Bash(npx eas whoami)",
+      "Bash(npx eas:*)"
     ],
     "deny": [],
     "ask": []
