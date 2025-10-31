@@ -25,15 +25,18 @@ export default function InviteManager() {
     }
 
     const newToken = generateInviteToken();
-    const newTokens = [...inviteTokens, newToken];
 
     try {
       console.log('Generating invite token...', { scriptId, newToken });
-      await googleScriptService.updateInviteTokens(scriptId, newTokens);
-      console.log('Updated script tokens, now saving locally...');
+
+      // Save token locally (script will be updated when first used for uploads)
       await addInviteToken(newToken);
-      console.log('Invite token generated successfully');
-      Alert.alert('Invite Generated', `A new invite has been created. You can now share it with your team member.`);
+      console.log('Invite token generated and saved successfully');
+
+      Alert.alert(
+        'Invite Generated',
+        `A new invite has been created. You can now share it with your team member.\n\nNote: The invite will be activated when first used for uploads.`
+      );
     } catch (error) {
       console.error('Failed to generate invite token:', error);
       Alert.alert('Error', `Failed to generate invite token: ${error.message}`);
@@ -41,12 +44,9 @@ export default function InviteManager() {
   };
 
   const handleRevokeInvite = async (token) => {
-    const newTokens = inviteTokens.filter(t => t !== token);
-    
     try {
-      await googleScriptService.updateInviteTokens(scriptId, newTokens);
       await removeInviteToken(token);
-      Alert.alert('Invite Revoked', `The invite has been revoked.`);
+      Alert.alert('Invite Revoked', `The invite has been revoked locally. It will no longer work for new uploads.`);
     } catch (error) {
       Alert.alert('Error', 'Failed to revoke invite token. Please try again.');
     }
