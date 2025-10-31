@@ -14,7 +14,8 @@
       "Bash(git commit:*)",
       "Bash(npx expo:*)",
       "Bash(npx eas whoami)",
-      "Bash(npx eas:*)"
+      "Bash(npx eas:*)",
+      "Bash(https://script.google.com/...\")\n- Added validation to ensure both parts are present\n\nThis fixes the issue where team members couldn''''t join because scriptUrl\nwas missing. The invite code now contains everything needed to join.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []
