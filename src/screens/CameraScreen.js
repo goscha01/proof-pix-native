@@ -920,12 +920,18 @@ export default function CameraScreen({ route, navigation }) {
   // In after mode, camera view mode should match the before photo's camera view mode
   useEffect(() => {
     if (mode === 'after') {
-      const activeBeforePhoto = getActiveBeforePhoto();
-      if (activeBeforePhoto && activeBeforePhoto.cameraViewMode) {
-        setCameraViewMode(activeBeforePhoto.cameraViewMode);
-      } else {
-        // Fallback to device orientation if no cameraViewMode saved
+      // Android: always use device orientation (auto-sync)
+      // iOS: match before photo's camera view mode
+      if (Platform.OS === 'android') {
         setCameraViewMode(deviceOrientation);
+      } else {
+        const activeBeforePhoto = getActiveBeforePhoto();
+        if (activeBeforePhoto && activeBeforePhoto.cameraViewMode) {
+          setCameraViewMode(activeBeforePhoto.cameraViewMode);
+        } else {
+          // Fallback to device orientation if no cameraViewMode saved
+          setCameraViewMode(deviceOrientation);
+        }
       }
     }
   }, [mode, deviceOrientation, selectedBeforePhoto]);
@@ -1065,8 +1071,8 @@ export default function CameraScreen({ route, navigation }) {
       // Calculate aspect ratio based on camera mode and platform
       let aspectRatio;
       if (Platform.OS === 'android') {
-        // Android: use cameraViewMode toggle - landscape mode uses 16:9 letterbox, portrait uses 9:16
-        aspectRatio = cameraViewMode === 'landscape' ? '16:9' : '9:16';
+        // Android: use cameraViewMode toggle - landscape mode uses 4:3 letterbox, portrait uses 9:16
+        aspectRatio = cameraViewMode === 'landscape' ? '4:3' : '9:16';
       } else {
         // iOS:
         if (cameraViewMode === 'landscape') {
@@ -1450,7 +1456,7 @@ export default function CameraScreen({ route, navigation }) {
                     enableTorch={enableTorch}
                   />
                 )}
-                
+
                 {/* Before photo overlay (for after mode) */}
                 {mode === 'after' && getActiveBeforePhoto() && (
                   <View style={styles.beforePhotoOverlay}>
@@ -3029,7 +3035,7 @@ const styles = StyleSheet.create({
   },
   letterboxCamera: {
     width: '100%',
-    aspectRatio: Platform.OS === 'android' ? 16 / 9 : 4 / 3, // Landscape 16:9 for Android
+    aspectRatio: 4 / 3, // Landscape 4:3 for both platforms
     position: 'relative',
     overflow: 'hidden'
   },
