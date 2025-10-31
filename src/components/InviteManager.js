@@ -59,8 +59,11 @@ export default function InviteManager() {
 
   const handleShareInvite = async (token) => {
     try {
+      // Create the invite link with both token and scriptUrl
+      const inviteLink = `proofpix://invite/${token}?scriptUrl=${encodeURIComponent(scriptUrl)}`;
+
       await Share.share({
-        message: `Join my ProofPix team!\n\nInvite Code: ${token}\n\nDownload ProofPix and enter this code to join.`,
+        message: `Join my ProofPix team!\n\nTap this link to join: ${inviteLink}\n\nOr use invite code: ${token}`,
         title: 'ProofPix Team Invite'
       });
     } catch (error) {
