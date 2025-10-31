@@ -13,13 +13,24 @@ export default function JoinTeamScreen({ navigation }) {
       return;
     }
 
-    // For now, we'll just navigate to the Invite screen with the token
-    // In a real implementation, you'd validate the token with the server first
+    // Parse invite code - format is "TOKEN|SCRIPTURL"
+    const parts = inviteCode.trim().split('|');
+    if (parts.length !== 2) {
+      Alert.alert('Invalid Code', 'This invite code is not in the correct format. Please check with your admin.');
+      return;
+    }
+
+    const [token, scriptUrl] = parts;
+
+    if (!token || !scriptUrl) {
+      Alert.alert('Invalid Code', 'This invite code is incomplete. Please check with your admin.');
+      return;
+    }
+
+    // Navigate to Invite screen with the parsed data
     navigation.navigate('Invite', {
-      token: inviteCode.trim(),
-      // We'll need to get the scriptUrl from somewhere - for now use a placeholder
-      // This will be improved when we add proper invite validation
-      scriptUrl: 'https://script.google.com/macros/s/placeholder/exec'
+      token: token,
+      scriptUrl: scriptUrl
     });
   };
 

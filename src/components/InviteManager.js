@@ -53,17 +53,19 @@ export default function InviteManager() {
   };
 
   const handleCopyToken = (token) => {
-    Clipboard.setString(token);
+    // Copy token with scriptUrl so team members can validate
+    const inviteData = `${token}|${scriptUrl}`;
+    Clipboard.setString(inviteData);
     Alert.alert('Copied!', 'Invite code copied to clipboard. Share this code with your team member.');
   };
 
   const handleShareInvite = async (token) => {
     try {
-      // Create the invite link with both token and scriptUrl
-      const inviteLink = `proofpix://invite/${token}?scriptUrl=${encodeURIComponent(scriptUrl)}`;
+      // Create invite code with token and scriptUrl
+      const inviteData = `${token}|${scriptUrl}`;
 
       await Share.share({
-        message: `Join my ProofPix team!\n\nTap this link to join: ${inviteLink}\n\nOr use invite code: ${token}`,
+        message: `Join my ProofPix team!\n\nInvite Code:\n${inviteData}\n\nPaste this code in ProofPix → Settings → Join an Existing Team`,
         title: 'ProofPix Team Invite'
       });
     } catch (error) {
