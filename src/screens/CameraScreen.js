@@ -24,6 +24,7 @@ import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
 import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS } from '../constants/rooms';
+import analyticsService from '../services/analyticsService';
 import PhotoLabel from '../components/PhotoLabel';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
@@ -813,9 +814,12 @@ export default function CameraScreen({ route, navigation }) {
     };
   }, []);
 
-  // Update camera view mode when device orientation changes
+  // Update camera view mode when device orientation changes - Android only
   useEffect(() => {
-    setCameraViewMode(deviceOrientation);
+    // Only auto-sync on Android; iOS uses manual toggle only
+    if (Platform.OS === 'android') {
+      setCameraViewMode(deviceOrientation);
+    }
   }, [deviceOrientation]);
 
   // Handle screen focus/blur to re-check permissions and settings
@@ -916,12 +920,18 @@ export default function CameraScreen({ route, navigation }) {
   // In after mode, camera view mode should match the before photo's camera view mode
   useEffect(() => {
     if (mode === 'after') {
-      const activeBeforePhoto = getActiveBeforePhoto();
-      if (activeBeforePhoto && activeBeforePhoto.cameraViewMode) {
-        setCameraViewMode(activeBeforePhoto.cameraViewMode);
-      } else {
-        // Fallback to device orientation if no cameraViewMode saved
+      // Android: always use device orientation (auto-sync)
+      // iOS: match before photo's camera view mode
+      if (Platform.OS === 'android') {
         setCameraViewMode(deviceOrientation);
+      } else {
+        const activeBeforePhoto = getActiveBeforePhoto();
+        if (activeBeforePhoto && activeBeforePhoto.cameraViewMode) {
+          setCameraViewMode(activeBeforePhoto.cameraViewMode);
+        } else {
+          // Fallback to device orientation if no cameraViewMode saved
+          setCameraViewMode(deviceOrientation);
+        }
       }
     }
   }, [mode, deviceOrientation, selectedBeforePhoto]);
@@ -950,7 +960,7 @@ export default function CameraScreen({ route, navigation }) {
     if (route.params?.beforePhoto) {
       setSelectedBeforePhoto(route.params.beforePhoto);
     }
-    // analyticsService.logEvent('CameraScreen_Open', { mode: route.params?.mode || 'before' });
+    analyticsService.logEvent('CameraScreen_Open', { mode: route.params?.mode || 'before' });
   }, [route.params]);
 
   useEffect(() => {
@@ -1053,15 +1063,33 @@ export default function CameraScreen({ route, navigation }) {
       const photoNumber = roomPhotos.length + 1;
       const photoName = `${room.charAt(0).toUpperCase() + room.slice(1)} ${photoNumber}`;
 
-      // Get the actual dimensions of the captured photo to calculate the correct aspect ratio
-      const { width, height } = await ImageManipulator.manipulateAsync(uri, [], {});
-      const actualAspectRatio = width > height ? `${width}:${height}` : `${height}:${width}`;
-
       // Save original photo to device immediately (no label delay)
       const savedUri = await savePhotoToDevice(uri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`, activeProjectId || null);
 
       // Capture device orientation (actual phone orientation)
       const currentOrientation = deviceOrientation;
+      // Calculate aspect ratio based on camera mode and platform
+      let aspectRatio;
+      if (Platform.OS === 'android') {
+        // Android: use cameraViewMode toggle - landscape mode uses 4:3 letterbox, portrait uses 9:16
+        aspectRatio = cameraViewMode === 'landscape' ? '4:3' : '9:16';
+      } else {
+        // iOS:
+        if (cameraViewMode === 'landscape') {
+          // Letterbox mode enabled: use 4:3 (matches letterboxCamera style)
+          aspectRatio = '4:3';
+        } else {
+          // No letterbox: calculate from actual screen dimensions
+          const screenWidth = dimensions.width;
+          const screenHeight = dimensions.height;
+          const ratio = deviceOrientation === 'landscape'
+            ? screenWidth / screenHeight  // landscape orientation: wider / narrower
+            : screenHeight / screenWidth; // portrait orientation: taller / wider
+          // Format as string with 2 decimal places, e.g., "2.16:1" or "2.17:1"
+          aspectRatio = `${ratio.toFixed(2)}:1`;
+        }
+      }
+
       // Add to photos with device orientation AND camera view mode
       const newPhoto = {
         id: Date.now(),
@@ -1070,7 +1098,7 @@ export default function CameraScreen({ route, navigation }) {
         mode: PHOTO_MODES.BEFORE,
         name: photoName,
         timestamp: Date.now(),
-        aspectRatio: actualAspectRatio, // Use the real aspect ratio
+        aspectRatio: aspectRatio,
         orientation: currentOrientation,
         cameraViewMode: cameraViewMode // Save the camera view mode
       };
@@ -1142,7 +1170,7 @@ export default function CameraScreen({ route, navigation }) {
         name: activeBeforePhoto.name,
         timestamp: Date.now(),
         beforePhotoId: beforePhotoId,
-        aspectRatio: activeBeforePhoto.aspectRatio, // Inherit the real aspect ratio
+        aspectRatio: activeBeforePhoto.aspectRatio || '4:3',
         orientation: activeBeforePhoto.orientation || deviceOrientation,
         cameraViewMode: activeBeforePhoto.cameraViewMode || 'portrait'
       };
@@ -1407,9 +1435,7 @@ export default function CameraScreen({ route, navigation }) {
       <View style={styles.cameraContainer}>
           {/* Letterbox container for landscape mode */}
           {(() => {
-            const showLetterbox = Platform.OS === 'android'
-              ? deviceOrientation === 'landscape'  // Android: follow device orientation
-              : cameraViewMode === 'landscape';     // iOS: follow camera view mode toggle
+            const showLetterbox = cameraViewMode === 'landscape';
             return showLetterbox;
           })() ? (
             <View style={[
@@ -1430,7 +1456,7 @@ export default function CameraScreen({ route, navigation }) {
                     enableTorch={enableTorch}
                   />
                 )}
-                
+
                 {/* Before photo overlay (for after mode) */}
                 {mode === 'after' && getActiveBeforePhoto() && (
                   <View style={styles.beforePhotoOverlay}>
@@ -2251,16 +2277,16 @@ const styles = StyleSheet.create({
     fontWeight: 'bold'
   },
   cameraContainer: {
-    flex: 1,
-    backgroundColor: 'black',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#000',
+    justifyContent: 'center',
   },
   camera: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  cameraOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'black',
-    opacity: 0.5,
+    flex: 1
   },
   beforePhotoOverlay: {
     position: 'absolute',
@@ -3009,7 +3035,7 @@ const styles = StyleSheet.create({
   },
   letterboxCamera: {
     width: '100%',
-    aspectRatio: Platform.OS === 'android' ? 16 / 9 : 4 / 3, // Landscape 16:9 for Android
+    aspectRatio: 4 / 3, // Landscape 4:3 for both platforms
     position: 'relative',
     overflow: 'hidden'
   },
@@ -3027,11 +3053,6 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 9/16,
     overflow: 'hidden',
-    alignSelf: 'center',
-  },
-  shutterButtonContainer: {
-    position: 'absolute',
-    bottom: 40,
     alignSelf: 'center',
   },
 });
