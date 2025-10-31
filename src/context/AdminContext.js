@@ -286,6 +286,7 @@ export function AdminProvider({ children }) {
     planLimit,
     isLoading,
     userMode,
+    isGoogleSignInAvailable: googleAuthService.isAvailable(),
 
     // Actions
     adminSignIn,

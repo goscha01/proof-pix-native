@@ -59,6 +59,7 @@ export default function SettingsScreen({ navigation }) {
     removeInviteToken,
     adminSignIn,
     individualSignIn,
+    isGoogleSignInAvailable,
   } = useAdmin();
 
   const [name, setName] = useState(userName);
@@ -233,19 +234,43 @@ export default function SettingsScreen({ navigation }) {
               <Text style={styles.sectionDescription}>
                 Sign in to sync your photos to the cloud and enable team features.
               </Text>
+              {!isGoogleSignInAvailable && (
+                <View style={styles.expoGoWarning}>
+                  <Text style={styles.expoGoWarningText}>
+                    ⚠️ Google Sign-in requires a development build and is not available in Expo Go.
+                  </Text>
+                  <Text style={styles.expoGoWarningSubtext}>
+                    Run: npx expo install expo-dev-client && eas build --profile development
+                  </Text>
+                </View>
+              )}
               <TouchableOpacity
-                style={styles.signInButton}
+                style={[
+                  styles.signInButton,
+                  !isGoogleSignInAvailable && styles.buttonDisabled
+                ]}
                 onPress={handleIndividualSignIn}
+                disabled={!isGoogleSignInAvailable}
               >
-                <Text style={styles.signInButtonText}>
+                <Text style={[
+                  styles.signInButtonText,
+                  !isGoogleSignInAvailable && styles.buttonTextDisabled
+                ]}>
                   Use for Individual Work
                 </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.googleSignInButton}
+                style={[
+                  styles.googleSignInButton,
+                  !isGoogleSignInAvailable && styles.buttonDisabled
+                ]}
                 onPress={handleGoogleSignIn}
+                disabled={!isGoogleSignInAvailable}
               >
-                <Text style={styles.googleSignInButtonText}>
+                <Text style={[
+                  styles.googleSignInButtonText,
+                  !isGoogleSignInAvailable && styles.buttonTextDisabled
+                ]}>
                   Set Up a Team (Admin)
                 </Text>
               </TouchableOpacity>
@@ -694,6 +719,32 @@ export default function SettingsScreen({ navigation }) {
         color: 'white',
         fontSize: 16,
         fontWeight: '600'
+      },
+      buttonDisabled: {
+        backgroundColor: '#cccccc',
+        opacity: 0.6
+      },
+      buttonTextDisabled: {
+        color: '#666666'
+      },
+      expoGoWarning: {
+        backgroundColor: '#fff3cd',
+        borderWidth: 1,
+        borderColor: '#ffc107',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 16
+      },
+      expoGoWarningText: {
+        color: '#856404',
+        fontSize: 14,
+        fontWeight: '600',
+        marginBottom: 8
+      },
+      expoGoWarningSubtext: {
+        color: '#856404',
+        fontSize: 12,
+        fontFamily: 'monospace'
       },
       adminNote: {
         color: COLORS.GRAY,
