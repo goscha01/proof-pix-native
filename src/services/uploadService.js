@@ -73,11 +73,10 @@ function normalizeFileUri(input) {
  * @param {Object} params - Upload parameters
  * @param {string} params.imageDataUrl - Base64 data URL of the image
  * @param {string} params.filename - Filename for the uploaded image
- * @param {string} params.albumName - Album name (e.g., "John - Tampa - Dec 21, 2024")
+ * @param {string} params.albumName - Album name (e.g., "John - Dec 21, 2024")
  * @param {string} params.room - Room name (e.g., "kitchen", "bathroom")
  * @param {string} params.type - Photo type ("before", "after", or "mix")
  * @param {string} params.format - Format type (e.g., "default", "portrait", "square")
- * @param {string} params.location - Location/city
  * @param {string} params.cleanerName - Cleaner's name
  * @param {string} params.scriptUrl - Google Apps Script URL
  * @param {string} params.folderId - Google Drive folder ID
@@ -91,7 +90,6 @@ export async function uploadPhoto({
   room,
   type,
   format = 'default',
-  location,
   cleanerName,
   scriptUrl,
   folderId,
@@ -133,7 +131,6 @@ export async function uploadPhoto({
       formData.append('flat', 'true');
     }
     formData.append('timestamp', Date.now().toString());
-    formData.append('location', location);
     formData.append('cleanerName', cleanerName);
     formData.append('image', base64String);
     // Upload to Google Drive (ensure flat flag reaches GAS via URL as well)
@@ -232,7 +229,6 @@ export async function uploadPhotoAsTeamMember({
  * @param {string} config.scriptUrl - Google Apps Script URL
  * @param {string} config.folderId - Google Drive folder ID
  * @param {string} config.albumName - Album name
- * @param {string} config.location - Location/city
  * @param {string} config.cleanerName - Cleaner's name
  * @param {number} config.batchSize - Number of concurrent uploads (default: all photos in parallel)
  * @param {Function} config.onProgress - Progress callback (current, total)
@@ -244,7 +240,6 @@ export async function uploadPhotoBatch(photos, config) {
     scriptUrl,
     folderId,
     albumName,
-    location,
     cleanerName,
     batchSize = photos.length, // Upload all photos in parallel by default
     onProgress,
@@ -310,7 +305,6 @@ export async function uploadPhotoBatch(photos, config) {
         room: photo.room || 'general',
         type: typeParam,
         format: format,
-        location,
         cleanerName,
         scriptUrl,
         folderId,
@@ -379,19 +373,16 @@ export async function uploadPhotoBatch(photos, config) {
 /**
  * Create an album name from user info and date
  * @param {string} userName - User/cleaner name
- * @param {string} location - Location/city
  * @param {Date} date - Date object (defaults to now)
- * @returns {string} - Album name (e.g., "John - Tampa - Dec 21, 2024")
+ * @returns {string} - Album name (e.g., "John - Dec 21, 2024")
  */
-export function createAlbumName(userName, location, date = new Date()) {
+export function createAlbumName(userName, date = new Date()) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const month = months[date.getMonth()];
   const day = date.getDate();
   const year = date.getFullYear();
 
-  const formattedLocation = location.charAt(0).toUpperCase() + location.slice(1).replace(/-/g, ' ');
-
-  return `${userName} - ${formattedLocation} - ${month} ${day}, ${year}`;
+  return `${userName} - ${month} ${day}, ${year}`;
 }
 
 /**

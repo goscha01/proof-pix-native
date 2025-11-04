@@ -47,7 +47,7 @@ export default function HomeScreen({ navigation }) {
   const [selectedProjects, setSelectedProjects] = useState(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const { projects, getPhotosByProject, deleteProject, setActiveProject, activeProjectId, createProject, photos } = usePhotos();
-  const { userName, location } = useSettings();
+  const { userName } = useSettings();
   const { uploadStatus, cancelUpload, cancelAllUploads } = useBackgroundUpload();
   const [newProjectVisible, setNewProjectVisible] = useState(false);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
@@ -686,7 +686,7 @@ export default function HomeScreen({ navigation }) {
   }, [openProjectVisible]);
 
   const openNewProjectModal = (navigateToCamera = false) => {
-    const base = createAlbumName(userName, location) || `Project`;
+    const base = createAlbumName(userName) || `Project`;
     const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[^a-z0-9_\- ]/gi, '_');
     const existing = projects.map(p => p.name);
     const existingNorm = new Set(existing.map(normalize));

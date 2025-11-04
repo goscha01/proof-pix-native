@@ -87,7 +87,6 @@ class BackgroundUploadService {
         scriptUrl: upload.config.scriptUrl,
         folderId: upload.config.folderId,
         albumName: upload.albumName,
-        location: upload.location,
         cleanerName: upload.userName,
         batchSize: upload.items.length, // Upload all photos in parallel
         flat: upload.flat,

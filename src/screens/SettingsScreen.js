@@ -15,7 +15,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
 import { useAdmin } from '../context/AdminContext';
 import { COLORS } from '../constants/rooms';
-import { LOCATIONS, getLocationConfig } from '../config/locations';
 import RoomEditor from '../components/RoomEditor';
 import googleDriveService from '../services/googleDriveService';
 import googleScriptService from '../services/googleScriptService';
@@ -28,7 +27,6 @@ export default function SettingsScreen({ navigation }) {
     showLabels,
     toggleLabels,
     userName,
-    location,
     updateUserInfo,
     isBusiness,
     toggleBusiness,
@@ -63,8 +61,6 @@ export default function SettingsScreen({ navigation }) {
   } = useAdmin();
 
   const [name, setName] = useState(userName);
-  const [selectedLocation, setSelectedLocation] = useState(location);
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
@@ -124,19 +120,13 @@ export default function SettingsScreen({ navigation }) {
 
 
   const handleSaveUserInfo = async () => {
-    await updateUserInfo(name, selectedLocation);
-  };
-
-  const handleLocationSelect = (locationId) => {
-    setSelectedLocation(locationId);
-    setShowLocationPicker(false);
-    updateUserInfo(name, locationId);
+    await updateUserInfo(name);
   };
 
   const handleResetUserData = () => {
     Alert.alert(
       'Reset User Data',
-      'This will clear your name and location settings. You will be taken to the setup screen to configure them again. Continue?',
+      'This will clear your name settings. You will be taken to the setup screen to configure them again. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -198,9 +188,6 @@ export default function SettingsScreen({ navigation }) {
       ]
     );
   };
-
-  const selectedLocationObj = LOCATIONS.find(loc => loc.id === selectedLocation) || LOCATIONS[0];
-  const config = getLocationConfig(selectedLocation);
 
   const handleSignOut = async () => {
     await signOut();
@@ -428,36 +415,6 @@ export default function SettingsScreen({ navigation }) {
               )}
             </View>
 
-            {/* Google Drive Configuration (Read-only) */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Google Drive Configuration</Text>
-              <Text style={styles.sectionDescription}>
-                Automatically configured based on selected location
-              </Text>
-
-              <View style={styles.configRow}>
-                <Text style={styles.configLabel}>Script URL:</Text>
-                <Text style={styles.configValue} numberOfLines={1}>
-                  {config.scriptUrl ? '✓ Configured' : '✗ Not configured'}
-                </Text>
-              </View>
-
-              <View style={styles.configRow}>
-                <Text style={styles.configLabel}>Folder ID:</Text>
-                <Text style={styles.configValue} numberOfLines={1}>
-                  {config.folderId ? '✓ Configured' : '✗ Not configured'}
-                </Text>
-              </View>
-
-              {(!config.scriptUrl || !config.folderId) && (
-                <View style={styles.warningBox}>
-                  <Text style={styles.warningText}>
-                    ⚠️ Configuration missing for {selectedLocationObj.name}. Please check environment variables.
-                  </Text>
-                </View>
-              )}
-            </View>
-
             {/* User Information */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>User Information</Text>
@@ -472,44 +429,6 @@ export default function SettingsScreen({ navigation }) {
                   placeholderTextColor={COLORS.GRAY}
                   onBlur={handleSaveUserInfo}
                 />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Location</Text>
-                <TouchableOpacity
-                  style={styles.locationPicker}
-                  onPress={() => setShowLocationPicker(!showLocationPicker)}
-                >
-                  <Text style={styles.locationPickerText}>
-                    {selectedLocationObj.name}
-                  </Text>
-                  <Text style={styles.locationPickerArrow}>▼</Text>
-                </TouchableOpacity>
-
-                {showLocationPicker && (
-                  <View style={styles.locationDropdown}>
-                    {LOCATIONS.map((loc) => (
-                      <TouchableOpacity
-                        key={loc.id}
-                        style={[
-                          styles.locationOption,
-                          selectedLocation === loc.id && styles.locationOptionSelected
-                        ]}
-                        onPress={() => handleLocationSelect(loc.id)}
-                      >
-                        <Text style={[
-                          styles.locationOptionText,
-                          selectedLocation === loc.id && styles.locationOptionTextSelected
-                        ]}>
-                          {loc.name}
-                        </Text>
-                        {selectedLocation === loc.id && (
-                          <Text style={styles.locationOptionCheck}>✓</Text>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
               </View>
 
               <TouchableOpacity
@@ -598,72 +517,9 @@ export default function SettingsScreen({ navigation }) {
         borderRadius: 8,
         color: COLORS.TEXT
       },
-      locationPicker: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderWidth: 1,
-        borderColor: COLORS.BORDER,
-        padding: 12,
-        borderRadius: 8
-      },
-      locationPickerText: {
-        color: COLORS.TEXT,
-        fontWeight: '600'
-      },
-      locationPickerArrow: {
-        color: COLORS.GRAY
-      },
-      locationDropdown: {
-        marginTop: 8,
-        borderWidth: 1,
-        borderColor: COLORS.BORDER,
-        borderRadius: 8,
-        overflow: 'hidden'
-      },
-      locationOption: {
-        padding: 12,
-        backgroundColor: 'white'
-      },
-      locationOptionSelected: {
-        backgroundColor: '#f7f7f7'
-      },
-      locationOptionText: {
-        color: COLORS.TEXT
-      },
-      locationOptionTextSelected: {
-        fontWeight: '700'
-      },
-      locationOptionCheck: {
-        position: 'absolute',
-        right: 12,
-        top: 12,
-        color: COLORS.PRIMARY
-      },
       sectionDescription: {
         color: COLORS.GRAY,
         marginBottom: 12
-      },
-      configRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingVertical: 8
-      },
-      configLabel: {
-        color: COLORS.GRAY
-      },
-      configValue: {
-        color: COLORS.TEXT,
-        maxWidth: '70%'
-      },
-      warningBox: {
-        marginTop: 12,
-        padding: 12,
-        borderRadius: 8,
-        backgroundColor: '#FFF8E1'
-      },
-      warningText: {
-        color: '#8A6D3B'
       },
       settingRow: {
         flexDirection: 'row',

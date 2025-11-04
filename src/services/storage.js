@@ -655,7 +655,7 @@ export const saveActiveProjectId = async (projectId) => {
 };
 
 /**
- * Gets stored user data (cleaner name, location)
+ * Gets stored user data (cleaner name)
  */
 export const getStoredUserData = async () => {
   try {
@@ -672,11 +672,10 @@ export const getStoredUserData = async () => {
 /**
  * Saves user data
  */
-export const saveUserData = async (cleaner, location) => {
+export const saveUserData = async (cleaner) => {
   try {
     const userData = {
       cleaner,
-      location,
       savedAt: Date.now()
     };
     await AsyncStorage.setItem(USER_PREFS_KEY, JSON.stringify(userData));

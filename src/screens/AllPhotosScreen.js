@@ -20,11 +20,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
+import { useAdmin } from '../context/AdminContext';
 import { COLORS, PHOTO_MODES, ROOMS, TEMPLATE_CONFIGS, TEMPLATE_TYPES } from '../constants/rooms';
 import { CroppedThumbnail } from '../components/CroppedThumbnail';
 import PhotoLabel from '../components/PhotoLabel';
 import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
-import { getLocationConfig } from '../config/locations';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
@@ -43,7 +43,8 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
-  const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels } = useSettings();
+  const { userName, isBusiness, useFolderStructure, enabledFolders, showLabels } = useSettings();
+  const { scriptUrl, folderId } = useAdmin();
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
@@ -317,26 +318,24 @@ export default function AllPhotosScreen({ navigation, route }) {
   };
 
   const handleUploadPhotos = async () => {
-    // Get location-based configuration
-    const config = getLocationConfig(location);
-
     // Check if Google Drive is configured
-    if (!config.scriptUrl || !config.folderId) {
+    if (!scriptUrl || !folderId) {
       Alert.alert(
         'Setup Required',
-        'Google Drive configuration is missing for the selected location. Please check your environment variables or contact support.',
+        'Google Drive is not configured. Please sign in to Google in Settings to enable uploads.',
         [
-          { text: 'OK', style: 'cancel' }
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
         ]
       );
       return;
     }
 
     // Check if user info is configured
-    if (!userName || !location) {
+    if (!userName) {
       Alert.alert(
         'Setup Required',
-        'Please configure your name and location in Settings before uploading.',
+        'Please configure your name in Settings before uploading.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
@@ -357,9 +356,9 @@ export default function AllPhotosScreen({ navigation, route }) {
 
   const startUploadWithOptions = async () => {
     try {
-      const config = getLocationConfig(location);
-      // Always generate album name based on current location, not project's original location
-      const albumName = createAlbumName(userName, location);
+      const config = { scriptUrl, folderId };
+      // Generate album name
+      const albumName = createAlbumName(userName);
       // Scope uploads to the active project if one is selected
       const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
 
@@ -623,7 +622,7 @@ export default function AllPhotosScreen({ navigation, route }) {
 
   const proceedWithUpload = async (items, albumName) => {
     try {
-      const config = getLocationConfig(location);
+      const config = { scriptUrl, folderId };
 
       // Close upload options and any upgrade overlay before starting background upload
       setOptionsVisible(false);
@@ -634,7 +633,6 @@ export default function AllPhotosScreen({ navigation, route }) {
         items,
         config,
         albumName,
-        location,
         userName,
         flat: !useFolderStructure
       });

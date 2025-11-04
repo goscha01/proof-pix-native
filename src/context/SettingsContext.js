@@ -24,7 +24,6 @@ export const SettingsProvider = ({ children }) => {
   
   const [showLabels, setShowLabels] = useState(true);
   const [userName, setUserName] = useState('');
-  const [location, setLocation] = useState('tampa'); // Default to Tampa
   const [isBusiness, setIsBusiness] = useState(false);
   const [useFolderStructure, setUseFolderStructure] = useState(true);
   const [enabledFolders, setEnabledFolders] = useState({ before: true, after: true, combined: true });
@@ -44,7 +43,6 @@ export const SettingsProvider = ({ children }) => {
         const settings = JSON.parse(stored);
         setShowLabels(settings.showLabels ?? true);
         setUserName(settings.userName ?? '');
-        setLocation(settings.location ?? 'tampa');
         setIsBusiness(settings.isBusiness ?? false);
         setUseFolderStructure(settings.useFolderStructure ?? true);
         setEnabledFolders(settings.enabledFolders ?? { before: true, after: true, combined: true });
@@ -67,7 +65,6 @@ export const SettingsProvider = ({ children }) => {
       const settings = {
         showLabels,
         userName,
-        location,
         isBusiness,
         useFolderStructure,
         enabledFolders,
@@ -85,10 +82,9 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ showLabels: newValue });
   };
 
-  const updateUserInfo = async (name, loc) => {
+  const updateUserInfo = async (name) => {
     setUserName(name);
-    setLocation(loc);
-    await saveSettings({ userName: name, location: loc });
+    await saveSettings({ userName: name });
   };
 
   const toggleBusiness = async () => {
@@ -144,7 +140,6 @@ export const SettingsProvider = ({ children }) => {
       await AsyncStorage.removeItem(SETTINGS_KEY);
       await AsyncStorage.removeItem(CUSTOM_ROOMS_KEY);
       setUserName('');
-      setLocation('tampa');
       setShowLabels(true);
       setIsBusiness(false);
       setUseFolderStructure(true);
@@ -159,7 +154,6 @@ export const SettingsProvider = ({ children }) => {
     showLabels,
     toggleLabels,
     userName,
-    location,
     updateUserInfo,
     isBusiness,
     toggleBusiness,
