@@ -21,7 +21,7 @@ import googleDriveService from '../services/googleDriveService';
 import googleScriptService from '../services/googleScriptService';
 import InviteManager from '../components/InviteManager';
 import { generateInviteToken } from '../utils/tokens';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 
 export default function SettingsScreen({ navigation }) {
   const {
@@ -40,7 +40,8 @@ export default function SettingsScreen({ navigation }) {
     customRooms,
     saveCustomRooms,
     getRooms,
-    resetCustomRooms
+    resetCustomRooms,
+    userPlan
   } = useSettings();
 
   const {
@@ -68,59 +69,60 @@ export default function SettingsScreen({ navigation }) {
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
 
-  const runAdminSetup = useCallback(async () => {
-    if (isAuthenticated && userMode === 'admin' && !isSetupComplete() && !isSigningIn) {
-      try {
-        console.log('Running automatic admin setup...');
-        setIsSigningIn(true); // Show a loading indicator
-
-        // Step 1: Find or create the Google Drive folder
-        const folderId = await googleDriveService.findOrCreateProofPixFolder();
-        await saveFolderId(folderId);
-        console.log('Admin folder ID saved:', folderId);
-
-        // Step 2: Create and deploy the Google Apps Script
-        const { scriptId, scriptUrl } = await googleScriptService.createAndDeployScript(folderId);
-        await saveScriptInfo(scriptUrl, scriptId);
-        console.log('Admin script deployed:', { scriptId, scriptUrl });
-
-        Alert.alert('Setup Complete', 'Your admin account is now fully configured.');
-
-      } catch (error) {
-         // The error is already handled by the signIn function's alert
-         console.error('Auto-setup failed:', error.message);
-         if (error.message && error.message.includes("User has not enabled the Apps Script API")) {
-          const settingsUrl = 'https://script.google.com/home/usersettings';
-          const userEmail = adminUserInfo?.email;
-          // Construct a URL that forces the Google Account Chooser
-          const finalUrl = userEmail
-            ? `https://accounts.google.com/AccountChooser?Email=${userEmail}&continue=${encodeURIComponent(settingsUrl)}`
-            : settingsUrl;
-
-          Alert.alert(
-            'Setup Required for ' + userEmail,
-            'Google requires you to manually enable the Apps Script API for this account. Tap "Open Settings" and confirm you are enabling it for the correct user.',
-            [
-              { text: 'Cancel', style: 'cancel' },
-              {
-                text: 'Open Settings',
-                onPress: () => Linking.openURL(finalUrl),
-                style: 'default',
-              },
-            ]
-          );
-        }
-      } finally {
-        setIsSigningIn(false);
-      }
+  const handleSetupTeam = async () => {
+    if (!isAuthenticated || userMode !== 'admin' || isSetupComplete() || isSigningIn) {
+      return;
     }
-  }, [isAuthenticated, userMode, isSetupComplete, saveFolderId, saveScriptInfo, adminUserInfo, isSigningIn]);
 
-  useFocusEffect(
-    useCallback(() => {
-      runAdminSetup();
-    }, [runAdminSetup])
-  );
+    try {
+      console.log('Running manual admin setup...');
+      setIsSigningIn(true); // Show a loading indicator
+
+      // Step 1: Find or create the Google Drive folder
+      const folderId = await googleDriveService.findOrCreateProofPixFolder();
+      await saveFolderId(folderId);
+      console.log('Admin folder ID saved:', folderId);
+
+      // Step 2: Create and deploy the Google Apps Script
+      const { scriptId, scriptUrl } = await googleScriptService.createAndDeployScript(folderId);
+      await saveScriptInfo(scriptUrl, scriptId);
+      console.log('Admin script deployed:', { scriptId, scriptUrl });
+
+      Alert.alert('Setup Complete', 'Your admin account is now fully configured.');
+
+    } catch (error) {
+      console.error('Setup failed:', error.message);
+      if (error.message && error.message.includes("User has not enabled the Apps Script API")) {
+        const settingsUrl = 'https://script.google.com/home/usersettings';
+        const userEmail = adminUserInfo?.email;
+        // Construct a URL that forces the Google Account Chooser
+        const finalUrl = userEmail
+          ? `https://accounts.google.com/AccountChooser?Email=${userEmail}&continue=${encodeURIComponent(settingsUrl)}`
+          : settingsUrl;
+
+        Alert.alert(
+          'Setup Required for ' + userEmail,
+          'Google requires you to manually enable the Apps Script API for this account. Tap "Open Settings" and confirm you are enabling it for the correct user.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Open Settings',
+              onPress: () => Linking.openURL(finalUrl),
+              style: 'default',
+            },
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Setup Failed',
+          error.message || 'Failed to set up team. Please try again.',
+          [{ text: 'OK', style: 'cancel' }]
+        );
+      }
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
 
 
   const handleSaveUserInfo = async () => {
@@ -163,7 +165,6 @@ export default function SettingsScreen({ navigation }) {
     } finally {
       setIsSigningIn(false);
     }
-    // The useFocusEffect will handle running the setup automatically.
   };
 
   const handleGoogleSignIn = async () => {
@@ -296,9 +297,31 @@ export default function SettingsScreen({ navigation }) {
               </View>
 
               {userMode === 'admin' && !isSetupComplete() && (
-                 <Text style={styles.setupIncompleteText}>
-                    Admin setup in progress... This may take a moment.
-                 </Text>
+                <>
+                  {(userPlan === 'business' || userPlan === 'enterprise') && (
+                    <TouchableOpacity
+                      style={[
+                        styles.setupTeamButton,
+                        isSigningIn && styles.buttonDisabled
+                      ]}
+                      onPress={handleSetupTeam}
+                      disabled={isSigningIn}
+                    >
+                      {isSigningIn ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.setupTeamButtonText}>
+                          Set Up Team
+                        </Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  {userPlan !== 'business' && userPlan !== 'enterprise' && (
+                    <Text style={styles.setupIncompleteText}>
+                      Team setup requires Business or Enterprise plan.
+                    </Text>
+                  )}
+                </>
               )}
 
               {userMode === 'admin' && isSetupComplete() && (
@@ -874,5 +897,19 @@ export default function SettingsScreen({ navigation }) {
         fontSize: 12,
         textAlign: 'center',
         marginTop: 8,
+      },
+      setupTeamButton: {
+        backgroundColor: COLORS.PRIMARY,
+        borderRadius: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        marginTop: 16,
+        marginBottom: 8
+      },
+      setupTeamButtonText: {
+        color: COLORS.TEXT,
+        fontSize: 16,
+        fontWeight: '600'
       },
     });

@@ -46,7 +46,7 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
-  const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels } = useSettings();
+  const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels, userPlan } = useSettings();
   const { userMode, teamInfo, isAuthenticated, folderId, scriptUrl } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
@@ -331,8 +331,11 @@ export default function AllPhotosScreen({ navigation, route }) {
       return;
     }
 
-    // For Pro users (individual mode) - use authenticated Google Drive
-    if (userMode === 'individual') {
+    // For Pro/Business/Enterprise users (individual mode or authenticated without team) - use authenticated Google Drive
+    const shouldUseDirectDrive = userMode === 'individual' || 
+      (isAuthenticated && (userPlan === 'pro' || userPlan === 'business' || userPlan === 'enterprise') && !teamInfo);
+    
+    if (shouldUseDirectDrive) {
       if (!isAuthenticated) {
         Alert.alert(
           'Sign In Required',
@@ -395,7 +398,7 @@ export default function AllPhotosScreen({ navigation, route }) {
     if (!config || !config.scriptUrl || !config.folderId) {
       Alert.alert(
         'Setup Required',
-        'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in as a Pro user.',
+        'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in with your Google account.',
         [
           { text: 'OK', style: 'cancel' }
         ]
@@ -456,15 +459,20 @@ export default function AllPhotosScreen({ navigation, route }) {
       let config = null;
       let uploadConfig = null; // Store config for use in proceedWithUpload
       
-      // For individual/Pro users - use their authenticated Google Drive
-      if (userMode === 'individual') {
+      // Check if user should use direct Drive API upload
+      // Pro, Business, and Enterprise users with individual mode or authenticated admin mode (without team) use direct Drive API
+      const shouldUseDirectDrive = userMode === 'individual' || 
+        (isAuthenticated && (userPlan === 'pro' || userPlan === 'business' || userPlan === 'enterprise') && !teamInfo);
+      
+      // For individual/Pro/Business/Enterprise users - use their authenticated Google Drive
+      if (shouldUseDirectDrive) {
         try {
           const userFolderId = await googleDriveService.findOrCreateProofPixFolder();
           if (!userFolderId) {
             Alert.alert('Error', 'Could not access Google Drive folder. Please sign in again.');
             return;
           }
-          // Use direct Drive API upload for Pro users
+          // Use direct Drive API upload for Pro, Business, and Enterprise users
           // We'll set a flag to use Drive API instead of Apps Script
           config = { 
             folderId: userFolderId, 
@@ -477,8 +485,8 @@ export default function AllPhotosScreen({ navigation, route }) {
           return;
         }
       } else {
-        // For admin mode - use configured folder/script or location-based (legacy)
-        // Only set config if NOT individual mode (to avoid overwriting Pro user config)
+        // For admin mode (team management) - use configured folder/script or location-based (legacy)
+        // Only set config if NOT individual mode (to avoid overwriting Pro/Business/Enterprise user config)
         if (userMode === 'admin' && folderId && scriptUrl) {
           config = { folderId, scriptUrl };
         } else {
@@ -489,12 +497,12 @@ export default function AllPhotosScreen({ navigation, route }) {
       }
 
       // Check if Google Drive is configured
-      // For Pro users (useDirectDrive), we only need folderId
-      // For admin/legacy, we need both scriptUrl and folderId
+      // For Pro/Business/Enterprise users (useDirectDrive), we only need folderId
+      // For admin team mode/legacy, we need both scriptUrl and folderId
       if (!config || !config.folderId || (!config.useDirectDrive && !config.scriptUrl)) {
         Alert.alert(
           'Setup Required',
-          'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in as a Pro user.',
+          'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in with your Google account.',
           [{ text: 'OK', style: 'cancel' }]
         );
         return;

@@ -102,7 +102,7 @@ export async function uploadPhoto({
   useDirectDrive = false // Flag to use direct Drive API instead of Apps Script
 }) {
   try {
-    // For direct Drive API uploads (Pro users), we don't need scriptUrl
+    // For direct Drive API uploads (Pro/Business/Enterprise users), we don't need scriptUrl
     if (useDirectDrive) {
       if (!folderId) {
         throw new Error('Missing Google Drive folder ID for direct upload.');
@@ -194,7 +194,7 @@ export async function uploadPhoto({
 }
 
 /**
- * Upload a photo directly to Google Drive using Drive API (for Pro users)
+ * Upload a photo directly to Google Drive using Drive API (for Pro/Business/Enterprise users)
  * @param {Object} params - Upload parameters
  * @param {string} params.imageDataUrl - Base64 data URL of the image
  * @param {string} params.filename - Filename for the uploaded image
