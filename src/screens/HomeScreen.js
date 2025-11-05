@@ -686,7 +686,7 @@ export default function HomeScreen({ navigation }) {
   }, [openProjectVisible]);
 
   const openNewProjectModal = (navigateToCamera = false) => {
-    const base = createAlbumName(userName, location) || `Project`;
+    const base = createAlbumName(userName) || `Project`;
     const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[^a-z0-9_\- ]/gi, '_');
     const existing = projects.map(p => p.name);
     const existingNorm = new Set(existing.map(normalize));

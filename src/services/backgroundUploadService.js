@@ -88,13 +88,14 @@ class BackgroundUploadService {
 
       // Prepare upload options
       const uploadOptions = {
-        scriptUrl: upload.config.scriptUrl,
-        folderId: upload.config.folderId,
+        scriptUrl: upload.config?.scriptUrl,
+        folderId: upload.config?.folderId,
         albumName: upload.albumName,
         location: upload.location,
         cleanerName: upload.userName,
         batchSize: upload.items.length, // Upload all photos in parallel
         flat: upload.flat,
+        useDirectDrive: upload.config?.useDirectDrive || upload.useDirectDrive || false, // Pass flag for direct Drive API
         onProgress: (current, total) => {
           upload.progress = { current, total };
           this.notifyListeners();

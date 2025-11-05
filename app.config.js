@@ -107,14 +107,6 @@ export default {
         projectId: "c65badb3-ddbc-4bb8-9de5-fab32a427f16"
       },
       // Environment variables accessible in your app
-      locationAScriptUrl: process.env.EXPO_PUBLIC_LOCATION_A_SCRIPT_URL,
-      locationAFolderId: process.env.EXPO_PUBLIC_LOCATION_A_FOLDER_ID,
-      locationBScriptUrl: process.env.EXPO_PUBLIC_LOCATION_B_SCRIPT_URL,
-      locationBFolderId: process.env.EXPO_PUBLIC_LOCATION_B_FOLDER_ID,
-      locationCScriptUrl: process.env.EXPO_PUBLIC_LOCATION_C_SCRIPT_URL,
-      locationCFolderId: process.env.EXPO_PUBLIC_LOCATION_C_FOLDER_ID,
-      locationDScriptUrl: process.env.EXPO_PUBLIC_LOCATION_D_SCRIPT_URL,
-      locationDFolderId: process.env.EXPO_PUBLIC_LOCATION_D_FOLDER_ID,
       googleServiceAccountPath: process.env.GOOGLE_SERVICE_ACCOUNT_PATH,
     }
   }

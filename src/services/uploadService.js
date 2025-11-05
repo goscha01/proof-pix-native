@@ -1,9 +1,10 @@
 /**
  * Upload Service
- * Handles uploading photos to Google Drive via Google Apps Script
+ * Handles uploading photos to Google Drive via Google Apps Script or direct Drive API
  */
 
 import * as FileSystem from 'expo-file-system/legacy';
+import googleDriveService from './googleDriveService';
 
 /**
  * Convert file URI to base64 data URL
@@ -73,7 +74,7 @@ function normalizeFileUri(input) {
  * @param {Object} params - Upload parameters
  * @param {string} params.imageDataUrl - Base64 data URL of the image
  * @param {string} params.filename - Filename for the uploaded image
- * @param {string} params.albumName - Album name (e.g., "John - Tampa - Dec 21, 2024")
+ * @param {string} params.albumName - Album name (e.g., "John - Dec 21, 2024")
  * @param {string} params.room - Room name (e.g., "kitchen", "bathroom")
  * @param {string} params.type - Photo type ("before", "after", or "mix")
  * @param {string} params.format - Format type (e.g., "default", "portrait", "square")
@@ -97,9 +98,31 @@ export async function uploadPhoto({
   folderId,
   onProgress,
   abortSignal,
-  flat = false
+  flat = false,
+  useDirectDrive = false // Flag to use direct Drive API instead of Apps Script
 }) {
   try {
+    // For direct Drive API uploads (Pro users), we don't need scriptUrl
+    if (useDirectDrive) {
+      if (!folderId) {
+        throw new Error('Missing Google Drive folder ID for direct upload.');
+      }
+      // Use direct Drive API upload
+      return await uploadPhotoToDriveDirect({
+        imageDataUrl,
+        filename,
+        albumName,
+        room,
+        type,
+        format,
+        location,
+        cleanerName,
+        folderId,
+        flat
+      });
+    }
+    
+    // For Apps Script uploads, we need both scriptUrl and folderId
     if (!scriptUrl || !folderId) {
       throw new Error('Missing Google Drive configuration. Please set Script URL and Folder ID in Settings.');
     }
@@ -167,6 +190,87 @@ export async function uploadPhoto({
     } else {
     }
     throw error;
+  }
+}
+
+/**
+ * Upload a photo directly to Google Drive using Drive API (for Pro users)
+ * @param {Object} params - Upload parameters
+ * @param {string} params.imageDataUrl - Base64 data URL of the image
+ * @param {string} params.filename - Filename for the uploaded image
+ * @param {string} params.albumName - Album folder name
+ * @param {string} params.room - Room name
+ * @param {string} params.type - Photo type ("before", "after", or "combined")
+ * @param {string} params.format - Format type (e.g., "default", "portrait", "square")
+ * @param {string} params.location - Location/city
+ * @param {string} params.cleanerName - Cleaner's name
+ * @param {string} params.folderId - Root folder ID (ProofPix-Uploads)
+ * @param {boolean} params.flat - If true, upload directly to album folder (no subfolders)
+ * @returns {Promise<Object>} - Upload result
+ */
+async function uploadPhotoToDriveDirect({
+  imageDataUrl,
+  filename,
+  albumName,
+  room,
+  type,
+  format = 'default',
+  location,
+  cleanerName,
+  folderId,
+  flat = false
+}) {
+  try {
+    // Get base64 data
+    let base64String = imageDataUrl;
+    if (imageDataUrl.startsWith('data:')) {
+      base64String = imageDataUrl.split('base64,')[1];
+    } else {
+      // If it's a file URI, convert to base64
+      const normalized = normalizeFileUri(imageDataUrl);
+      const base64DataUrl = await fileUriToBase64(normalized);
+      base64String = base64DataUrl.includes('base64,') 
+        ? base64DataUrl.split('base64,')[1] 
+        : base64DataUrl;
+    }
+
+    // Find or create album folder
+    const albumFolderId = await googleDriveService.findOrCreateAlbumFolder(folderId, albumName);
+    
+    let targetFolderId = albumFolderId;
+    
+    // Handle folder structure if not flat
+    if (!flat) {
+      if (format !== 'default') {
+        // Create formats folder and format subfolder
+        const formatsFolderId = await googleDriveService.findOrCreateSubfolder(albumFolderId, 'formats');
+        targetFolderId = await googleDriveService.findOrCreateSubfolder(formatsFolderId, format);
+      } else {
+        // Create type folder (before/after/combined)
+        const folderName = type === 'mix' || type === 'combined' ? 'combined' : type;
+        targetFolderId = await googleDriveService.findOrCreateSubfolder(albumFolderId, folderName);
+      }
+    }
+    
+    // Upload file to Drive
+    const result = await googleDriveService.uploadFile(base64String, filename, targetFolderId);
+    
+    return {
+      success: true,
+      fileId: result.fileId,
+      fileName: result.fileName,
+      albumName,
+      room: room || 'general',
+      type,
+      format,
+      location,
+      cleanerName,
+      folderPath: `${albumName}/${flat ? '' : (format !== 'default' ? `formats/${format}/` : `${type === 'mix' || type === 'combined' ? 'combined' : type}/`)}`,
+      message: 'Photo uploaded successfully to Google Drive'
+    };
+  } catch (error) {
+    console.error('Direct Drive upload error:', error);
+    throw new Error(`Failed to upload to Google Drive: ${error.message}`);
   }
 }
 
@@ -251,7 +355,8 @@ export async function uploadPhotoBatch(photos, config) {
     onBatchComplete,
     getAbortController, // optional callback to retrieve/create AbortController per request
     abortSignal, // optional AbortSignal to stop scheduling further uploads
-    flat = false // upload into project root (no subfolders)
+    flat = false, // upload into project root (no subfolders)
+    useDirectDrive = false // Flag to use direct Drive API instead of Apps Script
   } = config;
 
   const successful = [];
@@ -316,6 +421,7 @@ export async function uploadPhotoBatch(photos, config) {
         folderId,
         abortSignal: controller ? controller.signal : (abortSignal || undefined),
         flat: isFlat,
+        useDirectDrive, // Pass the flag to use direct Drive API
         // Remove intermediate progress reporting for cleaner parallel upload tracking
       });
 
@@ -379,19 +485,16 @@ export async function uploadPhotoBatch(photos, config) {
 /**
  * Create an album name from user info and date
  * @param {string} userName - User/cleaner name
- * @param {string} location - Location/city
  * @param {Date} date - Date object (defaults to now)
- * @returns {string} - Album name (e.g., "John - Tampa - Dec 21, 2024")
+ * @returns {string} - Album name (e.g., "John - Dec 21, 2024")
  */
-export function createAlbumName(userName, location, date = new Date()) {
+export function createAlbumName(userName, date = new Date()) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const month = months[date.getMonth()];
   const day = date.getDate();
   const year = date.getFullYear();
 
-  const formattedLocation = location.charAt(0).toUpperCase() + location.slice(1).replace(/-/g, ' ');
-
-  return `${userName} - ${formattedLocation} - ${month} ${day}, ${year}`;
+  return `${userName} - ${month} ${day}, ${year}`;
 }
 
 /**

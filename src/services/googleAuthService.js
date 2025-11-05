@@ -42,11 +42,20 @@ class GoogleAuthService {
   }
   constructor() {
     if (this.isAvailable()) {
+      // Configure with default scopes - these will be requested on sign-in
+      // For iOS, scopes in configure() ensure the consent screen shows all permissions
+      const defaultScopes = [
+        'https://www.googleapis.com/auth/userinfo.email',
+        'https://www.googleapis.com/auth/userinfo.profile',
+        'https://www.googleapis.com/auth/drive', // Include Drive scope here for iOS
+      ];
+      
       GoogleSignin.configure({
         webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
         iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-        // Scopes are now passed dynamically to the signIn method
+        scopes: defaultScopes, // Set scopes in configure() for iOS to show in consent screen
         offlineAccess: true,
+        forceCodeForRefreshToken: true, // Force showing consent screen
       });
     }
   }
@@ -75,12 +84,28 @@ class GoogleAuthService {
    */
   async signInAsIndividual() {
     this.checkAvailability();
+    // Use full 'drive' scope instead of 'drive.file' to ensure we can search and create folders
+    // 'drive.file' only works for files created by the app, which might not work for folder operations
     const scopes = [
         'https://www.googleapis.com/auth/userinfo.email',
         'https://www.googleapis.com/auth/userinfo.profile',
-        'https://www.googleapis.com/auth/drive.file',
+        'https://www.googleapis.com/auth/drive', // Full Drive scope for folder operations
       ];
-    return this.signIn(scopes);
+    console.log('Requesting scopes for individual sign-in:', scopes);
+    const result = await this.signIn(scopes);
+    
+    // After sign-in, verify we have access token
+    if (result && result.userInfo) {
+      try {
+        const tokens = await GoogleSignin.getTokens();
+        console.log('Access token obtained after sign-in');
+        console.log('Token scopes should include Drive - verify in Google Cloud Console OAuth consent screen');
+      } catch (tokenError) {
+        console.error('Failed to get tokens after sign-in:', tokenError);
+      }
+    }
+    
+    return result;
   }
 
   /**
@@ -90,6 +115,34 @@ class GoogleAuthService {
   async signIn(scopes = []) {
     try {
       await GoogleSignin.hasPlayServices();
+      
+      // Always revoke access and sign out first to ensure fresh consent screen with all scopes
+      // This is critical for getting Drive permissions - Google won't show consent if scopes are already granted
+      try {
+        // Try to revoke access first - this clears all granted permissions
+        try {
+          await GoogleSignin.revokeAccess();
+          console.log('Access revoked to force fresh consent screen');
+        } catch (revokeError) {
+          console.log('Could not revoke access (user may not be signed in):', revokeError.message);
+        }
+        
+        // Then sign out
+        await GoogleSignin.signOut();
+        console.log('Signed out to force fresh consent screen with all scopes');
+        // Wait a moment to ensure sign out completes
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (signOutError) {
+        // Ignore if sign out fails - user might not be signed in
+        console.log('Sign out not needed or failed:', signOutError.message);
+      }
+      
+      // Sign in with all required scopes
+      // After revokeAccess and signOut, this should show the consent screen with all requested permissions including Drive
+      console.log('=== SIGNING IN WITH SCOPES ===');
+      console.log('Scopes requested:', JSON.stringify(scopes, null, 2));
+      console.log('Make sure these scopes are configured in Google Cloud Console OAuth consent screen!');
+      
       const response = await GoogleSignin.signIn({ scopes });
       console.log('Raw userInfo from Google Sign-In:', JSON.stringify(response, null, 2));
 
@@ -98,6 +151,39 @@ class GoogleAuthService {
 
       if (user) {
         await this.storeUserInfo(user);
+        
+        // Verify we got the tokens and check scopes
+        try {
+          const tokens = await GoogleSignin.getTokens();
+          console.log('=== TOKEN VERIFICATION ===');
+          console.log('Access token obtained:', tokens.accessToken ? 'YES' : 'NO');
+          console.log('Token length:', tokens.accessToken?.length || 0);
+          
+          // Try to decode token to check scopes (JWT format)
+          if (tokens.accessToken) {
+            try {
+              // JWT tokens have 3 parts separated by dots
+              const parts = tokens.accessToken.split('.');
+              if (parts.length === 3) {
+                // Decode the payload (second part)
+                const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')));
+                console.log('Token scopes from JWT:', payload.scope || 'Not found in token');
+                if (!payload.scope || !payload.scope.includes('drive')) {
+                  console.error('⚠️ WARNING: Drive scope NOT found in token!');
+                  console.error('Token scopes:', payload.scope);
+                  console.error('You need to add Drive scope to Google Cloud Console OAuth consent screen');
+                } else {
+                  console.log('✅ Drive scope found in token!');
+                }
+              }
+            } catch (decodeError) {
+              console.log('Could not decode token (may not be JWT format):', decodeError.message);
+            }
+          }
+        } catch (tokenError) {
+          console.warn('Could not get tokens after sign-in:', tokenError);
+        }
+        
         return { userInfo: user };
       }
       
@@ -228,10 +314,16 @@ class GoogleAuthService {
     this.checkAvailability();
     try {
       const { accessToken } = await GoogleSignin.getTokens();
+      
+      if (!accessToken) {
+        throw new Error('No access token available. Please sign in again.');
+      }
 
       const headers = new Headers(options.headers || {});
       headers.append('Authorization', `Bearer ${accessToken}`);
-      headers.append('Content-Type', 'application/json');
+      if (!headers.has('Content-Type')) {
+        headers.append('Content-Type', 'application/json');
+      }
 
       const response = await fetch(url, {
         ...options,
@@ -241,7 +333,10 @@ class GoogleAuthService {
       return response;
     } catch (error) {
       console.error('Error making authenticated request:', error);
-      throw new Error('Failed to make authenticated request.');
+      if (error.message.includes('access token')) {
+        throw error;
+      }
+      throw new Error('Failed to make authenticated request: ' + error.message);
     }
   }
 

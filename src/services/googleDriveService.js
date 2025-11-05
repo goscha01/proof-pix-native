@@ -37,7 +37,17 @@ class GoogleDriveService {
     const response = await googleAuthService.makeAuthenticatedRequest(url);
 
     if (!response.ok) {
-      throw new Error('Failed to search for folder in Google Drive.');
+      const errorText = await response.text();
+      const status = response.status;
+      console.error('Drive API search error:', { status, errorText });
+      
+      if (status === 403) {
+        throw new Error('Drive API access denied. Please ensure you granted Drive permissions during sign-in.');
+      } else if (status === 401) {
+        throw new Error('Authentication failed. Please sign in again.');
+      } else {
+        throw new Error(`Failed to search for folder in Google Drive (${status}): ${errorText}`);
+      }
     }
 
     const data = await response.json();
@@ -72,6 +82,171 @@ class GoogleDriveService {
 
     const data = await response.json();
     return data.id;
+  }
+
+  /**
+   * Find or create an album folder within the ProofPix-Uploads folder
+   * @param {string} parentFolderId - Parent folder ID (ProofPix-Uploads)
+   * @param {string} albumName - Album folder name
+   * @returns {Promise<string>} The ID of the album folder
+   */
+  async findOrCreateAlbumFolder(parentFolderId, albumName) {
+    try {
+      // Search for existing folder
+      const query = `mimeType='application/vnd.google-apps.folder' and name='${albumName}' and '${parentFolderId}' in parents and trashed=false`;
+      const url = `${DRIVE_API_URL}?q=${encodeURIComponent(query)}&fields=files(id)`;
+      
+      const searchResponse = await googleAuthService.makeAuthenticatedRequest(url);
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json();
+        if (searchData.files && searchData.files.length > 0) {
+          return searchData.files[0].id;
+        }
+      }
+
+      // Create new folder if not found
+      const metadata = {
+        name: albumName,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentFolderId],
+      };
+
+      const createResponse = await googleAuthService.makeAuthenticatedRequest(DRIVE_API_URL, {
+        method: 'POST',
+        body: JSON.stringify(metadata),
+      });
+
+      if (!createResponse.ok) {
+        throw new Error('Failed to create album folder in Google Drive.');
+      }
+
+      const createData = await createResponse.json();
+      return createData.id;
+    } catch (error) {
+      console.error('Error in findOrCreateAlbumFolder:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Find or create a subfolder (e.g., before/after/combined) within an album folder
+   * @param {string} albumFolderId - Album folder ID
+   * @param {string} subfolderName - Subfolder name (before, after, combined, or formats/format)
+   * @returns {Promise<string>} The ID of the subfolder
+   */
+  async findOrCreateSubfolder(albumFolderId, subfolderName) {
+    try {
+      // Search for existing folder
+      const query = `mimeType='application/vnd.google-apps.folder' and name='${subfolderName}' and '${albumFolderId}' in parents and trashed=false`;
+      const url = `${DRIVE_API_URL}?q=${encodeURIComponent(query)}&fields=files(id)`;
+      
+      const searchResponse = await googleAuthService.makeAuthenticatedRequest(url);
+      if (searchResponse.ok) {
+        const searchData = await searchResponse.json();
+        if (searchData.files && searchData.files.length > 0) {
+          return searchData.files[0].id;
+        }
+      }
+
+      // Create new folder if not found
+      const metadata = {
+        name: subfolderName,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [albumFolderId],
+      };
+
+      const createResponse = await googleAuthService.makeAuthenticatedRequest(DRIVE_API_URL, {
+        method: 'POST',
+        body: JSON.stringify(metadata),
+      });
+
+      if (!createResponse.ok) {
+        throw new Error('Failed to create subfolder in Google Drive.');
+      }
+
+      const createData = await createResponse.json();
+      return createData.id;
+    } catch (error) {
+      console.error('Error in findOrCreateSubfolder:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Upload a file directly to Google Drive using multipart upload
+   * @param {string} fileData - Base64 encoded file data
+   * @param {string} filename - File name
+   * @param {string} parentFolderId - Parent folder ID
+   * @param {string} mimeType - MIME type (default: image/jpeg)
+   * @returns {Promise<Object>} Upload result with fileId
+   */
+  async uploadFile(fileData, filename, parentFolderId, mimeType = 'image/jpeg') {
+    try {
+      const { accessToken } = await googleAuthService.getTokens();
+      
+      // Decode base64 to binary
+      const binaryData = atob(fileData);
+      const bytes = new Uint8Array(binaryData.length);
+      for (let i = 0; i < binaryData.length; i++) {
+        bytes[i] = binaryData.charCodeAt(i);
+      }
+
+      // Create multipart body
+      const boundary = '----ProofPixUploadBoundary' + Date.now();
+      const metadata = {
+        name: filename,
+        parents: [parentFolderId],
+      };
+
+      const metadataPart = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(metadata)}\r\n`;
+      const filePart = `--${boundary}\r\nContent-Type: ${mimeType}\r\n\r\n`;
+      const endBoundary = `\r\n--${boundary}--\r\n`;
+
+      // Convert parts to ArrayBuffer
+      const encoder = new TextEncoder();
+      const metadataBytes = encoder.encode(metadataPart);
+      const filePartBytes = encoder.encode(filePart);
+      const endBytes = encoder.encode(endBoundary);
+
+      const totalLength = metadataBytes.length + filePartBytes.length + bytes.length + endBytes.length;
+      const body = new Uint8Array(totalLength);
+      
+      let offset = 0;
+      body.set(metadataBytes, offset);
+      offset += metadataBytes.length;
+      body.set(filePartBytes, offset);
+      offset += filePartBytes.length;
+      body.set(bytes, offset);
+      offset += bytes.length;
+      body.set(endBytes, offset);
+
+      const uploadUrl = `https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart`;
+      
+      const response = await fetch(uploadUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': `multipart/related; boundary=${boundary}`,
+        },
+        body: body,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Drive API upload error:', errorText);
+        throw new Error(`Failed to upload file to Google Drive: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return {
+        success: true,
+        fileId: result.id,
+        fileName: filename,
+      };
+    } catch (error) {
+      console.error('Error uploading file to Drive:', error);
+      throw error;
+    }
   }
 }
 

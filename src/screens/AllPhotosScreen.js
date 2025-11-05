@@ -26,6 +26,8 @@ import { CroppedThumbnail } from '../components/CroppedThumbnail';
 import PhotoLabel from '../components/PhotoLabel';
 import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
 import { getLocationConfig } from '../config/locations';
+import googleDriveService from '../services/googleDriveService';
+import googleAuthService from '../services/googleAuthService';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
@@ -45,7 +47,7 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
   const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels } = useSettings();
-  const { userMode, teamInfo } = useAdmin(); // Get userMode and teamInfo
+  const { userMode, teamInfo, isAuthenticated, folderId, scriptUrl } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
@@ -329,14 +331,71 @@ export default function AllPhotosScreen({ navigation, route }) {
       return;
     }
 
-    // Get location-based configuration for admin/individual
-    const config = getLocationConfig(location);
+    // For Pro users (individual mode) - use authenticated Google Drive
+    if (userMode === 'individual') {
+      if (!isAuthenticated) {
+        Alert.alert(
+          'Sign In Required',
+          'Please sign in with Google to upload photos to your Drive.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
+          ]
+        );
+        return;
+      }
+
+      // Check if user info is configured
+      if (!userName) {
+        Alert.alert(
+          'Setup Required',
+          'Please configure your name in Settings before uploading.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
+          ]
+        );
+        return;
+      }
+
+      // Check if there are photos to upload
+      if (photos.length === 0) {
+        Alert.alert('No Photos', 'There are no photos to upload.');
+        return;
+      }
+
+      // Ensure Google Drive folder exists
+      try {
+        const userFolderId = await googleDriveService.findOrCreateProofPixFolder();
+        if (!userFolderId) {
+          Alert.alert('Error', 'Could not create or find Google Drive folder. Please try again.');
+          return;
+        }
+      } catch (error) {
+        Alert.alert('Error', 'Failed to access Google Drive. Please sign in again.');
+        return;
+      }
+
+      // Open options modal
+      setOptionsVisible(true);
+      return;
+    }
+
+    // For admin mode - use configured folder/script or location-based (legacy)
+    let config = null;
+    if (userMode === 'admin' && folderId && scriptUrl) {
+      // Use admin's configured folder and script
+      config = { folderId, scriptUrl };
+    } else {
+      // Fallback to location-based config (if still available)
+      config = getLocationConfig(location);
+    }
 
     // Check if Google Drive is configured
-    if (!config.scriptUrl || !config.folderId) {
+    if (!config || !config.scriptUrl || !config.folderId) {
       Alert.alert(
         'Setup Required',
-        'Google Drive configuration is missing for the selected location. Please check your environment variables or contact support.',
+        'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in as a Pro user.',
         [
           { text: 'OK', style: 'cancel' }
         ]
@@ -345,10 +404,10 @@ export default function AllPhotosScreen({ navigation, route }) {
     }
 
     // Check if user info is configured
-    if (!userName || !location) {
+    if (!userName) {
       Alert.alert(
         'Setup Required',
-        'Please configure your name and location in Settings before uploading.',
+        'Please configure your name in Settings before uploading.',
         [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
@@ -394,9 +453,55 @@ export default function AllPhotosScreen({ navigation, route }) {
       }
 
       // Admin/Individual Upload Logic
-      const config = getLocationConfig(location);
-      // Always generate album name based on current location, not project's original location
-      const albumName = createAlbumName(userName, location);
+      let config = null;
+      let uploadConfig = null; // Store config for use in proceedWithUpload
+      
+      // For individual/Pro users - use their authenticated Google Drive
+      if (userMode === 'individual') {
+        try {
+          const userFolderId = await googleDriveService.findOrCreateProofPixFolder();
+          if (!userFolderId) {
+            Alert.alert('Error', 'Could not access Google Drive folder. Please sign in again.');
+            return;
+          }
+          // Use direct Drive API upload for Pro users
+          // We'll set a flag to use Drive API instead of Apps Script
+          config = { 
+            folderId: userFolderId, 
+            scriptUrl: null, // No script URL for direct Drive API
+            useDirectDrive: true // Flag to indicate direct Drive API upload
+          };
+          uploadConfig = config; // Store for later use
+        } catch (error) {
+          Alert.alert('Error', 'Failed to access Google Drive. Please sign in again.');
+          return;
+        }
+      } else {
+        // For admin mode - use configured folder/script or location-based (legacy)
+        // Only set config if NOT individual mode (to avoid overwriting Pro user config)
+        if (userMode === 'admin' && folderId && scriptUrl) {
+          config = { folderId, scriptUrl };
+        } else {
+          // Fallback to location-based config (if still available)
+          config = getLocationConfig(location);
+        }
+        uploadConfig = config; // Store for later use
+      }
+
+      // Check if Google Drive is configured
+      // For Pro users (useDirectDrive), we only need folderId
+      // For admin/legacy, we need both scriptUrl and folderId
+      if (!config || !config.folderId || (!config.useDirectDrive && !config.scriptUrl)) {
+        Alert.alert(
+          'Setup Required',
+          'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in as a Pro user.',
+          [{ text: 'OK', style: 'cancel' }]
+        );
+        return;
+      }
+
+      // Generate album name without location
+      const albumName = createAlbumName(userName);
       // Scope uploads to the active project if one is selected
       const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
 
@@ -618,7 +723,7 @@ export default function AllPhotosScreen({ navigation, route }) {
               style: 'default',
               onPress: () => {
                 // Force re-upload of all photos by using allItems instead of filtered newItems
-                proceedWithUpload(allItems, albumName);
+                proceedWithUpload(allItems, albumName, uploadConfig);
               }
             }
           ]
@@ -636,14 +741,14 @@ export default function AllPhotosScreen({ navigation, route }) {
             { 
               text: 'Upload New Only', 
               style: 'default',
-              onPress: () => proceedWithUpload(newItems, albumName) 
+              onPress: () => proceedWithUpload(newItems, albumName, uploadConfig) 
             },
             { 
               text: 'Upload All', 
               style: 'default',
               onPress: () => {
                 // Force re-upload of all photos including already uploaded ones
-                proceedWithUpload(allItems, albumName);
+                proceedWithUpload(allItems, albumName, uploadConfig);
               }
             }
           ]
@@ -652,15 +757,16 @@ export default function AllPhotosScreen({ navigation, route }) {
       }
 
       // All photos are new, proceed with upload
-      await proceedWithUpload(newItems, albumName);
+      await proceedWithUpload(newItems, albumName, uploadConfig);
     } catch (error) {
       Alert.alert('Upload Failed', error.message || 'An error occurred while preparing upload');
     }
   };
 
-  const proceedWithUpload = async (items, albumName) => {
+  const proceedWithUpload = async (items, albumName, configOverride = null) => {
     try {
-      const config = getLocationConfig(location);
+      // Use provided config or fallback to location config (for backward compatibility)
+      const config = configOverride || getLocationConfig(location);
 
       // Close upload options and any upgrade overlay before starting background upload
       setOptionsVisible(false);
@@ -675,6 +781,7 @@ export default function AllPhotosScreen({ navigation, route }) {
         userName,
         flat: !useFolderStructure,
         uploadType: 'standard',
+        useDirectDrive: config?.useDirectDrive || false, // Pass the flag for direct Drive API
       });
 
       // Show upload modal immediately
