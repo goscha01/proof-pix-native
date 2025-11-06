@@ -66,10 +66,9 @@ app.post('/api/admin/init', async (req, res) => {
     console.log('ServerAuthCode length:', serverAuthCode?.length || 0);
 
     // Exchange serverAuthCode for tokens
-    // WORKAROUND: iOS generates serverAuthCode with custom scheme redirect URI
-    // which Google rejects for sensitive scopes. We use 'urn:ietf:wg:oauth:2.0:oob'
-    // which is the "out of band" redirect URI for native apps
-    const redirectUri = 'urn:ietf:wg:oauth:2.0:oob';
+    // Use the proxy server URL as the redirect URI
+    // This must match one of the authorized redirect URIs in Google Cloud Console
+    const redirectUri = process.env.PROXY_SERVER_URL || 'https://proof-pix-proxy.vercel.app';
 
     const oauth2Client = new google.auth.OAuth2(
       clientId,
@@ -77,7 +76,7 @@ app.post('/api/admin/init', async (req, res) => {
       redirectUri
     );
 
-    console.log(`[INIT] Using redirect URI: ${redirectUri} (out-of-band for native apps)`);
+    console.log(`[INIT] Using redirect URI: ${redirectUri}`);
 
     let tokens;
     try {
