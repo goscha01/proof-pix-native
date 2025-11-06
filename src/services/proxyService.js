@@ -156,15 +156,42 @@ class ProxyService {
   }
 
   /**
-   * Upload a photo as a team member (with token)
+   * Upload a photo as a team member (with token) with full upload structure
    * @param {string} sessionId - Proxy session ID
    * @param {string} token - Invite token
    * @param {string} filename - Filename
    * @param {string} contentBase64 - Base64 encoded image
+   * @param {Object} uploadParams - Upload parameters (same as admin uploads)
+   * @param {string} uploadParams.albumName - Album folder name
+   * @param {string} uploadParams.room - Room name
+   * @param {string} uploadParams.type - Photo type (before/after/combined)
+   * @param {string} uploadParams.format - Format type (default/portrait/square)
+   * @param {string} uploadParams.location - Location/city
+   * @param {string} uploadParams.cleanerName - Cleaner's name
+   * @param {boolean} uploadParams.flat - Flat mode (no subfolders)
    */
-  async uploadPhoto(sessionId, token, filename, contentBase64) {
+  async uploadPhoto(sessionId, token, filename, contentBase64, uploadParams = {}) {
     try {
-      console.log('[PROXY] Uploading photo:', { sessionId, filename, token: token.substring(0, 10) + '...' });
+      const {
+        albumName,
+        room,
+        type,
+        format = 'default',
+        location,
+        cleanerName,
+        flat = false
+      } = uploadParams;
+
+      console.log('[PROXY] Uploading photo as team member:', { 
+        sessionId, 
+        filename, 
+        token: token.substring(0, 10) + '...',
+        albumName,
+        room,
+        type,
+        format,
+        flat
+      });
 
       const response = await fetch(`${PROXY_SERVER_URL}/api/upload/${sessionId}`, {
         method: 'POST',
@@ -174,7 +201,14 @@ class ProxyService {
         body: JSON.stringify({
           token,
           filename,
-          contentBase64
+          contentBase64,
+          albumName,
+          room,
+          type,
+          format,
+          location,
+          cleanerName,
+          flat
         }),
       });
 
@@ -183,7 +217,13 @@ class ProxyService {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[PROXY] Upload error:', errorText);
-        throw new Error(`Upload failed: ${response.status}`);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch (e) {
+          errorData = { error: errorText };
+        }
+        throw new Error(errorData.message || errorData.error || `Upload failed: ${response.status}`);
       }
 
       const data = await response.json();

@@ -145,35 +145,37 @@ class BackgroundUploadService {
       this.notifyListeners();
 
       const { items, teamInfo } = upload;
-      const successful = [];
-      const failed = [];
 
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        try {
-          // Team member uploads don't use albums, so we pass a generic identifier
-          const filename = `team-upload-${item.name}-${Date.now()}.jpg`;
-          const result = await uploadPhotoAsTeamMember({
-            imageDataUrl: item.uri,
-            filename: filename,
-            sessionId: teamInfo.sessionId,
-            token: teamInfo.token,
-          });
-
-          successful.push({ photo: item, result });
-        } catch (error) {
-          failed.push({ photo: item, error });
+      // Prepare upload options for team member batch upload (same as Pro/Business/Enterprise)
+      const uploadOptions = {
+        folderId: upload.config?.folderId, // May not be needed for team uploads but kept for consistency
+        albumName: upload.albumName,
+        location: upload.location,
+        cleanerName: upload.userName,
+        batchSize: upload.items.length, // Upload all photos in parallel
+        flat: upload.flat,
+        useDirectDrive: true, // Always use proxy server
+        sessionId: teamInfo.sessionId,
+        token: teamInfo.token, // Required for team member uploads
+        onProgress: (current, total) => {
+          upload.progress = { current, total };
+          this.notifyListeners();
         }
-        upload.progress = { current: i + 1, total: items.length };
-        this.notifyListeners();
-      }
+      };
 
-      // In team mode, we don't use the same persistent upload tracking
-      // because there's no "album" concept to check against for duplicates.
+      // Use batch upload (same as Pro/Business/Enterprise tiers)
+      const result = await uploadPhotoBatch(items, uploadOptions);
+      
+      // Mark photos as uploaded in tracker (only successful ones)
+      // Team members now support albums, so we can track uploads
+      if (result.successful && result.successful.length > 0) {
+        const successfulPhotos = result.successful.map(item => item.photo);
+        await markPhotosAsUploaded(successfulPhotos, upload.albumName);
+      }
       
       upload.status = 'completed';
       upload.endTime = Date.now();
-      upload.result = { successful, failed };
+      upload.result = result;
       this.completedUploads.set(upload.id, upload);
       this.activeUploads.delete(upload.id);
       this.notifyListeners();

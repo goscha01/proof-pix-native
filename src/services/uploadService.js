@@ -218,11 +218,19 @@ async function uploadPhotoToDriveDirect({
 
 /**
  * Upload a single photo as a team member using an invite token (proxy server only)
+ * Supports the same upload structure as Pro/Business/Enterprise tiers
  * @param {Object} params - Upload parameters
  * @param {string} params.imageDataUrl - Base64 data URL of the image
  * @param {string} params.filename - Filename for the uploaded image
  * @param {string} params.sessionId - Proxy server session ID
  * @param {string} params.token - The invite token for authorization
+ * @param {string} params.albumName - Album folder name
+ * @param {string} params.room - Room name
+ * @param {string} params.type - Photo type ("before", "after", or "combined")
+ * @param {string} params.format - Format type (e.g., "default", "portrait", "square")
+ * @param {string} params.location - Location/city
+ * @param {string} params.cleanerName - Cleaner's name
+ * @param {boolean} params.flat - If true, upload directly to album folder (no subfolders)
  * @returns {Promise<Object>} - Upload result
  */
 export async function uploadPhotoAsTeamMember({
@@ -230,6 +238,13 @@ export async function uploadPhotoAsTeamMember({
   filename,
   sessionId,
   token,
+  albumName,
+  room,
+  type,
+  format = 'default',
+  location,
+  cleanerName,
+  flat = false,
 }) {
   try {
     if (!sessionId || !token) {
@@ -248,8 +263,16 @@ export async function uploadPhotoAsTeamMember({
         : base64DataUrl;
     }
 
-    // Upload via proxy server
-    return await proxyService.uploadPhoto(sessionId, token, filename, base64String);
+    // Upload via proxy server with full upload structure (same as Pro/Business/Enterprise)
+    return await proxyService.uploadPhoto(sessionId, token, filename, base64String, {
+      albumName,
+      room,
+      type,
+      format,
+      location,
+      cleanerName,
+      flat
+    });
   } catch (error) {
     throw error;
   }
@@ -257,10 +280,12 @@ export async function uploadPhotoAsTeamMember({
 
 /**
  * Upload multiple photos in batches
+ * Supports both admin uploads (Pro/Business/Enterprise) and team member uploads
  * @param {Array} photos - Array of photo objects with upload parameters
  * @param {Object} config - Upload configuration
  * @param {string} config.folderId - Google Drive folder ID
  * @param {string} config.sessionId - Proxy server session ID (required)
+ * @param {string} config.token - Invite token (required for team member uploads)
  * @param {string} config.albumName - Album name
  * @param {string} config.location - Location/city
  * @param {string} config.cleanerName - Cleaner's name
@@ -282,11 +307,16 @@ export async function uploadPhotoBatch(photos, config) {
     abortSignal, // optional AbortSignal to stop scheduling further uploads
     flat = false, // upload into project root (no subfolders)
     useDirectDrive = true, // Always use proxy server (legacy Apps Script removed)
-    sessionId = null // Proxy server session ID (required)
+    sessionId = null, // Proxy server session ID (required)
+    token = null // Invite token (required for team member uploads)
   } = config;
+
+  // Determine if this is a team member upload
+  const isTeamMemberUpload = !!(token && sessionId);
 
   // If using proxy server and albumName is provided, prepare the album folder first
   // This ensures all parallel uploads use the same album folder
+  // Note: Team members can also use album folders (same as Pro/Business/Enterprise)
   if (useDirectDrive && albumName && sessionId && !flat) {
     try {
       console.log('[UPLOAD] Preparing album folder before parallel uploads:', albumName);
@@ -347,22 +377,37 @@ export async function uploadPhotoBatch(photos, config) {
       const isFlat = !!(flat || photo.flat === true || photo.flatOverride === true);
       
       // Create a promise that reports progress during upload
-      const uploadPromise = uploadPhoto({
-        imageDataUrl: photo.uri,
-        filename: photo.filename || `${photo.name}_${format !== 'default' ? format : typeParam}.jpg`,
-        albumName,
-        room: photo.room || 'general',
-        type: typeParam,
-        format: format,
-        location,
-        cleanerName,
-        folderId,
-        abortSignal: controller ? controller.signal : (abortSignal || undefined),
-        flat: isFlat,
-        useDirectDrive, // Always use proxy server
-        sessionId, // Pass the proxy session ID
-        // Remove intermediate progress reporting for cleaner parallel upload tracking
-      });
+      // Use team member upload if token is provided, otherwise use admin upload
+      const uploadPromise = isTeamMemberUpload
+        ? uploadPhotoAsTeamMember({
+            imageDataUrl: photo.uri,
+            filename: photo.filename || `${photo.name}_${format !== 'default' ? format : typeParam}.jpg`,
+            sessionId,
+            token,
+            albumName,
+            room: photo.room || 'general',
+            type: typeParam,
+            format: format,
+            location,
+            cleanerName,
+            flat: isFlat,
+          })
+        : uploadPhoto({
+            imageDataUrl: photo.uri,
+            filename: photo.filename || `${photo.name}_${format !== 'default' ? format : typeParam}.jpg`,
+            albumName,
+            room: photo.room || 'general',
+            type: typeParam,
+            format: format,
+            location,
+            cleanerName,
+            folderId,
+            abortSignal: controller ? controller.signal : (abortSignal || undefined),
+            flat: isFlat,
+            useDirectDrive, // Always use proxy server
+            sessionId, // Pass the proxy session ID
+            // Remove intermediate progress reporting for cleaner parallel upload tracking
+          });
 
       // Add progress tracking for parallel uploads
       return uploadPromise
