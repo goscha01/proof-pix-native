@@ -66,16 +66,18 @@ app.post('/api/admin/init', async (req, res) => {
     console.log('ServerAuthCode length:', serverAuthCode?.length || 0);
 
     // Exchange serverAuthCode for tokens
-    // IMPORTANT: For mobile serverAuthCode, DO NOT specify a redirect URI
-    // The serverAuthCode already contains the redirect URI information from the mobile SDK
-    // Specifying a redirect URI will cause "redirect_uri_mismatch" errors
+    // WORKAROUND: iOS generates serverAuthCode with custom scheme redirect URI
+    // which Google rejects for sensitive scopes. We use 'urn:ietf:wg:oauth:2.0:oob'
+    // which is the "out of band" redirect URI for native apps
+    const redirectUri = 'urn:ietf:wg:oauth:2.0:oob';
+
     const oauth2Client = new google.auth.OAuth2(
       clientId,
-      clientSecret
-      // No redirect URI parameter - let Google handle it from the serverAuthCode
+      clientSecret,
+      redirectUri
     );
 
-    console.log(`[INIT] No redirect URI specified (using serverAuthCode from mobile SDK)`);
+    console.log(`[INIT] Using redirect URI: ${redirectUri} (out-of-band for native apps)`);
 
     let tokens;
     try {

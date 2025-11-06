@@ -53,10 +53,7 @@ class GoogleAuthService {
 
       GoogleSignin.configure({
         webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID, // MUST be Web Client ID for serverAuthCode
-        // IMPORTANT: Do NOT set iosClientId when using sensitive scopes with serverAuthCode
-        // If iosClientId is set, the SDK generates serverAuthCode with mobile redirect URI
-        // which Google rejects for sensitive scopes (requires HTTPS redirect URIs)
-        // By only using webClientId, the serverAuthCode uses the Web Client's HTTPS redirect URI
+        iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID, // Required for iOS SDK to work
         scopes: defaultScopes, // Set scopes in configure() for iOS to show in consent screen
         offlineAccess: true, // Required to get serverAuthCode
         forceCodeForRefreshToken: true, // Force showing consent screen to get refresh token
@@ -64,7 +61,7 @@ class GoogleAuthService {
 
       console.log('[AUTH] GoogleSignin configured with:');
       console.log('- webClientId:', process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.substring(0, 20) + '...');
-      console.log('- iosClientId: NOT SET (using webClientId for serverAuthCode compatibility)');
+      console.log('- iosClientId:', process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID?.substring(0, 20) + '...');
       console.log('- offlineAccess: true');
       console.log('- forceCodeForRefreshToken: true');
     }
