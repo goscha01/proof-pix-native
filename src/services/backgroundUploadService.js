@@ -156,7 +156,7 @@ class BackgroundUploadService {
           const result = await uploadPhotoAsTeamMember({
             imageDataUrl: item.uri,
             filename: filename,
-            scriptUrl: teamInfo.scriptUrl,
+            sessionId: teamInfo.sessionId,
             token: teamInfo.token,
           });
 

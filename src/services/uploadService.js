@@ -81,8 +81,8 @@ function normalizeFileUri(input) {
  * @param {string} params.format - Format type (e.g., "default", "portrait", "square")
  * @param {string} params.location - Location/city
  * @param {string} params.cleanerName - Cleaner's name
- * @param {string} params.scriptUrl - Google Apps Script URL
  * @param {string} params.folderId - Google Drive folder ID
+ * @param {string} params.sessionId - Proxy server session ID (required)
  * @param {Function} params.onProgress - Progress callback (optional)
  * @returns {Promise<Object>} - Upload result
  */
@@ -95,99 +95,36 @@ export async function uploadPhoto({
   format = 'default',
   location,
   cleanerName,
-  scriptUrl,
   folderId,
   onProgress,
   abortSignal,
   flat = false,
-  useDirectDrive = false, // Flag to use proxy server instead of Apps Script
-  sessionId = null // Proxy server session ID (required for useDirectDrive)
+  useDirectDrive = true, // Always use proxy server (legacy Apps Script removed)
+  sessionId = null // Proxy server session ID (required)
 }) {
   try {
-    // For proxy server uploads (Pro/Business/Enterprise users), we don't need scriptUrl
-    if (useDirectDrive) {
-      if (!folderId) {
-        throw new Error('Missing Google Drive folder ID for proxy upload.');
-      }
-      if (!sessionId) {
-        throw new Error('Missing proxy session ID for proxy upload.');
-      }
-      // Use proxy server upload
-      return await uploadPhotoToDriveDirect({
-        imageDataUrl,
-        filename,
-        albumName,
-        room,
-        type,
-        format,
-        location,
-        cleanerName,
-        folderId,
-        flat,
-        sessionId
-      });
+    // Proxy server uploads are now the only option
+    if (!folderId) {
+      throw new Error('Missing Google Drive folder ID for upload.');
+    }
+    if (!sessionId) {
+      throw new Error('Missing proxy session ID for upload. Please connect your Google account in Settings.');
     }
     
-    // For Apps Script uploads, we need both scriptUrl and folderId
-    if (!scriptUrl || !folderId) {
-      throw new Error('Missing Google Drive configuration. Please set Script URL and Folder ID in Settings.');
-    }
-
-    if (!imageDataUrl) {
-      throw new Error('Missing image data');
-    }
-
-    // Convert to base64 if not already a data URL
-    let base64DataUrl = imageDataUrl;
-    if (!imageDataUrl.startsWith('data:')) {
-      const normalized = normalizeFileUri(imageDataUrl);
-      base64DataUrl = await fileUriToBase64(normalized);
-    } else {
-    }
-
-    // Extract just the base64 string (remove data:image/jpeg;base64, prefix if present)
-    let base64String = base64DataUrl;
-    if (base64DataUrl.includes('base64,')) {
-      base64String = base64DataUrl.split('base64,')[1];
-    }
-    // Prepare form data
-    const formData = new FormData();
-    formData.append('folderId', folderId);
-    formData.append('filename', filename);
-    formData.append('albumName', albumName);
-    formData.append('room', room || 'general');
-    formData.append('type', type);
-    formData.append('format', format);
-    if (flat || (typeof globalThis.__UPLOAD_FLAT_MODE === 'boolean' && globalThis.__UPLOAD_FLAT_MODE)) {
-      formData.append('flat', 'true');
-    }
-    formData.append('timestamp', Date.now().toString());
-    formData.append('location', location);
-    formData.append('cleanerName', cleanerName);
-    formData.append('image', base64String);
-    // Upload to Google Drive (ensure flat flag reaches GAS via URL as well)
-    const shouldFlat = flat || (typeof globalThis.__UPLOAD_FLAT_MODE === 'boolean' && globalThis.__UPLOAD_FLAT_MODE);
-    const targetUrl = shouldFlat
-      ? `${scriptUrl}${scriptUrl.includes('?') ? '&' : '?'}flat=true`
-      : scriptUrl;
-    
-    const response = await fetch(targetUrl, {
-      method: 'POST',
-      body: formData,
-      // Pass abort signal if provided to support cancellation
-      ...(abortSignal ? { signal: abortSignal } : {})
+    // Use proxy server upload
+    return await uploadPhotoToDriveDirect({
+      imageDataUrl,
+      filename,
+      albumName,
+      room,
+      type,
+      format,
+      location,
+      cleanerName,
+      folderId,
+      flat,
+      sessionId
     });
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    if (result.success) {
-      return result;
-    } else {
-      throw new Error(result.message || 'Upload failed');
-    }
   } catch (error) {
     const name = (error && error.name) || '';
     const message = (error && error.message) || '';
@@ -280,55 +217,39 @@ async function uploadPhotoToDriveDirect({
 }
 
 /**
- * Upload a single photo as a team member using an invite token.
- * This is a simplified version of uploadPhoto for team members.
+ * Upload a single photo as a team member using an invite token (proxy server only)
  * @param {Object} params - Upload parameters
  * @param {string} params.imageDataUrl - Base64 data URL of the image
  * @param {string} params.filename - Filename for the uploaded image
- * @param {string} params.scriptUrl - Google Apps Script URL
+ * @param {string} params.sessionId - Proxy server session ID
  * @param {string} params.token - The invite token for authorization
  * @returns {Promise<Object>} - Upload result
  */
 export async function uploadPhotoAsTeamMember({
   imageDataUrl,
   filename,
-  scriptUrl,
+  sessionId,
   token,
 }) {
   try {
-    if (!scriptUrl || !token) {
-      throw new Error('Missing script URL or invite token.');
+    if (!sessionId || !token) {
+      throw new Error('Missing session ID or invite token.');
     }
 
     let base64String = imageDataUrl;
-    if (imageDataUrl.includes('base64,')) {
+    if (imageDataUrl.startsWith('data:')) {
       base64String = imageDataUrl.split('base64,')[1];
-    }
-
-    const targetUrl = `${scriptUrl}?token=${token}`;
-    const body = JSON.stringify({
-      filename: filename,
-      contentBase64: base64String,
-    });
-
-    const response = await fetch(targetUrl, {
-      method: 'POST',
-      body,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    const result = await response.json();
-    if (result.success) {
-      return result;
     } else {
-      throw new Error(result.error || 'Upload failed');
+      // If it's a file URI, convert to base64
+      const normalized = normalizeFileUri(imageDataUrl);
+      const base64DataUrl = await fileUriToBase64(normalized);
+      base64String = base64DataUrl.includes('base64,') 
+        ? base64DataUrl.split('base64,')[1] 
+        : base64DataUrl;
     }
+
+    // Upload via proxy server
+    return await proxyService.uploadPhoto(sessionId, token, filename, base64String);
   } catch (error) {
     throw error;
   }
@@ -338,8 +259,8 @@ export async function uploadPhotoAsTeamMember({
  * Upload multiple photos in batches
  * @param {Array} photos - Array of photo objects with upload parameters
  * @param {Object} config - Upload configuration
- * @param {string} config.scriptUrl - Google Apps Script URL
  * @param {string} config.folderId - Google Drive folder ID
+ * @param {string} config.sessionId - Proxy server session ID (required)
  * @param {string} config.albumName - Album name
  * @param {string} config.location - Location/city
  * @param {string} config.cleanerName - Cleaner's name
@@ -350,7 +271,6 @@ export async function uploadPhotoAsTeamMember({
  */
 export async function uploadPhotoBatch(photos, config) {
   const {
-    scriptUrl,
     folderId,
     albumName,
     location,
@@ -361,8 +281,8 @@ export async function uploadPhotoBatch(photos, config) {
     getAbortController, // optional callback to retrieve/create AbortController per request
     abortSignal, // optional AbortSignal to stop scheduling further uploads
     flat = false, // upload into project root (no subfolders)
-    useDirectDrive = false, // Flag to use proxy server instead of Apps Script
-    sessionId = null // Proxy server session ID (required for useDirectDrive)
+    useDirectDrive = true, // Always use proxy server (legacy Apps Script removed)
+    sessionId = null // Proxy server session ID (required)
   } = config;
 
   // If using proxy server and albumName is provided, prepare the album folder first
@@ -436,11 +356,10 @@ export async function uploadPhotoBatch(photos, config) {
         format: format,
         location,
         cleanerName,
-        scriptUrl,
         folderId,
         abortSignal: controller ? controller.signal : (abortSignal || undefined),
         flat: isFlat,
-        useDirectDrive, // Pass the flag to use proxy server
+        useDirectDrive, // Always use proxy server
         sessionId, // Pass the proxy session ID
         // Remove intermediate progress reporting for cleaner parallel upload tracking
       });

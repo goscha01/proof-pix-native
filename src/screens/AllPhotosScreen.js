@@ -47,7 +47,7 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
   const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels, userPlan } = useSettings();
-  const { userMode, teamInfo, isAuthenticated, folderId, scriptUrl, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
+  const { userMode, teamInfo, isAuthenticated, folderId, proxySessionId, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
@@ -323,7 +323,7 @@ export default function AllPhotosScreen({ navigation, route }) {
   const handleUploadPhotos = async () => {
     // Handle team member upload
     if (userMode === 'team_member') {
-      if (teamInfo && teamInfo.scriptUrl && teamInfo.token) {
+      if (teamInfo && teamInfo.sessionId && teamInfo.token) {
         setOptionsVisible(true); // Open options modal for team member
       } else {
         Alert.alert('Error', 'Team information is missing. Please re-join the team.');
@@ -384,18 +384,21 @@ export default function AllPhotosScreen({ navigation, route }) {
       return;
     }
 
-    // For admin mode - use configured folder/script or location-based (legacy)
+    // For admin mode - use configured folder and proxy session
     let config = null;
-    if (userMode === 'admin' && folderId && scriptUrl) {
-      // Use admin's configured folder and script
-      config = { folderId, scriptUrl };
+    if (userMode === 'admin' && folderId && proxySessionId) {
+      // Use admin's configured folder and proxy session
+      config = { folderId, useDirectDrive: true, sessionId: proxySessionId };
     } else {
-      // Fallback to location-based config (if still available)
-      config = getLocationConfig(location);
+      // Fallback to location-based config (folderId only, no scriptUrl)
+      const locationConfig = getLocationConfig(location);
+      config = { folderId: locationConfig?.folderId, useDirectDrive: false };
     }
 
     // Check if Google Drive is configured
-    if (!config || !config.scriptUrl || !config.folderId) {
+    // For proxy server uploads, we need folderId and sessionId
+    // For location-based uploads, we need folderId (legacy support)
+    if (!config || !config.folderId || (config.useDirectDrive && !config.sessionId)) {
       Alert.alert(
         'Setup Required',
         'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in with your Google account.',
@@ -481,7 +484,6 @@ export default function AllPhotosScreen({ navigation, route }) {
           // Use proxy server upload for Pro, Business, and Enterprise users
           config = { 
             folderId: userFolderId, 
-            scriptUrl: null, // No script URL for proxy upload
             useDirectDrive: true, // Flag to indicate proxy server upload
             sessionId: sessionId // Proxy session ID
           };
@@ -492,28 +494,29 @@ export default function AllPhotosScreen({ navigation, route }) {
           return;
         }
       } else {
-        // For admin mode (team management) - use configured folder/script or location-based (legacy)
+        // For admin mode (team management) - use configured folder and proxy session
         // Only set config if NOT individual mode (to avoid overwriting Pro/Business/Enterprise user config)
-        if (userMode === 'admin' && folderId && scriptUrl) {
-          config = { folderId, scriptUrl };
+        if (userMode === 'admin' && folderId && proxySessionId) {
+          config = { folderId, useDirectDrive: true, sessionId: proxySessionId };
         } else {
-          // Fallback to location-based config (if still available)
-          config = getLocationConfig(location);
+          // Fallback to location-based config (folderId only)
+          const locationConfig = getLocationConfig(location);
+          config = { folderId: locationConfig?.folderId, useDirectDrive: false };
         }
         uploadConfig = config; // Store for later use
       }
 
-      // Check if Google Drive is configured
-      // For Pro/Business/Enterprise users (useDirectDrive), we only need folderId
-      // For admin team mode/legacy, we need both scriptUrl and folderId
-      if (!config || !config.folderId || (!config.useDirectDrive && !config.scriptUrl)) {
-        Alert.alert(
-          'Setup Required',
-          'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in with your Google account.',
-          [{ text: 'OK', style: 'cancel' }]
-        );
-        return;
-      }
+        // Check if Google Drive is configured
+        // For proxy server uploads (useDirectDrive), we need folderId and sessionId
+        // For location-based uploads, we need folderId (legacy support)
+        if (!config || !config.folderId || (config.useDirectDrive && !config.sessionId)) {
+          Alert.alert(
+            'Setup Required',
+            'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in with your Google account.',
+            [{ text: 'OK', style: 'cancel' }]
+          );
+          return;
+        }
 
       // Generate album name - use project's uploadId if available, otherwise generate new one
       const activeProject = activeProjectId ? projects.find(p => p.id === activeProjectId) : null;

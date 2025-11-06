@@ -2,15 +2,15 @@ import React from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Share, Clipboard } from 'react-native';
 import { useAdmin } from '../context/AdminContext';
 import { generateInviteToken } from '../utils/tokens';
-import googleScriptService from '../services/googleScriptService';
+import proxyService from '../services/proxyService';
+import { PROXY_SERVER_URL } from '../config/proxy';
 
 /**
  * A component for admins to manage their team invites.
  */
 export default function InviteManager() {
   const {
-    scriptId,
-    scriptUrl,
+    proxySessionId,
     inviteTokens,
     getRemainingInvites,
     canAddMoreInvites,
@@ -24,45 +24,62 @@ export default function InviteManager() {
       return;
     }
 
+    if (!proxySessionId) {
+      Alert.alert('Error', 'Proxy session not initialized. Please connect your team first.');
+      return;
+    }
+
     const newToken = generateInviteToken();
 
     try {
-      console.log('Generating invite token...', { scriptId, newToken });
+      console.log('[INVITE] Generating invite token...', { proxySessionId, newToken });
 
-      // Save token locally (script will be updated when first used for uploads)
+      // Add token to proxy server
+      await proxyService.addInviteToken(proxySessionId, newToken);
+      console.log('[INVITE] Token added to proxy server');
+
+      // Save token locally
       await addInviteToken(newToken);
-      console.log('Invite token generated and saved successfully');
+      console.log('[INVITE] Invite token generated and saved successfully');
 
       Alert.alert(
         'Invite Generated',
-        `A new invite has been created. You can now share it with your team member.\n\nNote: The invite will be activated when first used for uploads.`
+        `A new invite has been created. You can now share it with your team member.`
       );
     } catch (error) {
-      console.error('Failed to generate invite token:', error);
+      console.error('[INVITE] Failed to generate invite token:', error);
       Alert.alert('Error', `Failed to generate invite token: ${error.message}`);
     }
   };
 
   const handleRevokeInvite = async (token) => {
     try {
+      if (proxySessionId) {
+        // Remove token from proxy server
+        await proxyService.removeInviteToken(proxySessionId, token);
+        console.log('[INVITE] Token removed from proxy server');
+      }
+      
+      // Remove token locally
       await removeInviteToken(token);
-      Alert.alert('Invite Revoked', `The invite has been revoked locally. It will no longer work for new uploads.`);
+      Alert.alert('Invite Revoked', `The invite has been revoked. It will no longer work for new uploads.`);
     } catch (error) {
+      console.error('[INVITE] Failed to revoke invite token:', error);
       Alert.alert('Error', 'Failed to revoke invite token. Please try again.');
     }
   };
 
   const handleCopyToken = (token) => {
-    // Copy token with scriptUrl so team members can validate
-    const inviteData = `${token}|${scriptUrl}`;
+    // Copy token with sessionId for proxy server (proxy URL is in config)
+    const inviteData = `${token}|${proxySessionId}`;
     Clipboard.setString(inviteData);
     Alert.alert('Copied!', 'Invite code copied to clipboard. Share this code with your team member.');
   };
 
   const handleShareInvite = async (token) => {
     try {
-      // Create invite code with token and scriptUrl
-      const inviteData = `${token}|${scriptUrl}`;
+      // Create invite code with token and sessionId for proxy server
+      const inviteData = `${token}|${proxySessionId}`;
 
       await Share.share({
         message: `Join my ProofPix team!\n\nInvite Code:\n${inviteData}\n\nPaste this code in ProofPix → Settings → Join an Existing Team`,

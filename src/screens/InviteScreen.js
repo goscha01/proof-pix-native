@@ -3,21 +3,22 @@ import { View, Text, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useAdmin } from '../context/AdminContext';
 
 export default function InviteScreen({ route, navigation }) {
-  const { token, scriptUrl } = route.params || {};
+  const { token, sessionId } = route.params || {};
   const { joinTeam } = useAdmin();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
     const processInvite = async () => {
-      if (!token || !scriptUrl) {
+      // Validate required parameters
+      if (!token || !sessionId) {
         setError('This invite link is invalid or incomplete. Please request a new link from your administrator.');
         setIsLoading(false);
         return;
       }
 
       try {
-        const result = await joinTeam(token, scriptUrl);
+        const result = await joinTeam(token, sessionId);
         if (result.success) {
           // Navigate to home screen and reset the stack
           navigation.reset({
@@ -35,7 +36,7 @@ export default function InviteScreen({ route, navigation }) {
     };
 
     processInvite();
-  }, [token, scriptUrl, joinTeam, navigation]);
+  }, [token, sessionId, joinTeam, navigation]);
 
   if (isLoading) {
     return (

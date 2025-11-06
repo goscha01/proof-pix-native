@@ -11,30 +11,31 @@ export default function JoinTeamScreen({ navigation }) {
   const { isAuthenticated } = useAdmin();
   const insets = useSafeAreaInsets();
 
-  const handleJoinTeam = () => {
+  const handleJoinTeam = async () => {
     if (!inviteCode.trim()) {
       Alert.alert('Error', 'Please enter an invite code');
       return;
     }
 
-    // Parse invite code - format is "TOKEN|SCRIPTURL"
+    // Parse invite code - format is "TOKEN|SESSIONID" (proxy server format)
+    // Legacy format "TOKEN|SCRIPTURL" is also supported for backward compatibility
     const parts = inviteCode.trim().split('|');
     if (parts.length !== 2) {
       Alert.alert('Invalid Code', 'This invite code is not in the correct format. Please check with your admin.');
       return;
     }
 
-    const [token, scriptUrl] = parts;
+    const [token, sessionIdOrUrl] = parts;
 
-    if (!token || !scriptUrl) {
+    if (!token || !sessionIdOrUrl) {
       Alert.alert('Invalid Code', 'This invite code is incomplete. Please check with your admin.');
       return;
     }
 
-    // Navigate to Invite screen with the parsed data
+    // Proxy server format: token|sessionId
     navigation.navigate('Invite', {
       token: token,
-      scriptUrl: scriptUrl
+      sessionId: sessionIdOrUrl
     });
   };
 

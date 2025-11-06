@@ -18,7 +18,6 @@ import { COLORS } from '../constants/rooms';
 import { LOCATIONS, getLocationConfig } from '../config/locations';
 import RoomEditor from '../components/RoomEditor';
 import googleDriveService from '../services/googleDriveService';
-import googleScriptService from '../services/googleScriptService';
 import InviteManager from '../components/InviteManager';
 import { generateInviteToken } from '../utils/tokens';
 import { useNavigation } from '@react-navigation/native';
@@ -51,16 +50,15 @@ export default function SettingsScreen({ navigation }) {
     signOut,
     isSetupComplete,
     folderId: adminFolderId,
-    scriptUrl: adminScriptUrl,
-    scriptId: adminScriptId,
+    proxySessionId,
     userMode,
     saveFolderId,
-    saveScriptInfo,
     addInviteToken,
     removeInviteToken,
     adminSignIn,
     individualSignIn,
     isGoogleSignInAvailable,
+    initializeProxySession,
   } = useAdmin();
 
   const [name, setName] = useState(userName);
@@ -70,55 +68,44 @@ export default function SettingsScreen({ navigation }) {
   const [isSigningIn, setIsSigningIn] = useState(false);
 
   const handleSetupTeam = async () => {
-    if (!isAuthenticated || userMode !== 'admin' || isSetupComplete() || isSigningIn) {
+    if (!isAuthenticated || userMode !== 'admin' || isSigningIn) {
+      return;
+    }
+
+    // Check if already set up (either Apps Script or Proxy Server)
+    if (isSetupComplete() || proxySessionId) {
+      Alert.alert('Already Connected', 'Your team is already connected. You can manage invites below.');
       return;
     }
 
     try {
-      console.log('Running manual admin setup...');
+      console.log('[SETUP] Running team setup with proxy server...');
       setIsSigningIn(true); // Show a loading indicator
 
       // Step 1: Find or create the Google Drive folder
       const folderId = await googleDriveService.findOrCreateProofPixFolder();
       await saveFolderId(folderId);
-      console.log('Admin folder ID saved:', folderId);
+      console.log('[SETUP] Admin folder ID saved:', folderId);
 
-      // Step 2: Create and deploy the Google Apps Script
-      const { scriptId, scriptUrl } = await googleScriptService.createAndDeployScript(folderId);
-      await saveScriptInfo(scriptUrl, scriptId);
-      console.log('Admin script deployed:', { scriptId, scriptUrl });
+      // Step 2: Initialize proxy session (this creates the session and stores refresh token)
+      const sessionResult = await initializeProxySession(folderId);
+      if (!sessionResult || !sessionResult.sessionId) {
+        throw new Error('Failed to initialize proxy session');
+      }
+      console.log('[SETUP] Proxy session initialized:', sessionResult.sessionId);
 
-      Alert.alert('Setup Complete', 'Your admin account is now fully configured.');
+      Alert.alert(
+        'Team Connected!', 
+        'Your team is now connected. You can now generate invite links for your team members.'
+      );
 
     } catch (error) {
-      console.error('Setup failed:', error.message);
-      if (error.message && error.message.includes("User has not enabled the Apps Script API")) {
-        const settingsUrl = 'https://script.google.com/home/usersettings';
-        const userEmail = adminUserInfo?.email;
-        // Construct a URL that forces the Google Account Chooser
-        const finalUrl = userEmail
-          ? `https://accounts.google.com/AccountChooser?Email=${userEmail}&continue=${encodeURIComponent(settingsUrl)}`
-          : settingsUrl;
-
-        Alert.alert(
-          'Setup Required for ' + userEmail,
-          'Google requires you to manually enable the Apps Script API for this account. Tap "Open Settings" and confirm you are enabling it for the correct user.',
-          [
-            { text: 'Cancel', style: 'cancel' },
-            {
-              text: 'Open Settings',
-              onPress: () => Linking.openURL(finalUrl),
-              style: 'default',
-            },
-          ]
-        );
-      } else {
-        Alert.alert(
-          'Setup Failed',
-          error.message || 'Failed to set up team. Please try again.',
-          [{ text: 'OK', style: 'cancel' }]
-        );
-      }
+      console.error('[SETUP] Setup failed:', error.message);
+      Alert.alert(
+        'Setup Failed',
+        error.message || 'Failed to connect team. Please try again.',
+        [{ text: 'OK', style: 'cancel' }]
+      );
     } finally {
       setIsSigningIn(false);
     }
@@ -296,7 +283,7 @@ export default function SettingsScreen({ navigation }) {
                 </Text>
               </View>
 
-              {userMode === 'admin' && !isSetupComplete() && (
+              {userMode === 'admin' && !isSetupComplete() && !proxySessionId && (
                 <>
                   {(userPlan === 'business' || userPlan === 'enterprise') && (
                     <TouchableOpacity
@@ -311,7 +298,7 @@ export default function SettingsScreen({ navigation }) {
                         <ActivityIndicator size="small" color="#fff" />
                       ) : (
                         <Text style={styles.setupTeamButtonText}>
-                          Set Up Team
+                          Connect Team
                         </Text>
                       )}
                     </TouchableOpacity>
@@ -324,8 +311,13 @@ export default function SettingsScreen({ navigation }) {
                 </>
               )}
 
-              {userMode === 'admin' && isSetupComplete() && (
-                <InviteManager />
+              {userMode === 'admin' && (isSetupComplete() || proxySessionId) && (
+                <>
+                  <View style={styles.connectedStatus}>
+                    <Text style={styles.connectedText}>✓ Team Connected</Text>
+                  </View>
+                  <InviteManager />
+                </>
               )}
 
               <TouchableOpacity
@@ -467,20 +459,13 @@ export default function SettingsScreen({ navigation }) {
               </Text>
 
               <View style={styles.configRow}>
-                <Text style={styles.configLabel}>Script URL:</Text>
-                <Text style={styles.configValue} numberOfLines={1}>
-                  {config.scriptUrl ? '✓ Configured' : '✗ Not configured'}
-                </Text>
-              </View>
-
-              <View style={styles.configRow}>
                 <Text style={styles.configLabel}>Folder ID:</Text>
                 <Text style={styles.configValue} numberOfLines={1}>
                   {config.folderId ? '✓ Configured' : '✗ Not configured'}
                 </Text>
               </View>
 
-              {(!config.scriptUrl || !config.folderId) && (
+              {!config.folderId && (
                 <View style={styles.warningBox}>
                   <Text style={styles.warningText}>
                     ⚠️ Configuration missing for {selectedLocationObj.name}. Please check environment variables.
@@ -911,5 +896,17 @@ export default function SettingsScreen({ navigation }) {
         color: COLORS.TEXT,
         fontSize: 16,
         fontWeight: '600'
+      },
+      connectedStatus: {
+        backgroundColor: '#d4edda',
+        padding: 12,
+        borderRadius: 8,
+        marginBottom: 15,
+        alignItems: 'center',
+      },
+      connectedText: {
+        color: '#155724',
+        fontSize: 14,
+        fontWeight: '600',
       },
     });
