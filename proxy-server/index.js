@@ -88,6 +88,15 @@ app.post('/api/admin/init', async (req, res) => {
         code: tokenError.code,
         response: tokenError.response?.data
       });
+
+      // Log full error details for redirect_uri_mismatch to help debug
+      if (tokenError.response?.data?.error === 'redirect_uri_mismatch') {
+        console.error('REDIRECT URI MISMATCH DETAILS:');
+        console.error('- This means the serverAuthCode was generated with a specific redirect URI');
+        console.error('- You need to add that redirect URI to Google Cloud Console');
+        console.error('- For iOS apps, the redirect URI is usually: com.googleusercontent.apps.IOS_CLIENT_ID:/oauth2redirect');
+        console.error('- Full error:', JSON.stringify(tokenError.response?.data, null, 2));
+      }
       
       // Provide more specific error messages
       if (tokenError.response?.data?.error === 'invalid_grant') {
