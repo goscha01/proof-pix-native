@@ -22,18 +22,23 @@ const SESSION_TTL = 7 * 24 * 60 * 60;
  */
 app.post('/api/admin/init', async (req, res) => {
   try {
-    const { folderId, serverAuthCode } = req.body;
+    const { folderId, serverAuthCode, clientId: requestedClientId } = req.body;
 
     if (!folderId || !serverAuthCode) {
       return res.status(400).json({ error: 'Missing folderId or serverAuthCode' });
     }
 
-    // Check if environment variables are set
-    // Try multiple possible variable names for compatibility
+    // IMPORTANT: Always use Web Client ID for server-side token exchange
+    // iOS Client IDs don't have client secrets, so they can't be used for server-side exchange
+    // The serverAuthCode from iOS can be exchanged with Web Client ID if they're in the same OAuth project
+    // We ignore the requestedClientId and always use Web Client ID for server-side exchange
     const clientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 
                      process.env.GOOGLE_WEB_CLIENT_ID ||
                      process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    
+    console.log(`[INIT] Always using Web Client ID for server-side token exchange: ${clientId ? clientId.substring(0, 20) + '...' : 'MISSING'}`);
+    console.log(`[INIT] Note: serverAuthCode from any platform can be exchanged with Web Client ID if in same OAuth project`);
     
     console.log('Environment check:', {
       hasClientId: !!clientId,
@@ -56,18 +61,28 @@ app.post('/api/admin/init', async (req, res) => {
     }
 
     console.log('Exchanging serverAuthCode for tokens...');
-    console.log('Client ID:', clientId.substring(0, 20) + '...');
+    console.log('Client ID being used:', clientId.substring(0, 20) + '...');
+    console.log('Full Client ID:', clientId);
+    console.log('ServerAuthCode length:', serverAuthCode?.length || 0);
 
     // Exchange serverAuthCode for tokens
+    // IMPORTANT: For iOS/Android, the redirect URI must match the one used during sign-in
+    // For mobile apps using native Google Sign-In, the redirect URI is typically empty or a special mobile URI
+    // For server-side token exchange from mobile serverAuthCode, we should NOT include a redirect URI
+    // or use a postmessage redirect (standard for mobile OAuth flows)
     const oauth2Client = new google.auth.OAuth2(
       clientId,
-      clientSecret
+      clientSecret,
+      'postmessage' // Standard redirect URI for mobile OAuth server-side token exchange
     );
+
+    console.log(`[INIT] Using redirect URI: postmessage (standard for mobile OAuth)`);
 
     let tokens;
     try {
       const tokenResponse = await oauth2Client.getToken(serverAuthCode);
       tokens = tokenResponse.tokens;
+      console.log('[INIT] Token exchange successful. Token keys:', Object.keys(tokens));
     } catch (tokenError) {
       console.error('Token exchange error:', {
         message: tokenError.message,
@@ -82,10 +97,28 @@ app.post('/api/admin/init', async (req, res) => {
         });
       }
       
+      if (tokenError.response?.data?.error === 'invalid_client') {
+        return res.status(400).json({ 
+          error: 'Invalid client. Please check that the Client ID and Secret are correct, and that the redirect URI is added to authorized redirect URIs in Google Cloud Console.',
+          details: tokenError.response.data,
+          redirectUri: redirectUri,
+          hint: `In Google Cloud Console → OAuth Client → Authorized redirect URIs, add: ${redirectUri}`
+        });
+      }
+      
       if (tokenError.response?.data?.error === 'invalid_request') {
         return res.status(400).json({ 
           error: 'Invalid request. Please check that the client ID and secret are correct in Vercel environment variables.',
           details: tokenError.response.data
+        });
+      }
+      
+      if (tokenError.response?.data?.error === 'redirect_uri_mismatch') {
+        return res.status(400).json({ 
+          error: 'Redirect URI mismatch. Please add the proxy server URL to authorized redirect URIs in Google Cloud Console for the Web Client ID.',
+          details: tokenError.response.data,
+          redirectUri: redirectUri,
+          hint: `Google Cloud Console → APIs & Services → Credentials → Your Web Client ID → Authorized redirect URIs → Add: ${redirectUri}`
         });
       }
       
@@ -97,21 +130,43 @@ app.post('/api/admin/init', async (req, res) => {
     if (!refreshToken) {
       console.error('Failed to obtain refresh token from Google.');
       console.error('Tokens received:', Object.keys(tokens));
-      return res.status(400).json({ 
-        error: 'Failed to obtain refresh token. The user may need to re-grant offline access. Make sure offlineAccess: true is set in Google Sign-In configuration.' 
+      console.error('This can happen if:');
+      console.error('1. offlineAccess is not set to true in Google Sign-In config');
+      console.error('2. The user previously granted access and Google is reusing the same session');
+      console.error('3. The serverAuthCode was already used or has expired');
+      console.error('Solution: Have the admin sign out completely and sign in again from Settings');
+      return res.status(400).json({
+        error: 'Failed to obtain refresh token. Please sign out completely in Settings and sign in again. If testing on the same device, this is expected - the refresh token is only issued once per account.',
+        hint: 'If you are the admin testing as a team member on the same device, the refresh token may have already been issued. Try using a different Google account or device for testing.'
       });
     }
 
     // Generate admin session ID
     const sessionId = generateSessionId();
 
-    // Store the folderId, refreshToken, and an empty invite token list for this session
+    // Store the folderId, refreshToken, clientId used, and an empty invite token list for this session
+    // This ensures we use the correct Client ID/Secret when refreshing tokens
     const sessionData = {
       folderId,
       refreshToken,
+      clientId, // Store which client ID was used for this session
       inviteTokens: [],
     };
+    
+    console.log(`[INIT] Storing session with refresh token (length: ${refreshToken.length})`);
+    console.log(`[INIT] Storing Client ID with session: ${clientId.substring(0, 20)}...`);
     await kv.set(`session:${sessionId}`, sessionData, { ex: SESSION_TTL });
+    
+    // Verify the token was stored correctly by reading it back
+    const verifySession = await kv.get(`session:${sessionId}`);
+    if (verifySession && verifySession.refreshToken) {
+      console.log(`[INIT] Verified refresh token stored correctly (length: ${verifySession.refreshToken.length})`);
+      if (verifySession.refreshToken !== refreshToken) {
+        console.error(`[INIT] WARNING: Refresh token mismatch! Original length: ${refreshToken.length}, Stored length: ${verifySession.refreshToken.length}`);
+      }
+    } else {
+      console.error(`[INIT] ERROR: Refresh token not found in stored session!`);
+    }
 
     console.log(`Admin session created in KV with refresh token: ${sessionId}`);
 
@@ -289,14 +344,50 @@ app.post('/api/prepare/:sessionId', async (req, res) => {
       return res.status(400).json({ error: 'Admin session is missing the required refresh token. Please have the admin re-authenticate.' });
     }
 
-    // Initialize Google OAuth2 client
+    // Get the client ID that was used for this session
+    const sessionClientId = session.clientId || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+    const sessionClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    
+    console.log(`[PREPARE] Using Client ID for session: ${sessionClientId.substring(0, 20)}...`);
+    
+    // Initialize Google OAuth2 client with the correct Client ID for this session
     const oauth2Client = new google.auth.OAuth2(
-      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET
+      sessionClientId,
+      sessionClientSecret
     );
     oauth2Client.setCredentials({
       refresh_token: session.refreshToken,
     });
+    
+    // Explicitly refresh the access token before using Drive API
+    try {
+      const { credentials } = await oauth2Client.refreshAccessToken();
+      oauth2Client.setCredentials(credentials);
+      
+      // If a new refresh token was provided, update it in the session
+      if (credentials.refresh_token && credentials.refresh_token !== session.refreshToken) {
+        console.log('New refresh token received, updating session');
+        await kv.set(`session:${sessionId}`, {
+          ...session,
+          refreshToken: credentials.refresh_token
+        });
+      }
+    } catch (refreshError) {
+      console.error('Failed to refresh access token:', {
+        message: refreshError.message,
+        code: refreshError.code,
+        response: refreshError.response?.data
+      });
+      
+      if (refreshError.response?.data?.error === 'invalid_grant') {
+        return res.status(500).json({ 
+          error: 'invalid_grant',
+          message: 'The admin\'s Google account session has expired. Please have the admin re-authenticate in Settings.'
+        });
+      }
+      
+      throw refreshError;
+    }
 
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
@@ -365,12 +456,16 @@ app.post('/api/upload/:sessionId', async (req, res) => {
     // Get admin session from Vercel KV
     const session = await kv.get(`session:${sessionId}`);
     if (!session) {
+      console.error(`[UPLOAD] Session not found: ${sessionId}`);
       return res.status(404).json({ error: 'Session not found' });
     }
 
     if (!session.refreshToken) {
+      console.error(`[UPLOAD] Session missing refresh token: ${sessionId}`, { sessionKeys: Object.keys(session) });
       return res.status(400).json({ error: 'Admin session is missing the required refresh token. Please have the admin re-authenticate.' });
     }
+    
+    console.log(`[UPLOAD] Session found for ${sessionId}, refresh token length: ${session.refreshToken?.length || 0}`);
     
     // If token is provided, validate it (for team member uploads)
     // If token is not provided, assume it's an admin upload
@@ -382,14 +477,67 @@ app.post('/api/upload/:sessionId', async (req, res) => {
       }
     }
     
-    // Initialize Google OAuth2 client and set credentials to get a new access token
+    // Get the client ID and secret that were used for this session
+    // If not stored, fall back to Web Client ID (for backward compatibility)
+    const sessionClientId = session.clientId || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+    const sessionClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    
+    console.log(`[UPLOAD] Session Client ID: ${sessionClientId ? sessionClientId.substring(0, 20) + '...' : 'MISSING'}`);
+    console.log(`[UPLOAD] Session has clientId stored: ${!!session.clientId}`);
+    console.log(`[UPLOAD] Full stored Client ID: ${session.clientId || 'NOT STORED'}`);
+    console.log(`[UPLOAD] Refresh token length: ${session.refreshToken?.length || 0}`);
+    console.log(`[UPLOAD] Refresh token preview: ${session.refreshToken ? session.refreshToken.substring(0, 20) + '...' : 'MISSING'}`);
+    
+    // Initialize Google OAuth2 client with the correct Client ID for this session
     const oauth2Client = new google.auth.OAuth2(
-      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET
+      sessionClientId,
+      sessionClientSecret
     );
     oauth2Client.setCredentials({
       refresh_token: session.refreshToken,
     });
+    
+    // Explicitly refresh the access token before using Drive API
+    // This ensures we have a valid access token and catches refresh errors early
+    console.log(`[UPLOAD] Attempting to refresh access token with refresh token length: ${session.refreshToken?.length || 0}`);
+    try {
+      const { credentials } = await oauth2Client.refreshAccessToken();
+      oauth2Client.setCredentials(credentials);
+      console.log(`[UPLOAD] Successfully refreshed access token`);
+      
+      // If a new refresh token was provided, update it in the session
+      if (credentials.refresh_token && credentials.refresh_token !== session.refreshToken) {
+        console.log('[UPLOAD] New refresh token received, updating session');
+        await kv.set(`session:${sessionId}`, {
+          ...session,
+          refreshToken: credentials.refresh_token
+        });
+      }
+    } catch (refreshError) {
+      console.error('[UPLOAD] Failed to refresh access token:', {
+        message: refreshError.message,
+        code: refreshError.code,
+        response: refreshError.response?.data,
+        refreshTokenLength: session.refreshToken?.length || 0,
+        refreshTokenPreview: session.refreshToken ? session.refreshToken.substring(0, 20) + '...' : 'MISSING'
+      });
+      
+      if (refreshError.response?.data?.error === 'invalid_grant') {
+        // Check if the refresh token in the session matches what we're trying to use
+        const verifySession = await kv.get(`session:${sessionId}`);
+        if (verifySession && verifySession.refreshToken !== session.refreshToken) {
+          console.error('[UPLOAD] Refresh token mismatch detected! Session may have been corrupted.');
+        }
+        
+        return res.status(500).json({ 
+          success: false,
+          error: 'invalid_grant',
+          message: 'Upload failed: The admin\'s Google account session has expired. Please have the admin re-authenticate in Settings.'
+        });
+      }
+      
+      throw refreshError;
+    }
     
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
@@ -458,16 +606,58 @@ app.post('/api/upload/:sessionId', async (req, res) => {
     const stream = Readable.from(buffer);
 
     // Upload to Google Drive
-    const response = await drive.files.create({
-      requestBody: {
-        name: filename,
-        parents: [targetFolderId]
-      },
-      media: {
-        mimeType: 'image/jpeg',
-        body: stream
+    let response;
+    try {
+      response = await drive.files.create({
+        requestBody: {
+          name: filename,
+          parents: [targetFolderId]
+        },
+        media: {
+          mimeType: 'image/jpeg',
+          body: stream
+        }
+      });
+    } catch (uploadError) {
+      console.error('Drive API upload error:', {
+        message: uploadError.message,
+        code: uploadError.code,
+        response: uploadError.response?.data
+      });
+      
+      // Handle token refresh errors
+      if (uploadError.message?.includes('invalid_grant') || 
+          uploadError.response?.data?.error === 'invalid_grant' ||
+          uploadError.code === 401) {
+        // Try to get a fresh access token explicitly
+        try {
+          const { credentials } = await oauth2Client.refreshAccessToken();
+          oauth2Client.setCredentials(credentials);
+          
+          // Retry the upload with refreshed token
+          response = await drive.files.create({
+            requestBody: {
+              name: filename,
+              parents: [targetFolderId]
+            },
+            media: {
+              mimeType: 'image/jpeg',
+              body: Readable.from(buffer) // Create new stream for retry
+            }
+          });
+        } catch (refreshError) {
+          console.error('Token refresh failed:', refreshError.message);
+          return res.status(500).json({ 
+            success: false,
+            error: 'invalid_grant',
+            message: 'Upload failed: The admin\'s Google account session has expired. Please have the admin re-authenticate in Settings.'
+          });
+        }
+      } else {
+        // Re-throw other errors
+        throw uploadError;
       }
-    });
+    }
 
     console.log(`File uploaded successfully: ${filename} (${response.data.id}) to folder ${targetFolderId}`);
 

@@ -50,14 +50,19 @@ class GoogleAuthService {
         'https://www.googleapis.com/auth/userinfo.profile',
         'https://www.googleapis.com/auth/drive', // Include Drive scope here for iOS
       ];
-      
+
       GoogleSignin.configure({
-        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+        webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID, // MUST be Web Client ID for serverAuthCode
         iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
         scopes: defaultScopes, // Set scopes in configure() for iOS to show in consent screen
-        offlineAccess: true,
-        forceCodeForRefreshToken: true, // Force showing consent screen
+        offlineAccess: true, // Required to get serverAuthCode
+        forceCodeForRefreshToken: true, // Force showing consent screen to get refresh token
       });
+
+      console.log('[AUTH] GoogleSignin configured with:');
+      console.log('- webClientId:', process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID?.substring(0, 20) + '...');
+      console.log('- offlineAccess: true');
+      console.log('- forceCodeForRefreshToken: true');
     }
   }
 
@@ -156,10 +161,16 @@ class GoogleAuthService {
         try {
           const serverAuthCode = response?.serverAuthCode || response?.data?.serverAuthCode;
           if (serverAuthCode) {
+            console.log('[AUTH] ✅ serverAuthCode obtained from Google Sign-In');
+            console.log('[AUTH] serverAuthCode length:', serverAuthCode.length);
             console.log('[AUTH] Storing serverAuthCode for proxy session');
             await AsyncStorage.setItem(STORAGE_KEYS.SERVER_AUTH_CODE, serverAuthCode);
+            console.log('[AUTH] serverAuthCode stored successfully');
           } else {
-            console.warn('[AUTH] No serverAuthCode found in sign-in response');
+            console.error('[AUTH] ⚠️ CRITICAL: No serverAuthCode found in sign-in response!');
+            console.error('[AUTH] Response structure:', Object.keys(response));
+            console.error('[AUTH] This means offlineAccess is not working properly');
+            console.error('[AUTH] Check: 1) offlineAccess: true in configure(), 2) Web Client ID is set, 3) User granted offline access');
           }
         } catch (e) {
           console.error('[AUTH] Error storing serverAuthCode:', e);
@@ -426,6 +437,20 @@ class GoogleAuthService {
       console.error('[AUTH] Error reading serverAuthCode from storage:', e);
     }
     return null;
+  }
+
+  /**
+   * Clear the stored serverAuthCode
+   * This should be called after successfully using the code, as it's a one-time code
+   */
+  async clearServerAuthCode() {
+    try {
+      await AsyncStorage.removeItem(STORAGE_KEYS.SERVER_AUTH_CODE);
+      console.log('[AUTH] Cleared serverAuthCode from storage');
+    } catch (e) {
+      console.error('[AUTH] Error clearing serverAuthCode:', e);
+      throw e;
+    }
   }
 }
 
