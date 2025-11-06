@@ -3,6 +3,7 @@
  * Handles communication with the ProofPix proxy server
  */
 
+import { Platform } from 'react-native';
 import { PROXY_SERVER_URL } from '../config/proxy';
 import googleAuthService from './googleAuthService';
 
@@ -24,6 +25,21 @@ class ProxyService {
       }
       console.log('[PROXY] Got serverAuthCode, length:', serverAuthCode.length);
 
+      // IMPORTANT: Always use Web Client ID for server-side token exchange
+      // iOS Client IDs don't have client secrets, so they can't be used for server-side exchange
+      // However, the serverAuthCode from iOS CAN be exchanged with Web Client ID
+      // if both clients are in the same OAuth project (which they should be)
+      // The serverAuthCode is not tied to a specific Client ID - it can be exchanged
+      // with any Client ID in the same OAuth project that has a client secret
+      const clientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+      
+      if (!clientId) {
+        throw new Error('Missing Web Client ID. Please check EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in environment variables.');
+      }
+      
+      console.log(`[PROXY] Platform: ${Platform.OS}, Using Web Client ID for server-side token exchange: ${clientId.substring(0, 20)}...`);
+      console.log(`[PROXY] Note: serverAuthCode from ${Platform.OS} can be exchanged with Web Client ID if they're in the same OAuth project`);
+
       const url = `${PROXY_SERVER_URL}/api/admin/init`;
       console.log('[PROXY] Making request to:', url);
       
@@ -35,6 +51,7 @@ class ProxyService {
         body: JSON.stringify({
           folderId,
           serverAuthCode,
+          clientId, // Pass the Client ID so server knows which one to use
         }),
       });
 
@@ -49,6 +66,15 @@ class ProxyService {
 
       const data = await response.json();
       console.log('[PROXY] Session initialized successfully:', data.sessionId);
+
+      // Clear the serverAuthCode after successful use (it's a one-time code)
+      // This prevents it from being reused if initializeAdminSession is called again
+      try {
+        await googleAuthService.clearServerAuthCode();
+        console.log('[PROXY] Cleared serverAuthCode after successful session initialization');
+      } catch (clearError) {
+        console.warn('[PROXY] Failed to clear serverAuthCode (non-critical):', clearError.message);
+      }
 
       return {
         sessionId: data.sessionId
@@ -206,6 +232,34 @@ class ProxyService {
     } catch (error) {
       console.error('[PROXY] Error preparing album folder:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Validate if a proxy session is still active and valid
+   * @param {string} sessionId - Proxy session ID
+   * @returns {Promise<{valid: boolean, message?: string, error?: string}>}
+   */
+  async validateSession(sessionId) {
+    try {
+      console.log('[PROXY] Validating session:', sessionId);
+
+      const response = await fetch(`${PROXY_SERVER_URL}/api/admin/${sessionId}/validate`, {
+        method: 'GET',
+      });
+
+      console.log('[PROXY] Validation response status:', response.status);
+
+      const data = await response.json();
+      console.log('[PROXY] Validation result:', data);
+
+      return data;
+    } catch (error) {
+      console.error('[PROXY] Error validating session:', error);
+      return {
+        valid: false,
+        error: error.message
+      };
     }
   }
 

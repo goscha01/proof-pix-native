@@ -701,19 +701,93 @@ app.post('/api/upload/:sessionId', async (req, res) => {
 });
 
 /**
+ * Validate session endpoint: Check if a session exists and is valid
+ * GET /api/admin/:sessionId/validate
+ */
+app.get('/api/admin/:sessionId/validate', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await kv.get(`session:${sessionId}`);
+    if (!session) {
+      return res.status(404).json({
+        valid: false,
+        error: 'Session not found'
+      });
+    }
+
+    if (!session.refreshToken) {
+      return res.status(400).json({
+        valid: false,
+        error: 'Session exists but missing refresh token'
+      });
+    }
+
+    // Try to refresh the access token to verify the session is still valid
+    const sessionClientId = session.clientId || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+    const sessionClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+
+    const oauth2Client = new google.auth.OAuth2(
+      sessionClientId,
+      sessionClientSecret
+    );
+    oauth2Client.setCredentials({
+      refresh_token: session.refreshToken,
+    });
+
+    try {
+      const { credentials } = await oauth2Client.refreshAccessToken();
+
+      // If we got here, the session is valid!
+      // Update the refresh token if a new one was provided
+      if (credentials.refresh_token && credentials.refresh_token !== session.refreshToken) {
+        await kv.set(`session:${sessionId}`, {
+          ...session,
+          refreshToken: credentials.refresh_token
+        }, { ex: SESSION_TTL });
+      }
+
+      res.json({
+        valid: true,
+        message: 'Session is valid and active',
+        tokenCount: session.inviteTokens?.length || 0
+      });
+    } catch (refreshError) {
+      console.error('Session validation failed:', refreshError.message);
+
+      if (refreshError.response?.data?.error === 'invalid_grant') {
+        return res.status(401).json({
+          valid: false,
+          error: 'invalid_grant',
+          message: 'Session has expired. Please re-authenticate.'
+        });
+      }
+
+      throw refreshError;
+    }
+  } catch (error) {
+    console.error('Error validating session:', error);
+    res.status(500).json({
+      valid: false,
+      error: error.message
+    });
+  }
+});
+
+/**
  * Health check endpoint
  */
 app.get('/health', (req, res) => {
   // Check environment variables (without exposing sensitive values)
-  const hasClientId = !!(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 
+  const hasClientId = !!(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ||
                          process.env.GOOGLE_WEB_CLIENT_ID ||
                          process.env.GOOGLE_CLIENT_ID);
   const hasClientSecret = !!process.env.GOOGLE_CLIENT_SECRET;
   const hasKvUrl = !!(process.env.VERCEL_KV_REST_API_URL || process.env.KV_REST_API_URL);
   const hasKvToken = !!(process.env.VERCEL_KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN);
-  
-  res.json({ 
-    status: 'ok', 
+
+  res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     config: {
       hasOAuthCredentials: hasClientId && hasClientSecret,
