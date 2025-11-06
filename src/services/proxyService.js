@@ -40,7 +40,8 @@ class ProxyService {
       console.log(`[PROXY] Platform: ${Platform.OS}, Using Web Client ID for server-side token exchange: ${clientId.substring(0, 20)}...`);
       console.log(`[PROXY] Note: serverAuthCode from ${Platform.OS} can be exchanged with Web Client ID if they're in the same OAuth project`);
 
-      const url = `${PROXY_SERVER_URL}/api/admin/init`;
+      // Add cache-busting parameter to ensure we hit the latest deployment
+      const url = `${PROXY_SERVER_URL}/api/admin/init?v=${Date.now()}`;
       console.log('[PROXY] Making request to:', url);
       
       const response = await fetch(url, {
