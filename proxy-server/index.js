@@ -147,6 +147,30 @@ app.post('/api/admin/init', async (req, res) => {
       });
     }
 
+    console.log(`[INIT] ✅ Got refresh token! Length: ${refreshToken.length}`);
+    console.log(`[INIT] Refresh token preview: ${refreshToken.substring(0, 30)}...`);
+    console.log(`[INIT] Testing refresh token immediately...`);
+
+    // TEST: Try to use the refresh token immediately to verify it works
+    try {
+      const testClient = new google.auth.OAuth2(clientId, clientSecret);
+      testClient.setCredentials({ refresh_token: refreshToken });
+      const { credentials: testCreds } = await testClient.refreshAccessToken();
+      console.log(`[INIT] ✅ Refresh token test PASSED! Got access token with length: ${testCreds.access_token.length}`);
+    } catch (testError) {
+      console.error(`[INIT] ❌ Refresh token test FAILED immediately after exchange!`);
+      console.error(`[INIT] This means the refresh token Google gave us is already invalid`);
+      console.error(`[INIT] Error:`, {
+        message: testError.message,
+        code: testError.code,
+        error: testError.response?.data?.error
+      });
+      return res.status(500).json({
+        error: 'The refresh token obtained from Google is invalid. This may be a Google OAuth configuration issue.',
+        details: testError.response?.data
+      });
+    }
+
     // Generate admin session ID
     const sessionId = generateSessionId();
 
