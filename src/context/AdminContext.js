@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import googleAuthService from '../services/googleAuthService';
+import proxyService from '../services/proxyService';
 import { useSettings } from './SettingsContext';
 
 const STORAGE_KEYS = {
@@ -11,6 +12,7 @@ const STORAGE_KEYS = {
   ADMIN_PLAN_LIMIT: '@admin_plan_limit',
   ADMIN_USER_MODE: '@admin_user_mode',
   TEAM_MEMBER_INFO: '@team_member_info', // For team members
+  PROXY_SESSION_ID: '@proxy_session_id', // Proxy server session ID
 };
 
 const AdminContext = createContext();
@@ -30,7 +32,9 @@ export function AdminProvider({ children }) {
   const [planLimit, setPlanLimit] = useState(5); // Default plan limit
   const [isLoading, setIsLoading] = useState(true);
   const [userMode, setUserMode] = useState(null); // 'individual', 'admin', or 'team_member'
-  const [teamInfo, setTeamInfo] = useState(null); // { scriptUrl, token }
+  const [teamInfo, setTeamInfo] = useState(null);
+  const [proxySessionId, setProxySessionId] = useState(null); // Proxy server session ID // { scriptUrl, token }
+  const [isInitializingProxy, setIsInitializingProxy] = useState(false); // Guard to prevent concurrent initialization
 
   // Load saved admin data on mount
   useEffect(() => {
@@ -56,6 +60,12 @@ export function AdminProvider({ children }) {
       // Load user mode
       const storedMode = await AsyncStorage.getItem(STORAGE_KEYS.ADMIN_USER_MODE);
       setUserMode(storedMode);
+
+      // Load proxy session ID (for both individual and admin modes)
+      const storedProxySessionId = await AsyncStorage.getItem(STORAGE_KEYS.PROXY_SESSION_ID);
+      if (storedProxySessionId) {
+        setProxySessionId(storedProxySessionId);
+      }
 
       // Load admin-specific data only if in admin mode and authenticated
       if (storedMode === 'admin' && storedUser) {
@@ -278,9 +288,68 @@ export function AdminProvider({ children }) {
         STORAGE_KEYS.ADMIN_INVITE_TOKENS,
         STORAGE_KEYS.ADMIN_PLAN_LIMIT,
         STORAGE_KEYS.TEAM_MEMBER_INFO,
+        STORAGE_KEYS.PROXY_SESSION_ID,
       ]);
+      setProxySessionId(null);
     } catch (error) {
       throw error;
+    }
+  };
+
+  /**
+   * Initialize or retrieve proxy session ID
+   * @param {string} folderId - Google Drive folder ID
+   * @returns {Promise<string|null>} - Proxy session ID or null if failed
+   */
+  const initializeProxySession = async (folderId) => {
+    // Prevent concurrent initialization calls
+    if (isInitializingProxy) {
+      console.log('[ADMIN] Proxy session initialization already in progress, waiting...');
+      // Wait a bit and check again
+      await new Promise(resolve => setTimeout(resolve, 500));
+      if (proxySessionId) {
+        return proxySessionId;
+      }
+      return null;
+    }
+
+    try {
+      // If we already have a session ID, return it
+      if (proxySessionId) {
+        console.log('[ADMIN] Using existing proxy session ID');
+        return proxySessionId;
+      }
+
+      // Check storage for existing session
+      const storedSessionId = await AsyncStorage.getItem(STORAGE_KEYS.PROXY_SESSION_ID);
+      if (storedSessionId) {
+        console.log('[ADMIN] Found stored proxy session ID');
+        setProxySessionId(storedSessionId);
+        return storedSessionId;
+      }
+
+      // Set guard to prevent concurrent calls
+      setIsInitializingProxy(true);
+      
+      // Initialize new session via proxy service
+      console.log('[ADMIN] Initializing new proxy session');
+      const result = await proxyService.initializeAdminSession(folderId);
+      
+      if (result && result.sessionId) {
+        await AsyncStorage.setItem(STORAGE_KEYS.PROXY_SESSION_ID, result.sessionId);
+        setProxySessionId(result.sessionId);
+        console.log('[ADMIN] Proxy session initialized successfully');
+        setIsInitializingProxy(false);
+        return result.sessionId;
+      }
+
+      throw new Error('Failed to initialize proxy session');
+    } catch (error) {
+      console.error('[ADMIN] Error initializing proxy session:', error);
+      setIsInitializingProxy(false);
+      // Don't throw - return null to prevent infinite loops
+      // The caller should handle the null case
+      return null;
     }
   };
 
@@ -317,6 +386,7 @@ export function AdminProvider({ children }) {
     isLoading,
     userMode,
     teamInfo,
+    proxySessionId,
     isGoogleSignInAvailable: googleAuthService.isAvailable(),
 
     // Actions
@@ -330,6 +400,7 @@ export function AdminProvider({ children }) {
     removeInviteToken,
     updatePlanLimit,
     clearAdminData,
+    initializeProxySession,
 
     // Helpers
     isSetupComplete,

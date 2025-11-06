@@ -47,7 +47,7 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 export default function AllPhotosScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
   const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels, userPlan } = useSettings();
-  const { userMode, teamInfo, isAuthenticated, folderId, scriptUrl } = useAdmin(); // Get userMode, teamInfo, and auth info
+  const { userMode, teamInfo, isAuthenticated, folderId, scriptUrl, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
@@ -464,7 +464,7 @@ export default function AllPhotosScreen({ navigation, route }) {
       const shouldUseDirectDrive = userMode === 'individual' || 
         (isAuthenticated && (userPlan === 'pro' || userPlan === 'business' || userPlan === 'enterprise') && !teamInfo);
       
-      // For individual/Pro/Business/Enterprise users - use their authenticated Google Drive
+      // For individual/Pro/Business/Enterprise users - use their authenticated Google Drive via proxy
       if (shouldUseDirectDrive) {
         try {
           const userFolderId = await googleDriveService.findOrCreateProofPixFolder();
@@ -472,16 +472,23 @@ export default function AllPhotosScreen({ navigation, route }) {
             Alert.alert('Error', 'Could not access Google Drive folder. Please sign in again.');
             return;
           }
-          // Use direct Drive API upload for Pro, Business, and Enterprise users
-          // We'll set a flag to use Drive API instead of Apps Script
+          // Initialize proxy session for uploads
+          const sessionId = await initializeProxySession(userFolderId);
+          if (!sessionId) {
+            Alert.alert('Error', 'Failed to initialize proxy session. Please try again.');
+            return;
+          }
+          // Use proxy server upload for Pro, Business, and Enterprise users
           config = { 
             folderId: userFolderId, 
-            scriptUrl: null, // No script URL for direct Drive API
-            useDirectDrive: true // Flag to indicate direct Drive API upload
+            scriptUrl: null, // No script URL for proxy upload
+            useDirectDrive: true, // Flag to indicate proxy server upload
+            sessionId: sessionId // Proxy session ID
           };
           uploadConfig = config; // Store for later use
         } catch (error) {
-          Alert.alert('Error', 'Failed to access Google Drive. Please sign in again.');
+          console.error('Error setting up proxy upload:', error);
+          Alert.alert('Error', `Failed to setup proxy upload: ${error.message}`);
           return;
         }
       } else {
@@ -508,8 +515,10 @@ export default function AllPhotosScreen({ navigation, route }) {
         return;
       }
 
-      // Generate album name without location
-      const albumName = createAlbumName(userName);
+      // Generate album name - use project's uploadId if available, otherwise generate new one
+      const activeProject = activeProjectId ? projects.find(p => p.id === activeProjectId) : null;
+      const projectUploadId = activeProject?.uploadId || null;
+      const albumName = createAlbumName(userName, new Date(), projectUploadId);
       // Scope uploads to the active project if one is selected
       const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
 
@@ -789,7 +798,8 @@ export default function AllPhotosScreen({ navigation, route }) {
         userName,
         flat: !useFolderStructure,
         uploadType: 'standard',
-        useDirectDrive: config?.useDirectDrive || false, // Pass the flag for direct Drive API
+        useDirectDrive: config?.useDirectDrive || false, // Pass the flag for proxy server upload
+        sessionId: config?.sessionId || null, // Pass the proxy session ID
       });
 
       // Show upload modal immediately

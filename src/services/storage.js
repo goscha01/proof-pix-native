@@ -619,7 +619,13 @@ export const saveProjects = async (projects) => {
 export const createProject = async (name) => {
   const list = await loadProjects();
   const id = Date.now().toString();
-  const project = { id, name, createdAt: Date.now() };
+  // Generate a unique upload identifier for this project (HHMMSS format)
+  const now = new Date();
+  const hours = now.getHours().toString().padStart(2, '0');
+  const minutes = now.getMinutes().toString().padStart(2, '0');
+  const seconds = now.getSeconds().toString().padStart(2, '0');
+  const uploadId = `${hours}${minutes}${seconds}`;
+  const project = { id, name, createdAt: Date.now(), uploadId };
   await saveProjects([project, ...list]);
   return project;
 };

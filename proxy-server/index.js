@@ -28,18 +28,78 @@ app.post('/api/admin/init', async (req, res) => {
       return res.status(400).json({ error: 'Missing folderId or serverAuthCode' });
     }
 
+    // Check if environment variables are set
+    // Try multiple possible variable names for compatibility
+    const clientId = process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 
+                     process.env.GOOGLE_WEB_CLIENT_ID ||
+                     process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    
+    console.log('Environment check:', {
+      hasClientId: !!clientId,
+      hasClientSecret: !!clientSecret,
+      clientIdLength: clientId?.length || 0,
+      clientSecretLength: clientSecret?.length || 0,
+      allEnvKeys: Object.keys(process.env).filter(k => k.includes('GOOGLE') || k.includes('CLIENT'))
+    });
+    
+    if (!clientId || !clientSecret) {
+      console.error('Missing OAuth credentials:', { 
+        hasClientId: !!clientId, 
+        hasClientSecret: !!clientSecret,
+        availableKeys: Object.keys(process.env).filter(k => k.includes('GOOGLE') || k.includes('CLIENT'))
+      });
+      return res.status(500).json({ 
+        error: 'Server configuration error: Missing OAuth credentials. Please check Vercel environment variables.',
+        hint: 'Required: EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID and GOOGLE_CLIENT_SECRET'
+      });
+    }
+
+    console.log('Exchanging serverAuthCode for tokens...');
+    console.log('Client ID:', clientId.substring(0, 20) + '...');
+
     // Exchange serverAuthCode for tokens
     const oauth2Client = new google.auth.OAuth2(
-      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
-      process.env.GOOGLE_CLIENT_SECRET
+      clientId,
+      clientSecret
     );
 
-    const { tokens } = await oauth2Client.getToken(serverAuthCode);
+    let tokens;
+    try {
+      const tokenResponse = await oauth2Client.getToken(serverAuthCode);
+      tokens = tokenResponse.tokens;
+    } catch (tokenError) {
+      console.error('Token exchange error:', {
+        message: tokenError.message,
+        code: tokenError.code,
+        response: tokenError.response?.data
+      });
+      
+      // Provide more specific error messages
+      if (tokenError.response?.data?.error === 'invalid_grant') {
+        return res.status(400).json({ 
+          error: 'The authorization code has expired or already been used. Please sign in again to get a new code.' 
+        });
+      }
+      
+      if (tokenError.response?.data?.error === 'invalid_request') {
+        return res.status(400).json({ 
+          error: 'Invalid request. Please check that the client ID and secret are correct in Vercel environment variables.',
+          details: tokenError.response.data
+        });
+      }
+      
+      throw tokenError;
+    }
+
     const refreshToken = tokens.refresh_token;
 
     if (!refreshToken) {
       console.error('Failed to obtain refresh token from Google.');
-      return res.status(400).json({ error: 'Failed to obtain refresh token. The user may need to re-grant offline access.' });
+      console.error('Tokens received:', Object.keys(tokens));
+      return res.status(400).json({ 
+        error: 'Failed to obtain refresh token. The user may need to re-grant offline access. Make sure offlineAccess: true is set in Google Sign-In configuration.' 
+      });
     }
 
     // Generate admin session ID
@@ -61,8 +121,18 @@ app.post('/api/admin/init', async (req, res) => {
       message: 'Admin session initialized',
     });
   } catch (error) {
-    console.error('Error initializing admin session:', error.response ? error.response.data : error.message);
-    res.status(500).json({ error: error.message });
+    console.error('Error initializing admin session:', {
+      message: error.message,
+      code: error.code,
+      response: error.response?.data,
+      stack: error.stack
+    });
+    
+    const errorMessage = error.response?.data?.error || error.message || 'Unknown error';
+    res.status(500).json({ 
+      error: errorMessage,
+      details: error.response?.data
+    });
   }
 });
 
@@ -127,18 +197,169 @@ app.delete('/api/admin/:sessionId/tokens/:token', async (req, res) => {
 });
 
 /**
- * Team member endpoint: Upload a photo
+ * Helper function to find or create a folder in Google Drive
+ * This function checks for existing folders and only creates if none exist
+ */
+async function findOrCreateFolder(drive, parentFolderId, folderName) {
+  try {
+    // Escape single quotes in folder name for the query
+    const escapedFolderName = folderName.replace(/'/g, "\\'");
+    
+    // Search for existing folder - be very specific to avoid duplicates
+    const response = await drive.files.list({
+      q: `mimeType='application/vnd.google-apps.folder' and name='${escapedFolderName}' and '${parentFolderId}' in parents and trashed=false`,
+      fields: 'files(id, name)',
+      spaces: 'drive',
+      pageSize: 10, // Limit results
+      orderBy: 'createdTime desc', // Prefer most recently created folder if duplicates exist
+    });
+
+    // If folder exists, return the first one (most recent if duplicates)
+    if (response.data.files && response.data.files.length > 0) {
+      const existingFolderId = response.data.files[0].id;
+      console.log(`Found existing folder: ${folderName} (${existingFolderId}) in parent ${parentFolderId}`);
+      
+      // If multiple folders with same name exist, log a warning and use the most recent
+      if (response.data.files.length > 1) {
+        console.warn(`WARNING: Multiple folders named "${folderName}" found in parent ${parentFolderId}. Using most recent: ${existingFolderId}`);
+        console.warn(`All duplicate folder IDs: ${response.data.files.map(f => f.id).join(', ')}`);
+      }
+      
+      return existingFolderId;
+    }
+
+    // Folder doesn't exist, create it
+    console.log(`Creating new folder: ${folderName} in parent ${parentFolderId}`);
+    const folderResponse = await drive.files.create({
+      requestBody: {
+        name: folderName,
+        mimeType: 'application/vnd.google-apps.folder',
+        parents: [parentFolderId],
+      },
+      fields: 'id, name',
+    });
+
+    console.log(`Created folder: ${folderName} (${folderResponse.data.id})`);
+    return folderResponse.data.id;
+  } catch (error) {
+    // If error is "duplicate" or "already exists", try to find it again
+    if (error.message && (error.message.includes('duplicate') || error.message.includes('already exists'))) {
+      console.log(`Folder creation returned duplicate error, searching again for: ${folderName}`);
+      try {
+        const retryResponse = await drive.files.list({
+          q: `mimeType='application/vnd.google-apps.folder' and name='${folderName.replace(/'/g, "\\'")}' and '${parentFolderId}' in parents and trashed=false`,
+          fields: 'files(id, name)',
+          spaces: 'drive',
+          orderBy: 'createdTime desc',
+        });
+        if (retryResponse.data.files && retryResponse.data.files.length > 0) {
+          console.log(`Found folder after retry: ${folderName} (${retryResponse.data.files[0].id})`);
+          return retryResponse.data.files[0].id;
+        }
+      } catch (retryError) {
+        console.error(`Retry search failed for ${folderName}:`, retryError);
+      }
+    }
+    console.error(`Error finding/creating folder ${folderName}:`, error);
+    throw error;
+  }
+}
+
+/**
+ * Prepare upload endpoint: Create album folder structure before parallel uploads
+ * POST /api/prepare/:sessionId
+ * Body: { albumName }
+ */
+app.post('/api/prepare/:sessionId', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { albumName } = req.body;
+
+    if (!albumName) {
+      return res.status(400).json({ error: 'Missing albumName' });
+    }
+
+    // Get admin session from Vercel KV
+    const session = await kv.get(`session:${sessionId}`);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    if (!session.refreshToken) {
+      return res.status(400).json({ error: 'Admin session is missing the required refresh token. Please have the admin re-authenticate.' });
+    }
+
+    // Initialize Google OAuth2 client
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+      process.env.GOOGLE_CLIENT_SECRET
+    );
+    oauth2Client.setCredentials({
+      refresh_token: session.refreshToken,
+    });
+
+    const drive = google.drive({ version: 'v3', auth: oauth2Client });
+
+    // Create or find album folder
+    console.log(`[PREPARE] Creating/finding album folder: ${albumName}`);
+    const albumFolderId = await findOrCreateFolder(drive, session.folderId, albumName);
+    console.log(`[PREPARE] Album folder ready: ${albumName} (${albumFolderId})`);
+
+    // Cache it in KV for parallel uploads
+    const albumCacheKey = `album:${sessionId}:${albumName}`;
+    await kv.set(albumCacheKey, albumFolderId, { ex: 3600 }); // 1 hour TTL
+    console.log(`[PREPARE] Cached album folder ID: ${albumFolderId}`);
+
+    res.json({
+      success: true,
+      albumFolderId,
+      albumName,
+      message: 'Album folder structure prepared'
+    });
+  } catch (error) {
+    console.error('[PREPARE] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Upload endpoint: Upload a photo (supports both admin and team member uploads)
  * POST /api/upload/:sessionId
- * Body: { token, filename, contentBase64 }
+ * Body: { 
+ *   token? (optional for admin uploads), 
+ *   filename, 
+ *   contentBase64,
+ *   albumName?,
+ *   room?,
+ *   type?,
+ *   format?,
+ *   location?,
+ *   cleanerName?,
+ *   flat? (boolean)
+ * }
  */
 app.post('/api/upload/:sessionId', async (req, res) => {
   try {
     const { sessionId } = req.params;
-    const { token, filename, contentBase64 } = req.body;
+    const { 
+      token, 
+      filename, 
+      contentBase64,
+      albumName,
+      room,
+      type,
+      format = 'default',
+      location,
+      cleanerName,
+      flat = false
+    } = req.body;
 
-    // Validate inputs
-    if (!token || !filename || !contentBase64) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    // Validate required inputs
+    if (!filename || !contentBase64) {
+      return res.status(400).json({ error: 'Missing required fields: filename and contentBase64' });
     }
 
     // Get admin session from Vercel KV
@@ -151,11 +372,14 @@ app.post('/api/upload/:sessionId', async (req, res) => {
       return res.status(400).json({ error: 'Admin session is missing the required refresh token. Please have the admin re-authenticate.' });
     }
     
-    // Validate invite token
-    const sessionTokens = new Set(session.inviteTokens);
-    if (!sessionTokens.has(token)) {
-      console.log(`Unauthorized token attempt: ${token}`);
-      return res.status(403).json({ error: 'Invalid invite token' });
+    // If token is provided, validate it (for team member uploads)
+    // If token is not provided, assume it's an admin upload
+    if (token) {
+      const sessionTokens = new Set(session.inviteTokens || []);
+      if (!sessionTokens.has(token)) {
+        console.log(`Unauthorized token attempt: ${token}`);
+        return res.status(403).json({ error: 'Invalid invite token' });
+      }
     }
     
     // Initialize Google OAuth2 client and set credentials to get a new access token
@@ -169,6 +393,66 @@ app.post('/api/upload/:sessionId', async (req, res) => {
     
     const drive = google.drive({ version: 'v3', auth: oauth2Client });
 
+    // Determine target folder ID based on upload parameters
+    let targetFolderId = session.folderId;
+
+    // If albumName is provided, create folder structure
+    if (albumName) {
+      console.log(`[FOLDER STRUCTURE] Creating folder structure for album: ${albumName}, type: ${type}, format: ${format}, flat: ${flat}`);
+      
+      // Use a separate KV key for album folder mapping to ensure atomicity across parallel uploads
+      // This ensures all uploads in the same batch use the same album folder, even when running in parallel
+      const albumCacheKey = `album:${sessionId}:${albumName}`;
+      let albumFolderId = await kv.get(albumCacheKey);
+      
+      if (!albumFolderId) {
+        // Create or find album folder (findOrCreateFolder handles duplicates by using the most recent)
+        albumFolderId = await findOrCreateFolder(drive, session.folderId, albumName);
+        console.log(`[FOLDER STRUCTURE] Album folder: ${albumName} (${albumFolderId})`);
+        
+        // Cache it in KV with a shorter TTL (1 hour) - just for this upload session
+        // This ensures all parallel uploads in the same batch use the same album folder
+        try {
+          await kv.set(albumCacheKey, albumFolderId, { ex: 3600 }); // 1 hour TTL
+          console.log(`[FOLDER STRUCTURE] Cached album folder ID for ${albumName}: ${albumFolderId}`);
+        } catch (cacheError) {
+          console.warn(`[FOLDER STRUCTURE] Failed to cache album folder (non-critical):`, cacheError.message);
+          // Continue anyway - the folder was found/created successfully
+        }
+      } else {
+        console.log(`[FOLDER STRUCTURE] Using cached album folder: ${albumName} (${albumFolderId})`);
+      }
+      
+      targetFolderId = albumFolderId;
+
+      // If not flat mode, create subfolder structure
+      // Organize by type first (before/after/combined), then by format if needed
+      if (!flat) {
+        // Always create type folder first (before/after/combined)
+        const folderName = type === 'mix' || type === 'combined' ? 'combined' : (type || 'general');
+        console.log(`[FOLDER STRUCTURE] Looking for type folder: ${folderName} in album ${albumName}`);
+        const typeFolderId = await findOrCreateFolder(drive, albumFolderId, folderName);
+        console.log(`[FOLDER STRUCTURE] Type folder: ${folderName} (${typeFolderId})`);
+        
+        // If format is not default, create formats subfolder within type folder
+        if (format !== 'default') {
+          console.log(`[FOLDER STRUCTURE] Format is not default (${format}), creating formats subfolder in ${folderName}`);
+          const formatsFolderId = await findOrCreateFolder(drive, typeFolderId, 'formats');
+          console.log(`[FOLDER STRUCTURE] Formats folder in ${folderName}: formats (${formatsFolderId})`);
+          targetFolderId = await findOrCreateFolder(drive, formatsFolderId, format);
+          console.log(`[FOLDER STRUCTURE] Final target folder: ${folderName}/formats/${format} (${targetFolderId})`);
+        } else {
+          // Default format goes directly in type folder
+          targetFolderId = typeFolderId;
+          console.log(`[FOLDER STRUCTURE] Default format, using type folder directly: ${folderName} (${targetFolderId})`);
+        }
+      } else {
+        console.log(`[FOLDER STRUCTURE] Flat mode enabled, uploading directly to album folder`);
+      }
+    }
+    
+    console.log(`[FOLDER STRUCTURE] Final upload target: ${targetFolderId}`);
+
     // Convert base64 to buffer and then to a readable stream
     const buffer = Buffer.from(contentBase64, 'base64');
     const stream = Readable.from(buffer);
@@ -177,7 +461,7 @@ app.post('/api/upload/:sessionId', async (req, res) => {
     const response = await drive.files.create({
       requestBody: {
         name: filename,
-        parents: [session.folderId]
+        parents: [targetFolderId]
       },
       media: {
         mimeType: 'image/jpeg',
@@ -185,15 +469,44 @@ app.post('/api/upload/:sessionId', async (req, res) => {
       }
     });
 
-    console.log(`File uploaded successfully: ${filename} (${response.data.id})`);
+    console.log(`File uploaded successfully: ${filename} (${response.data.id}) to folder ${targetFolderId}`);
+
+    // Build folder path for response
+    let folderPath = '';
+    if (albumName) {
+      if (flat) {
+        folderPath = albumName;
+      } else {
+        const folderName = type === 'mix' || type === 'combined' ? 'combined' : (type || 'general');
+        if (format !== 'default') {
+          folderPath = `${albumName}/${folderName}/formats/${format}/`;
+        } else {
+          folderPath = `${albumName}/${folderName}/`;
+        }
+      }
+    }
 
     res.json({
       success: true,
-      fileId: response.data.id
+      fileId: response.data.id,
+      fileName: filename,
+      albumName: albumName || null,
+      room: room || 'general',
+      type: type || null,
+      format: format || 'default',
+      location: location || null,
+      cleanerName: cleanerName || null,
+      folderPath: folderPath,
+      flatMode: !!flat,
+      message: 'Photo uploaded successfully'
     });
   } catch (error) {
     console.error('Error uploading file:', error.response ? error.response.data : error.message);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      success: false,
+      error: error.message,
+      message: `Upload failed: ${error.message}`
+    });
   }
 });
 
@@ -201,7 +514,27 @@ app.post('/api/upload/:sessionId', async (req, res) => {
  * Health check endpoint
  */
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  // Check environment variables (without exposing sensitive values)
+  const hasClientId = !!(process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || 
+                         process.env.GOOGLE_WEB_CLIENT_ID ||
+                         process.env.GOOGLE_CLIENT_ID);
+  const hasClientSecret = !!process.env.GOOGLE_CLIENT_SECRET;
+  const hasKvUrl = !!(process.env.VERCEL_KV_REST_API_URL || process.env.KV_REST_API_URL);
+  const hasKvToken = !!(process.env.VERCEL_KV_REST_API_TOKEN || process.env.KV_REST_API_TOKEN);
+  
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    config: {
+      hasOAuthCredentials: hasClientId && hasClientSecret,
+      hasKvConfig: hasKvUrl && hasKvToken,
+      clientIdSource: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ? 'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID' :
+                      process.env.GOOGLE_WEB_CLIENT_ID ? 'GOOGLE_WEB_CLIENT_ID' :
+                      process.env.GOOGLE_CLIENT_ID ? 'GOOGLE_CLIENT_ID' : 'none',
+      kvUrlSource: process.env.VERCEL_KV_REST_API_URL ? 'VERCEL_KV_REST_API_URL' :
+                   process.env.KV_REST_API_URL ? 'KV_REST_API_URL' : 'none'
+    }
+  });
 });
 
 /**

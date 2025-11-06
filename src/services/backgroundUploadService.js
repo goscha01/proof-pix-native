@@ -95,7 +95,8 @@ class BackgroundUploadService {
         cleanerName: upload.userName,
         batchSize: upload.items.length, // Upload all photos in parallel
         flat: upload.flat,
-        useDirectDrive: upload.config?.useDirectDrive || upload.useDirectDrive || false, // Pass flag for direct Drive API
+        useDirectDrive: upload.config?.useDirectDrive || upload.useDirectDrive || false, // Pass flag for proxy server upload
+        sessionId: upload.config?.sessionId || upload.sessionId || null, // Pass proxy session ID
         onProgress: (current, total) => {
           upload.progress = { current, total };
           this.notifyListeners();

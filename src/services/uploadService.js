@@ -5,6 +5,7 @@
 
 import * as FileSystem from 'expo-file-system/legacy';
 import googleDriveService from './googleDriveService';
+import proxyService from './proxyService';
 
 /**
  * Convert file URI to base64 data URL
@@ -99,15 +100,19 @@ export async function uploadPhoto({
   onProgress,
   abortSignal,
   flat = false,
-  useDirectDrive = false // Flag to use direct Drive API instead of Apps Script
+  useDirectDrive = false, // Flag to use proxy server instead of Apps Script
+  sessionId = null // Proxy server session ID (required for useDirectDrive)
 }) {
   try {
-    // For direct Drive API uploads (Pro/Business/Enterprise users), we don't need scriptUrl
+    // For proxy server uploads (Pro/Business/Enterprise users), we don't need scriptUrl
     if (useDirectDrive) {
       if (!folderId) {
-        throw new Error('Missing Google Drive folder ID for direct upload.');
+        throw new Error('Missing Google Drive folder ID for proxy upload.');
       }
-      // Use direct Drive API upload
+      if (!sessionId) {
+        throw new Error('Missing proxy session ID for proxy upload.');
+      }
+      // Use proxy server upload
       return await uploadPhotoToDriveDirect({
         imageDataUrl,
         filename,
@@ -118,7 +123,8 @@ export async function uploadPhoto({
         location,
         cleanerName,
         folderId,
-        flat
+        flat,
+        sessionId
       });
     }
     
@@ -194,7 +200,7 @@ export async function uploadPhoto({
 }
 
 /**
- * Upload a photo directly to Google Drive using Drive API (for Pro/Business/Enterprise users)
+ * Upload a photo via proxy server (for Pro/Business/Enterprise users)
  * @param {Object} params - Upload parameters
  * @param {string} params.imageDataUrl - Base64 data URL of the image
  * @param {string} params.filename - Filename for the uploaded image
@@ -206,6 +212,7 @@ export async function uploadPhoto({
  * @param {string} params.cleanerName - Cleaner's name
  * @param {string} params.folderId - Root folder ID (ProofPix-Uploads)
  * @param {boolean} params.flat - If true, upload directly to album folder (no subfolders)
+ * @param {string} params.sessionId - Proxy server session ID
  * @returns {Promise<Object>} - Upload result
  */
 async function uploadPhotoToDriveDirect({
@@ -218,9 +225,14 @@ async function uploadPhotoToDriveDirect({
   location,
   cleanerName,
   folderId,
-  flat = false
+  flat = false,
+  sessionId
 }) {
   try {
+    if (!sessionId) {
+      throw new Error('Proxy session ID is required for upload');
+    }
+
     // Get base64 data
     let base64String = imageDataUrl;
     if (imageDataUrl.startsWith('data:')) {
@@ -234,43 +246,36 @@ async function uploadPhotoToDriveDirect({
         : base64DataUrl;
     }
 
-    // Find or create album folder
-    const albumFolderId = await googleDriveService.findOrCreateAlbumFolder(folderId, albumName);
-    
-    let targetFolderId = albumFolderId;
-    
-    // Handle folder structure if not flat
-    if (!flat) {
-      if (format !== 'default') {
-        // Create formats folder and format subfolder
-        const formatsFolderId = await googleDriveService.findOrCreateSubfolder(albumFolderId, 'formats');
-        targetFolderId = await googleDriveService.findOrCreateSubfolder(formatsFolderId, format);
-      } else {
-        // Create type folder (before/after/combined)
-        const folderName = type === 'mix' || type === 'combined' ? 'combined' : type;
-        targetFolderId = await googleDriveService.findOrCreateSubfolder(albumFolderId, folderName);
-      }
-    }
-    
-    // Upload file to Drive
-    const result = await googleDriveService.uploadFile(base64String, filename, targetFolderId);
-    
-    return {
-      success: true,
-      fileId: result.fileId,
-      fileName: result.fileName,
+    // Upload via proxy server
+    const result = await proxyService.uploadPhotoAsAdmin({
+      sessionId,
+      filename,
+      contentBase64: base64String,
       albumName,
-      room: room || 'general',
+      room,
       type,
       format,
       location,
       cleanerName,
-      folderPath: `${albumName}/${flat ? '' : (format !== 'default' ? `formats/${format}/` : `${type === 'mix' || type === 'combined' ? 'combined' : type}/`)}`,
-      message: 'Photo uploaded successfully to Google Drive'
+      flat
+    });
+    
+    return {
+      success: true,
+      fileId: result.fileId,
+      fileName: result.fileName || filename,
+      albumName: result.albumName || albumName,
+      room: result.room || room || 'general',
+      type: result.type || type,
+      format: result.format || format,
+      location: result.location || location,
+      cleanerName: result.cleanerName || cleanerName,
+      folderPath: result.folderPath || `${albumName}/${flat ? '' : (format !== 'default' ? `formats/${format}/` : `${type === 'mix' || type === 'combined' ? 'combined' : type}/`)}`,
+      message: result.message || 'Photo uploaded successfully via proxy server'
     };
   } catch (error) {
-    console.error('Direct Drive upload error:', error);
-    throw new Error(`Failed to upload to Google Drive: ${error.message}`);
+    console.error('Proxy upload error:', error);
+    throw new Error(`Failed to upload via proxy server: ${error.message}`);
   }
 }
 
@@ -356,8 +361,22 @@ export async function uploadPhotoBatch(photos, config) {
     getAbortController, // optional callback to retrieve/create AbortController per request
     abortSignal, // optional AbortSignal to stop scheduling further uploads
     flat = false, // upload into project root (no subfolders)
-    useDirectDrive = false // Flag to use direct Drive API instead of Apps Script
+    useDirectDrive = false, // Flag to use proxy server instead of Apps Script
+    sessionId = null // Proxy server session ID (required for useDirectDrive)
   } = config;
+
+  // If using proxy server and albumName is provided, prepare the album folder first
+  // This ensures all parallel uploads use the same album folder
+  if (useDirectDrive && albumName && sessionId && !flat) {
+    try {
+      console.log('[UPLOAD] Preparing album folder before parallel uploads:', albumName);
+      await proxyService.prepareAlbumFolder(sessionId, albumName);
+      console.log('[UPLOAD] Album folder prepared, starting parallel uploads');
+    } catch (error) {
+      console.warn('[UPLOAD] Failed to prepare album folder (will create during upload):', error.message);
+      // Continue anyway - the upload endpoint will create the folder if needed
+    }
+  }
 
   const successful = [];
   const failed = [];
@@ -421,7 +440,8 @@ export async function uploadPhotoBatch(photos, config) {
         folderId,
         abortSignal: controller ? controller.signal : (abortSignal || undefined),
         flat: isFlat,
-        useDirectDrive, // Pass the flag to use direct Drive API
+        useDirectDrive, // Pass the flag to use proxy server
+        sessionId, // Pass the proxy session ID
         // Remove intermediate progress reporting for cleaner parallel upload tracking
       });
 
@@ -488,13 +508,28 @@ export async function uploadPhotoBatch(photos, config) {
  * @param {Date} date - Date object (defaults to now)
  * @returns {string} - Album name (e.g., "John - Dec 21, 2024")
  */
-export function createAlbumName(userName, date = new Date()) {
+/**
+ * Generate a unique project identifier (timestamp-based)
+ * Format: HHMM (e.g., "1430" for 2:30 PM)
+ */
+function generateProjectId(date = new Date()) {
+  const hours = date.getHours().toString().padStart(2, '0');
+  const minutes = date.getMinutes().toString().padStart(2, '0');
+  const seconds = date.getSeconds().toString().padStart(2, '0');
+  return `${hours}${minutes}${seconds}`;
+}
+
+export function createAlbumName(userName, date = new Date(), projectUploadId = null) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const month = months[date.getMonth()];
   const day = date.getDate();
   const year = date.getFullYear();
 
-  return `${userName} - ${month} ${day}, ${year}`;
+  // If projectUploadId is provided, use it (for re-uploads to same project)
+  // Otherwise generate one based on current time (for new projects or no project)
+  const uniqueId = projectUploadId || generateProjectId(date);
+  
+  return `${userName} - ${month} ${day}, ${year} - ${uniqueId}`;
 }
 
 /**

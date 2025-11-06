@@ -7,8 +7,9 @@
  * For production: Use your deployed proxy URL (e.g., 'https://proofpix-proxy.vercel.app')
  */
 
-// TODO: Replace this with your deployed proxy server URL
-export const PROXY_SERVER_URL = process.env.EXPO_PUBLIC_PROXY_URL || 'https://proofpix-proxy.vercel.app';
+// Use environment variable if set, otherwise default to Vercel deployment
+// For local development, set EXPO_PUBLIC_PROXY_URL=http://localhost:3000 in .env
+export const PROXY_SERVER_URL = process.env.EXPO_PUBLIC_PROXY_URL || 'https://proof-pix-proxy.vercel.app';
 
 export default {
   PROXY_SERVER_URL

@@ -15,6 +15,7 @@ try {
 
 const STORAGE_KEYS = {
   ADMIN_USER_INFO: '@admin_user_info',
+  SERVER_AUTH_CODE: '@server_auth_code',
 };
 
 /**
@@ -151,6 +152,18 @@ class GoogleAuthService {
 
       if (user) {
         await this.storeUserInfo(user);
+        // Persist serverAuthCode if provided by SDK
+        try {
+          const serverAuthCode = response?.serverAuthCode || response?.data?.serverAuthCode;
+          if (serverAuthCode) {
+            console.log('[AUTH] Storing serverAuthCode for proxy session');
+            await AsyncStorage.setItem(STORAGE_KEYS.SERVER_AUTH_CODE, serverAuthCode);
+          } else {
+            console.warn('[AUTH] No serverAuthCode found in sign-in response');
+          }
+        } catch (e) {
+          console.error('[AUTH] Error storing serverAuthCode:', e);
+        }
         
         // Verify we got the tokens and check scopes
         try {
@@ -266,6 +279,7 @@ class GoogleAuthService {
   async clearUserInfo() {
     try {
       await AsyncStorage.removeItem(STORAGE_KEYS.ADMIN_USER_INFO);
+      await AsyncStorage.removeItem(STORAGE_KEYS.SERVER_AUTH_CODE);
     } catch (error) {
       console.error('Failed to clear user info:', error);
     }
@@ -378,6 +392,40 @@ class GoogleAuthService {
     } catch (error) {
       return null;
     }
+  }
+
+  /**
+   * Get serverAuthCode if available
+   * @returns {Promise<string|null>}
+   */
+  async getServerAuthCode() {
+    if (!this.isAvailable()) {
+      console.log('[AUTH] Google Sign-in not available, checking stored serverAuthCode');
+    }
+    try {
+      // First try to get from current user (most recent)
+      const currentUser = await GoogleSignin.getCurrentUser();
+      const code = currentUser?.serverAuthCode || currentUser?.data?.serverAuthCode;
+      if (code) {
+        console.log('[AUTH] Found serverAuthCode from current user');
+        return code;
+      }
+    } catch (e) {
+      console.log('[AUTH] Could not get serverAuthCode from current user:', e.message);
+    }
+    try {
+      // Fallback to stored value
+      const stored = await AsyncStorage.getItem(STORAGE_KEYS.SERVER_AUTH_CODE);
+      if (stored) {
+        console.log('[AUTH] Found serverAuthCode from storage');
+        return stored;
+      } else {
+        console.warn('[AUTH] No serverAuthCode found in storage');
+      }
+    } catch (e) {
+      console.error('[AUTH] Error reading serverAuthCode from storage:', e);
+    }
+    return null;
   }
 }
 
