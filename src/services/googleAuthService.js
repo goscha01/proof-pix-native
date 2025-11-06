@@ -123,20 +123,13 @@ class GoogleAuthService {
     try {
       await GoogleSignin.hasPlayServices();
       
-      // Always revoke access and sign out first to ensure fresh consent screen with all scopes
-      // This is critical for getting Drive permissions - Google won't show consent if scopes are already granted
+      // Sign out locally to ensure clean state
+      // NOTE: We do NOT revoke access here because:
+      // 1. It would invalidate the refresh token used by team members
+      // 2. Google will still show consent screen if new scopes are requested
       try {
-        // Try to revoke access first - this clears all granted permissions
-        try {
-          await GoogleSignin.revokeAccess();
-          console.log('Access revoked to force fresh consent screen');
-        } catch (revokeError) {
-          console.log('Could not revoke access (user may not be signed in):', revokeError.message);
-        }
-        
-        // Then sign out
         await GoogleSignin.signOut();
-        console.log('Signed out to force fresh consent screen with all scopes');
+        console.log('Signed out to prepare for fresh sign-in');
         // Wait a moment to ensure sign out completes
         await new Promise(resolve => setTimeout(resolve, 500));
       } catch (signOutError) {
@@ -256,29 +249,50 @@ class GoogleAuthService {
   }
 
   /**
-   * Signs out the user and revokes all previously granted permissions.
-   * This forces the user to re-consent on the next sign-in, which is
-   * necessary when scopes have changed.
+   * Signs out the user from the app.
+   * IMPORTANT: Does NOT revoke OAuth permissions to preserve team member access.
+   * Team members rely on the admin's refresh token stored on the proxy server.
+   * Revoking access would invalidate that token and break team member uploads.
    */
   async signOut() {
     this.checkAvailability();
     try {
-      // Revoke access to ensure all permissions are cleared from the token
-      await GoogleSignin.revokeAccess();
-      // Standard sign out to clear the user session
+      // Only sign out locally - do NOT revoke access
+      // Revoking would invalidate the refresh token used by team members
       await GoogleSignin.signOut();
       await this.clearUserInfo();
+      console.log('[AUTH] Signed out successfully (permissions preserved for team members)');
+    } catch (error) {
+      console.error('Error during sign out:', error);
+      try {
+        await this.clearUserInfo();
+      } catch (clearError) {
+        console.error('Failed to clear user info:', clearError);
+      }
+      throw new Error('Failed to sign out completely.');
+    }
+  }
+
+  /**
+   * Signs out the user AND revokes all OAuth permissions.
+   * This invalidates all refresh tokens, including the one used by team members.
+   * ONLY use this when you need to force re-consent (e.g., scope changes).
+   */
+  async signOutAndRevoke() {
+    this.checkAvailability();
+    try {
+      await GoogleSignin.revokeAccess();
+      await GoogleSignin.signOut();
+      await this.clearUserInfo();
+      console.log('[AUTH] Signed out and revoked all permissions');
     } catch (error) {
       console.error('Error during sign out and revoke:', error);
-      // It's possible for revokeAccess to fail if the token is already invalid.
-      // We can try to sign out anyway as a fallback.
-      if (error.code !== '12501') { // 12501 is a common sign-in cancelled error
-        try {
-          await GoogleSignin.signOut();
-          await this.clearUserInfo();
-        } catch (signOutError) {
-          console.error('Fallback signOut failed:', signOutError);
-        }
+      // Try to sign out anyway
+      try {
+        await GoogleSignin.signOut();
+        await this.clearUserInfo();
+      } catch (signOutError) {
+        console.error('Fallback signOut failed:', signOutError);
       }
       throw new Error('Failed to sign out completely.');
     }
