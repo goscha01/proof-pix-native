@@ -66,17 +66,16 @@ app.post('/api/admin/init', async (req, res) => {
     console.log('ServerAuthCode length:', serverAuthCode?.length || 0);
 
     // Exchange serverAuthCode for tokens
-    // IMPORTANT: For iOS/Android, the redirect URI must match the one used during sign-in
-    // For mobile apps using native Google Sign-In, the redirect URI is typically empty or a special mobile URI
-    // For server-side token exchange from mobile serverAuthCode, we should NOT include a redirect URI
-    // or use a postmessage redirect (standard for mobile OAuth flows)
+    // IMPORTANT: For mobile serverAuthCode, DO NOT specify a redirect URI
+    // The serverAuthCode already contains the redirect URI information from the mobile SDK
+    // Specifying a redirect URI will cause "redirect_uri_mismatch" errors
     const oauth2Client = new google.auth.OAuth2(
       clientId,
-      clientSecret,
-      'postmessage' // Standard redirect URI for mobile OAuth server-side token exchange
+      clientSecret
+      // No redirect URI parameter - let Google handle it from the serverAuthCode
     );
 
-    console.log(`[INIT] Using redirect URI: postmessage (standard for mobile OAuth)`);
+    console.log(`[INIT] No redirect URI specified (using serverAuthCode from mobile SDK)`);
 
     let tokens;
     try {
@@ -98,11 +97,9 @@ app.post('/api/admin/init', async (req, res) => {
       }
       
       if (tokenError.response?.data?.error === 'invalid_client') {
-        return res.status(400).json({ 
-          error: 'Invalid client. Please check that the Client ID and Secret are correct, and that the redirect URI is added to authorized redirect URIs in Google Cloud Console.',
-          details: tokenError.response.data,
-          redirectUri: redirectUri,
-          hint: `In Google Cloud Console → OAuth Client → Authorized redirect URIs, add: ${redirectUri}`
+        return res.status(400).json({
+          error: 'Invalid client. Please check that the Client ID and Secret are correct in Vercel environment variables.',
+          details: tokenError.response.data
         });
       }
       
@@ -114,11 +111,10 @@ app.post('/api/admin/init', async (req, res) => {
       }
       
       if (tokenError.response?.data?.error === 'redirect_uri_mismatch') {
-        return res.status(400).json({ 
-          error: 'Redirect URI mismatch. Please add the proxy server URL to authorized redirect URIs in Google Cloud Console for the Web Client ID.',
+        return res.status(400).json({
+          error: 'Redirect URI mismatch. This usually means the serverAuthCode was generated with a different Client ID than the one being used for token exchange. Make sure both the mobile app and server use the same OAuth project.',
           details: tokenError.response.data,
-          redirectUri: redirectUri,
-          hint: `Google Cloud Console → APIs & Services → Credentials → Your Web Client ID → Authorized redirect URIs → Add: ${redirectUri}`
+          hint: 'The serverAuthCode from mobile contains embedded redirect URI info. Ensure the Web Client ID and iOS Client ID are in the same Google Cloud project.'
         });
       }
       
