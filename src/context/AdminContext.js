@@ -20,7 +20,8 @@ const AdminContext = createContext();
  * Manages admin-specific state for Google Drive integration
  */
 export function AdminProvider({ children }) {
-  const { updateUserPlan } = useSettings();
+  const settingsContext = useSettings();
+  const { updateUserPlan } = settingsContext;
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
   const [folderId, setFolderId] = useState(null);
@@ -163,6 +164,22 @@ export function AdminProvider({ children }) {
     try {
       if (!token || !sessionId) {
         throw new Error('Missing token or sessionId');
+      }
+
+      // Get team member's name from settings
+      // We need to access it from AsyncStorage since we can't use the hook here
+      const settingsKey = 'app-settings';
+      const storedSettings = await AsyncStorage.getItem(settingsKey);
+      const settings = storedSettings ? JSON.parse(storedSettings) : {};
+      const memberName = settings.userName || 'Team Member';
+
+      // Register team member join with proxy server
+      try {
+        await proxyService.registerTeamMemberJoin(sessionId, token, memberName);
+        console.log('[ADMIN] Team member registered with proxy server');
+      } catch (registerError) {
+        console.warn('[ADMIN] Failed to register team member (non-critical):', registerError.message);
+        // Continue anyway - the join can still work
       }
 
       const newTeamInfo = { token, sessionId, useProxy: true };

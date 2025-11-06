@@ -21,6 +21,7 @@ import googleDriveService from '../services/googleDriveService';
 import InviteManager from '../components/InviteManager';
 import { generateInviteToken } from '../utils/tokens';
 import { useNavigation } from '@react-navigation/native';
+import proxyService from '../services/proxyService';
 
 export default function SettingsScreen({ navigation }) {
   const {
@@ -52,6 +53,7 @@ export default function SettingsScreen({ navigation }) {
     folderId: adminFolderId,
     proxySessionId,
     userMode,
+    teamInfo,
     saveFolderId,
     addInviteToken,
     removeInviteToken,
@@ -62,10 +64,10 @@ export default function SettingsScreen({ navigation }) {
   } = useAdmin();
 
   const [name, setName] = useState(userName);
-  const [selectedLocation, setSelectedLocation] = useState(location);
-  const [showLocationPicker, setShowLocationPicker] = useState(false);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [adminInfo, setAdminInfo] = useState(null);
+  const [loadingAdminInfo, setLoadingAdminInfo] = useState(false);
 
   const handleSetupTeam = async () => {
     if (!isAuthenticated || userMode !== 'admin' || isSigningIn) {
@@ -113,19 +115,13 @@ export default function SettingsScreen({ navigation }) {
 
 
   const handleSaveUserInfo = async () => {
-    await updateUserInfo(name, selectedLocation);
-  };
-
-  const handleLocationSelect = (locationId) => {
-    setSelectedLocation(locationId);
-    setShowLocationPicker(false);
-    updateUserInfo(name, locationId);
+    await updateUserInfo(name, location);
   };
 
   const handleResetUserData = () => {
     Alert.alert(
       'Reset User Data',
-      'This will clear your name and location settings. You will be taken to the setup screen to configure them again. Continue?',
+      'This will clear your name settings. You will be taken to the setup screen to configure them again. Continue?',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -187,12 +183,40 @@ export default function SettingsScreen({ navigation }) {
     );
   };
 
-  const selectedLocationObj = LOCATIONS.find(loc => loc.id === selectedLocation) || LOCATIONS[0];
-  const config = getLocationConfig(selectedLocation);
+  const selectedLocationObj = LOCATIONS.find(loc => loc.id === location) || LOCATIONS[0];
+  const config = getLocationConfig(location);
 
   const handleSignOut = async () => {
     await signOut();
   };
+
+  // Fetch admin info for team members
+  useEffect(() => {
+    const fetchAdminInfo = async () => {
+      if (userMode === 'team_member' && teamInfo?.sessionId) {
+        setLoadingAdminInfo(true);
+        try {
+          console.log('[SETTINGS] Fetching admin info for session:', teamInfo.sessionId);
+          const sessionInfo = await proxyService.getSessionInfo(teamInfo.sessionId);
+          console.log('[SETTINGS] Session info received:', sessionInfo);
+          if (sessionInfo.success && sessionInfo.adminUserInfo) {
+            setAdminInfo(sessionInfo.adminUserInfo);
+            console.log('[SETTINGS] Admin info set:', sessionInfo.adminUserInfo);
+          } else {
+            console.warn('[SETTINGS] No admin info in session response:', sessionInfo);
+          }
+        } catch (error) {
+          console.error('[SETTINGS] Failed to fetch admin info:', error);
+          // Set a fallback so user knows they're connected even if we can't get the name
+          setAdminInfo({ name: null, email: null });
+        } finally {
+          setLoadingAdminInfo(false);
+        }
+      }
+    };
+
+    fetchAdminInfo();
+  }, [userMode, teamInfo?.sessionId]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -212,7 +236,38 @@ export default function SettingsScreen({ navigation }) {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Cloud & Team Sync</Text>
           
-          {isSigningIn ? (
+          {userMode === 'team_member' ? (
+            <>
+              {/* Team Member View - Show team connection info (read-only) */}
+              <View style={styles.adminInfoBox}>
+                <Text style={styles.adminInfoLabel}>Connected to Team:</Text>
+                {loadingAdminInfo ? (
+                  <ActivityIndicator size="small" color={COLORS.PRIMARY} style={{ marginVertical: 8 }} />
+                ) : adminInfo && (adminInfo.name || adminInfo.email) ? (
+                  <>
+                    <Text style={styles.adminInfoValue}>
+                      {adminInfo.name || adminInfo.email || 'Admin'}
+                    </Text>
+                    {adminInfo.email && adminInfo.name && (
+                      <Text style={styles.adminInfoEmail}>
+                        {adminInfo.email}
+                      </Text>
+                    )}
+                  </>
+                ) : (
+                  <Text style={styles.adminInfoValue}>
+                    ✓ Connected to Team
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity
+                style={styles.signOutButton}
+                onPress={handleSignOut}
+              >
+                <Text style={styles.signOutButtonText}>Sign Out</Text>
+              </TouchableOpacity>
+            </>
+          ) : isSigningIn ? (
              <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#0000ff" />
                 <Text style={styles.loadingText}>Connecting to Google...</Text>
@@ -330,156 +385,160 @@ export default function SettingsScreen({ navigation }) {
           )}
         </View>
 
-        {/* Local Settings Sections */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Display Settings</Text>
-          <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Show Labels</Text>
-                  <Text style={styles.settingDescription}>
-                    Display "BEFORE" and "AFTER" labels on all photos
-                  </Text>
-                </View>
-                <Switch
-                  value={showLabels}
-                  onValueChange={toggleLabels}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Business</Text>
-                  <Text style={styles.settingDescription}>
-                    Enable business mode features
-                  </Text>
-                </View>
-                <Switch
-                  value={isBusiness}
-                  onValueChange={toggleBusiness}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
-            </View>
-
-            {/* Room Customization */}
+        {/* Local Settings Sections - Hidden for team members */}
+        {userMode !== 'team_member' && (
+          <>
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Folder Customization</Text>
-              <Text style={styles.sectionDescription}>
-                Customize the names and icons of folders in your app
-              </Text>
-
+              <Text style={styles.sectionTitle}>Display Settings</Text>
               <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Custom Folders</Text>
-                  <Text style={styles.settingDescription}>
-                    {customRooms ? `${customRooms.length} custom folders` : 'Using default folders'}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.customizeButton}
-                  onPress={() => {
-
-                    setShowRoomEditor(true);
-                  }}
-                >
-                  <Text style={styles.customizeButtonText}>Customize</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* Upload Structure */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Upload Structure</Text>
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Use folder structure</Text>
-                  <Text style={styles.settingDescription}>
-                    If off, all photos go into the project folder
-                  </Text>
-                </View>
-                <Switch
-                  value={useFolderStructure}
-                  onValueChange={toggleUseFolderStructure}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
-
-              {useFolderStructure && (
-                <>
-                  <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>Before folder</Text>
-                      <Text style={styles.settingDescription}>Uploads to "before" subfolder</Text>
+                      <Text style={styles.settingLabel}>Show Labels</Text>
+                      <Text style={styles.settingDescription}>
+                        Display "BEFORE" and "AFTER" labels on all photos
+                      </Text>
                     </View>
                     <Switch
-                      value={enabledFolders.before}
-                      onValueChange={(v) => updateEnabledFolders({ before: v })}
+                      value={showLabels}
+                      onValueChange={toggleLabels}
                       trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
                       thumbColor="white"
                     />
                   </View>
+
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>After folder</Text>
-                      <Text style={styles.settingDescription}>Uploads to "after" subfolder</Text>
+                      <Text style={styles.settingLabel}>Business</Text>
+                      <Text style={styles.settingDescription}>
+                        Enable business mode features
+                      </Text>
                     </View>
                     <Switch
-                      value={enabledFolders.after}
-                      onValueChange={(v) => updateEnabledFolders({ after: v })}
+                      value={isBusiness}
+                      onValueChange={toggleBusiness}
                       trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
                       thumbColor="white"
                     />
                   </View>
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>Combined folder</Text>
-                      <Text style={styles.settingDescription}>Uploads to "combined"/formats subfolders</Text>
-                    </View>
-                    <Switch
-                      value={enabledFolders.combined}
-                      onValueChange={(v) => updateEnabledFolders({ combined: v })}
-                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                      thumbColor="white"
-                    />
-                  </View>
-                </>
-              )}
-            </View>
-
-            {/* Google Drive Configuration (Read-only) */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Google Drive Configuration</Text>
-              <Text style={styles.sectionDescription}>
-                Automatically configured based on selected location
-              </Text>
-
-              <View style={styles.configRow}>
-                <Text style={styles.configLabel}>Folder ID:</Text>
-                <Text style={styles.configValue} numberOfLines={1}>
-                  {config.folderId ? '✓ Configured' : '✗ Not configured'}
-                </Text>
-              </View>
-
-              {!config.folderId && (
-                <View style={styles.warningBox}>
-                  <Text style={styles.warningText}>
-                    ⚠️ Configuration missing for {selectedLocationObj.name}. Please check environment variables.
-                  </Text>
                 </View>
-              )}
-            </View>
+
+                {/* Room Customization */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Folder Customization</Text>
+                  <Text style={styles.sectionDescription}>
+                    Customize the names and icons of folders in your app
+                  </Text>
+
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Text style={styles.settingLabel}>Custom Folders</Text>
+                      <Text style={styles.settingDescription}>
+                        {customRooms ? `${customRooms.length} custom folders` : 'Using default folders'}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.customizeButton}
+                      onPress={() => {
+
+                        setShowRoomEditor(true);
+                      }}
+                    >
+                      <Text style={styles.customizeButtonText}>Customize</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Upload Structure */}
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Upload Structure</Text>
+
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Text style={styles.settingLabel}>Use folder structure</Text>
+                      <Text style={styles.settingDescription}>
+                        If off, all photos go into the project folder
+                      </Text>
+                    </View>
+                    <Switch
+                      value={useFolderStructure}
+                      onValueChange={toggleUseFolderStructure}
+                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                      thumbColor="white"
+                    />
+                  </View>
+
+                  {useFolderStructure && (
+                    <>
+                      <View style={styles.settingRow}>
+                        <View style={styles.settingInfo}>
+                          <Text style={styles.settingLabel}>Before folder</Text>
+                          <Text style={styles.settingDescription}>Uploads to "before" subfolder</Text>
+                        </View>
+                        <Switch
+                          value={enabledFolders.before}
+                          onValueChange={(v) => updateEnabledFolders({ before: v })}
+                          trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                          thumbColor="white"
+                        />
+                      </View>
+                      <View style={styles.settingRow}>
+                        <View style={styles.settingInfo}>
+                          <Text style={styles.settingLabel}>After folder</Text>
+                          <Text style={styles.settingDescription}>Uploads to "after" subfolder</Text>
+                        </View>
+                        <Switch
+                          value={enabledFolders.after}
+                          onValueChange={(v) => updateEnabledFolders({ after: v })}
+                          trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                          thumbColor="white"
+                        />
+                      </View>
+                      <View style={styles.settingRow}>
+                        <View style={styles.settingInfo}>
+                          <Text style={styles.settingLabel}>Combined folder</Text>
+                          <Text style={styles.settingDescription}>Uploads to "combined"/formats subfolders</Text>
+                        </View>
+                        <Switch
+                          value={enabledFolders.combined}
+                          onValueChange={(v) => updateEnabledFolders({ combined: v })}
+                          trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                          thumbColor="white"
+                        />
+                      </View>
+                    </>
+                  )}
+                </View>
+
+                {/* Google Drive Configuration (Read-only) */}
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>Google Drive Configuration</Text>
+                  <Text style={styles.sectionDescription}>
+                    Automatically configured based on selected location
+                  </Text>
+
+                  <View style={styles.configRow}>
+                    <Text style={styles.configLabel}>Folder ID:</Text>
+                    <Text style={styles.configValue} numberOfLines={1}>
+                      {config.folderId ? '✓ Configured' : '✗ Not configured'}
+                    </Text>
+                  </View>
+
+                  {!config.folderId && (
+                    <View style={styles.warningBox}>
+                      <Text style={styles.warningText}>
+                        ⚠️ Configuration missing for {selectedLocationObj.name}. Please check environment variables.
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </>
+            )}
 
             {/* User Information */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>User Information</Text>
 
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Cleaner Name</Text>
+                <Text style={styles.label}>User name</Text>
                 <TextInput
                   style={styles.input}
                   value={name}
@@ -488,44 +547,6 @@ export default function SettingsScreen({ navigation }) {
                   placeholderTextColor={COLORS.GRAY}
                   onBlur={handleSaveUserInfo}
                 />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Location</Text>
-                <TouchableOpacity
-                  style={styles.locationPicker}
-                  onPress={() => setShowLocationPicker(!showLocationPicker)}
-                >
-                  <Text style={styles.locationPickerText}>
-                    {selectedLocationObj.name}
-                  </Text>
-                  <Text style={styles.locationPickerArrow}>▼</Text>
-                </TouchableOpacity>
-
-                {showLocationPicker && (
-                  <View style={styles.locationDropdown}>
-                    {LOCATIONS.map((loc) => (
-                      <TouchableOpacity
-                        key={loc.id}
-                        style={[
-                          styles.locationOption,
-                          selectedLocation === loc.id && styles.locationOptionSelected
-                        ]}
-                        onPress={() => handleLocationSelect(loc.id)}
-                      >
-                        <Text style={[
-                          styles.locationOptionText,
-                          selectedLocation === loc.id && styles.locationOptionTextSelected
-                        ]}>
-                          {loc.name}
-                        </Text>
-                        {selectedLocation === loc.id && (
-                          <Text style={styles.locationOptionCheck}>✓</Text>
-                        )}
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
               </View>
 
               <TouchableOpacity

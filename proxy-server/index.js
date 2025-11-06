@@ -174,13 +174,36 @@ app.post('/api/admin/init', async (req, res) => {
     // Generate admin session ID
     const sessionId = generateSessionId();
 
-    // Store the folderId, refreshToken, clientId used, and an empty invite token list for this session
+    // Fetch admin user info from Google
+    let adminUserInfo = null;
+    try {
+      const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
+      oauth2Client.setCredentials({ refresh_token: refreshToken });
+      const { credentials } = await oauth2Client.refreshAccessToken();
+      oauth2Client.setCredentials(credentials);
+      
+      const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+      const userInfo = await oauth2.userinfo.get();
+      adminUserInfo = {
+        name: userInfo.data.name || null,
+        email: userInfo.data.email || null,
+        picture: userInfo.data.picture || null
+      };
+      console.log(`[INIT] Fetched admin user info: ${adminUserInfo.name} (${adminUserInfo.email})`);
+    } catch (userInfoError) {
+      console.warn(`[INIT] Failed to fetch admin user info:`, userInfoError.message);
+      // Continue without user info - it's not critical
+    }
+
+    // Store the folderId, refreshToken, clientId used, admin user info, invite tokens, and team members list for this session
     // This ensures we use the correct Client ID/Secret when refreshing tokens
     const sessionData = {
       folderId,
       refreshToken,
       clientId, // Store which client ID was used for this session
+      adminUserInfo, // Store admin's Google account info
       inviteTokens: [],
+      teamMembers: [], // Track team members: [{ token, name, status: 'pending'|'joined'|'declined', joinedAt, lastUploadAt }]
     };
     
     console.log(`[INIT] Storing session with refresh token (length: ${refreshToken.length})`);
@@ -505,6 +528,36 @@ app.post('/api/upload/:sessionId', async (req, res) => {
         console.log(`Unauthorized token attempt: ${token}`);
         return res.status(403).json({ error: 'Invalid invite token' });
       }
+      
+      // Mark team member as "joined" when they upload (if they haven't been marked yet)
+      if (!session.teamMembers) {
+        session.teamMembers = [];
+      }
+      const memberIndex = session.teamMembers.findIndex(m => m.token === token);
+      const now = new Date().toISOString();
+      
+      if (memberIndex >= 0) {
+        // Update existing member - mark as joined and update last upload time
+        session.teamMembers[memberIndex] = {
+          ...session.teamMembers[memberIndex],
+          status: 'joined',
+          lastUploadAt: now,
+          lastSeenAt: now
+        };
+      } else if (cleanerName) {
+        // If member doesn't exist yet but we have their name, create entry
+        session.teamMembers.push({
+          token,
+          name: cleanerName,
+          status: 'joined',
+          joinedAt: now,
+          lastSeenAt: now,
+          lastUploadAt: now
+        });
+      }
+      
+      // Save updated session with team member info
+      await kv.set(`session:${sessionId}`, session, { ex: SESSION_TTL });
     }
     
     // Get the client ID and secret that were used for this session
@@ -726,6 +779,168 @@ app.post('/api/upload/:sessionId', async (req, res) => {
       success: false,
       error: error.message,
       message: `Upload failed: ${error.message}`
+    });
+  }
+});
+
+/**
+ * Team member join endpoint: Register a team member joining
+ * POST /api/team/:sessionId/join
+ * Body: { token, memberName }
+ */
+app.post('/api/team/:sessionId/join', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+    const { token, memberName } = req.body;
+
+    if (!token || !memberName) {
+      return res.status(400).json({ error: 'Missing token or memberName' });
+    }
+
+    const session = await kv.get(`session:${sessionId}`);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // Validate token
+    const sessionTokens = new Set(session.inviteTokens || []);
+    if (!sessionTokens.has(token)) {
+      return res.status(403).json({ error: 'Invalid invite token' });
+    }
+
+    // Initialize teamMembers array if it doesn't exist
+    if (!session.teamMembers) {
+      session.teamMembers = [];
+    }
+
+    // Check if team member already exists for this token
+    const existingMemberIndex = session.teamMembers.findIndex(m => m.token === token);
+    const now = new Date().toISOString();
+
+    if (existingMemberIndex >= 0) {
+      // Update existing member
+      session.teamMembers[existingMemberIndex] = {
+        ...session.teamMembers[existingMemberIndex],
+        name: memberName,
+        status: 'joined', // If they're joining again, mark as joined
+        joinedAt: session.teamMembers[existingMemberIndex].joinedAt || now,
+        lastSeenAt: now
+      };
+    } else {
+      // Add new team member
+      session.teamMembers.push({
+        token,
+        name: memberName,
+        status: 'pending', // Initially pending until first upload
+        joinedAt: now,
+        lastSeenAt: now,
+        lastUploadAt: null
+      });
+    }
+
+    await kv.set(`session:${sessionId}`, session, { ex: SESSION_TTL });
+
+    res.json({
+      success: true,
+      message: 'Team member registered'
+    });
+  } catch (error) {
+    console.error('Error registering team member:', error);
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Get session info (including admin user info)
+ * GET /api/admin/:sessionId/info
+ */
+app.get('/api/admin/:sessionId/info', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await kv.get(`session:${sessionId}`);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    // If adminUserInfo is not stored, fetch it from Google
+    let adminUserInfo = session.adminUserInfo;
+    if (!adminUserInfo && session.refreshToken) {
+      try {
+        const sessionClientId = session.clientId || process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID;
+        const sessionClientSecret = process.env.GOOGLE_CLIENT_SECRET;
+        
+        const oauth2Client = new google.auth.OAuth2(sessionClientId, sessionClientSecret);
+        oauth2Client.setCredentials({ refresh_token: session.refreshToken });
+        const { credentials } = await oauth2Client.refreshAccessToken();
+        oauth2Client.setCredentials(credentials);
+        
+        const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+        const userInfo = await oauth2.userinfo.get();
+        adminUserInfo = {
+          name: userInfo.data.name || null,
+          email: userInfo.data.email || null,
+          picture: userInfo.data.picture || null
+        };
+        
+        // Update session with admin user info for future requests
+        await kv.set(`session:${sessionId}`, {
+          ...session,
+          adminUserInfo
+        }, { ex: SESSION_TTL });
+        
+        console.log(`[INFO] Fetched and stored admin user info: ${adminUserInfo.name} (${adminUserInfo.email})`);
+      } catch (userInfoError) {
+        console.warn(`[INFO] Failed to fetch admin user info:`, userInfoError.message);
+        // Continue without user info - it's not critical
+      }
+    }
+
+    res.json({
+      success: true,
+      adminUserInfo: adminUserInfo || null,
+      folderId: session.folderId || null
+    });
+  } catch (error) {
+    console.error('Error getting session info:', error);
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+/**
+ * Get team members list for admin
+ * GET /api/admin/:sessionId/team-members
+ */
+app.get('/api/admin/:sessionId/team-members', async (req, res) => {
+  try {
+    const { sessionId } = req.params;
+
+    const session = await kv.get(`session:${sessionId}`);
+    if (!session) {
+      return res.status(404).json({ error: 'Session not found' });
+    }
+
+    const teamMembers = session.teamMembers || [];
+
+    res.json({
+      success: true,
+      teamMembers: teamMembers.map(m => ({
+        token: m.token,
+        name: m.name,
+        status: m.status || 'pending',
+        joinedAt: m.joinedAt,
+        lastSeenAt: m.lastSeenAt,
+        lastUploadAt: m.lastUploadAt
+      }))
+    });
+  } catch (error) {
+    console.error('Error getting team members:', error);
+    res.status(500).json({
+      error: error.message
     });
   }
 });

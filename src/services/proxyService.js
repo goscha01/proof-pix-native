@@ -279,6 +279,105 @@ class ProxyService {
   }
 
   /**
+   * Register team member join
+   * @param {string} sessionId - Proxy session ID
+   * @param {string} token - Invite token
+   * @param {string} memberName - Team member's name
+   * @returns {Promise<{success: boolean}>}
+   */
+  async registerTeamMemberJoin(sessionId, token, memberName) {
+    try {
+      console.log('[PROXY] Registering team member join:', { sessionId, token: token.substring(0, 10) + '...', memberName });
+
+      const response = await fetch(`${PROXY_SERVER_URL}/api/team/${sessionId}/join`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ token, memberName }),
+      });
+
+      console.log('[PROXY] Register join response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[PROXY] Register join error:', errorText);
+        throw new Error(`Failed to register team member: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('[PROXY] Team member registered successfully');
+
+      return data;
+    } catch (error) {
+      console.error('[PROXY] Error registering team member:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get team members list
+   * @param {string} sessionId - Proxy session ID
+   * @returns {Promise<{teamMembers: Array}>}
+   */
+  async getTeamMembers(sessionId) {
+    try {
+      console.log('[PROXY] Getting team members:', sessionId);
+
+      const response = await fetch(`${PROXY_SERVER_URL}/api/admin/${sessionId}/team-members`, {
+        method: 'GET',
+      });
+
+      console.log('[PROXY] Team members response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[PROXY] Get team members error:', errorText);
+        throw new Error(`Failed to get team members: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('[PROXY] Team members retrieved:', data.teamMembers?.length || 0);
+
+      return data;
+    } catch (error) {
+      console.error('[PROXY] Error getting team members:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get session info including admin user info
+   * @param {string} sessionId - Proxy session ID
+   * @returns {Promise<{adminUserInfo: {name, email, picture}, folderId: string}>}
+   */
+  async getSessionInfo(sessionId) {
+    try {
+      console.log('[PROXY] Getting session info:', sessionId);
+
+      const response = await fetch(`${PROXY_SERVER_URL}/api/admin/${sessionId}/info`, {
+        method: 'GET',
+      });
+
+      console.log('[PROXY] Session info response status:', response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[PROXY] Get session info error:', errorText);
+        throw new Error(`Failed to get session info: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('[PROXY] Session info result:', data);
+
+      return data;
+    } catch (error) {
+      console.error('[PROXY] Error getting session info:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Validate if a proxy session is still active and valid
    * @param {string} sessionId - Proxy session ID
    * @returns {Promise<{valid: boolean, message?: string, error?: string}>}
