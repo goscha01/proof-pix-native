@@ -683,7 +683,7 @@ export default function SettingsScreen({ navigation }) {
                     )}
                   </View>
                   
-                  <InviteManager />
+                  <InviteManager navigation={navigation} />
                 </>
               )}
 

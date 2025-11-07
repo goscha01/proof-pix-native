@@ -9,7 +9,7 @@ import { COLORS } from '../constants/rooms';
 /**
  * A component for admins to manage their team invites.
  */
-export default function InviteManager() {
+export default function InviteManager({ navigation }) {
   const {
     proxySessionId,
     inviteTokens,
@@ -17,6 +17,7 @@ export default function InviteManager() {
     canAddMoreInvites,
     addInviteToken,
     removeInviteToken,
+    joinTeam,
   } = useAdmin();
 
   const [teamMembers, setTeamMembers] = useState([]);
@@ -84,25 +85,49 @@ export default function InviteManager() {
     }
   };
 
-  const handleRevokeInvite = async (token) => {
-    try {
-      if (proxySessionId) {
-        // Remove token from proxy server
-        await proxyService.removeInviteToken(proxySessionId, token);
-        console.log('[INVITE] Token removed from proxy server');
-      }
-      
-      // Remove token locally
-      await removeInviteToken(token);
-      
-      // Refresh team members list
-      await fetchTeamMembers();
-      
-      Alert.alert('Invite Revoked', `The invite has been revoked. It will no longer work for new uploads.`);
-    } catch (error) {
-      console.error('[INVITE] Failed to revoke invite token:', error);
-      Alert.alert('Error', 'Failed to revoke invite token. Please try again.');
+  const handleTestInvite = async (token) => {
+    if (!proxySessionId) {
+      Alert.alert('Error', 'Proxy session not initialized.');
+      return;
     }
+
+    Alert.alert(
+      'Test Team Mode',
+      'This will switch your app to team member mode to test this invite. You can switch back from Settings.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Test',
+          onPress: async () => {
+            try {
+              const result = await joinTeam(token, proxySessionId);
+              if (result.success) {
+                Alert.alert(
+                  'Team Mode Activated',
+                  'You are now in team member mode. Navigate to Settings to switch back to admin mode.',
+                  [
+                    {
+                      text: 'OK',
+                      onPress: () => {
+                        // Navigate to Home screen to see team member view
+                        if (navigation) {
+                          navigation.navigate('Home');
+                        }
+                      }
+                    }
+                  ]
+                );
+              } else {
+                Alert.alert('Error', result.error || 'Failed to activate team mode.');
+              }
+            } catch (error) {
+              console.error('[INVITE] Failed to test invite:', error);
+              Alert.alert('Error', 'Failed to activate team mode. Please try again.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const handleCopyToken = (token) => {
@@ -139,8 +164,8 @@ export default function InviteManager() {
         <TouchableOpacity onPress={() => handleShareInvite(item)} style={styles.actionButton}>
           <Text style={styles.shareButton}>Share</Text>
         </TouchableOpacity>
-        <TouchableOpacity onPress={() => handleRevokeInvite(item)} style={styles.actionButton}>
-          <Text style={styles.revokeButton}>Revoke</Text>
+        <TouchableOpacity onPress={() => handleTestInvite(item)} style={styles.actionButton}>
+          <Text style={styles.testButton}>Test</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -313,8 +338,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  revokeButton: {
-    color: '#dc3545',
+  testButton: {
+    color: '#28a745',
     fontSize: 13,
     fontWeight: '600',
   },
