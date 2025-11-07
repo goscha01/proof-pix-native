@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Share, Clipboard, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Alert, Share, Clipboard, ActivityIndicator, TextInput, Modal } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAdmin } from '../context/AdminContext';
+import { useSettings } from '../context/SettingsContext';
 import { generateInviteToken } from '../utils/tokens';
 import proxyService from '../services/proxyService';
 import { PROXY_SERVER_URL } from '../config/proxy';
@@ -19,9 +21,14 @@ export default function InviteManager({ navigation }) {
     removeInviteToken,
     joinTeam,
   } = useAdmin();
+  
+  const { updateUserInfo, reloadSettings } = useSettings();
 
   const [teamMembers, setTeamMembers] = useState([]);
   const [loadingMembers, setLoadingMembers] = useState(false);
+  const [showNameInput, setShowNameInput] = useState(false);
+  const [testMemberName, setTestMemberName] = useState('');
+  const [currentTestToken, setCurrentTestToken] = useState(null);
 
   // Fetch team members
   const fetchTeamMembers = async () => {
@@ -43,10 +50,22 @@ export default function InviteManager({ navigation }) {
   useEffect(() => {
     if (!proxySessionId) return;
     
-    // Fetch team members only when component mounts or session changes
+    // Fetch team members when component mounts, session changes, or when switching back from team mode
     // No need for constant polling - team members are fetched when invites are generated/revoked
     fetchTeamMembers();
   }, [proxySessionId]);
+
+  // Also fetch when component becomes visible again (e.g., when switching back from team member mode)
+  useEffect(() => {
+    // Fetch team members when navigation is focused (user returns to Settings screen)
+    const unsubscribe = navigation?.addListener?.('focus', () => {
+      if (proxySessionId) {
+        fetchTeamMembers();
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, proxySessionId]);
 
   const handleGenerateInvite = async () => {
     if (!canAddMoreInvites()) {
@@ -91,43 +110,86 @@ export default function InviteManager({ navigation }) {
       return;
     }
 
-    Alert.alert(
-      'Test Team Mode',
-      'This will switch your app to team member mode to test this invite. You can switch back from Settings.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Test',
-          onPress: async () => {
-            try {
-              const result = await joinTeam(token, proxySessionId);
-              if (result.success) {
-                Alert.alert(
-                  'Team Mode Activated',
-                  'You are now in team member mode. Navigate to Settings to switch back to admin mode.',
-                  [
-                    {
-                      text: 'OK',
-                      onPress: () => {
-                        // Navigate to Home screen to see team member view
-                        if (navigation) {
-                          navigation.navigate('Home');
-                        }
-                      }
-                    }
-                  ]
-                );
-              } else {
-                Alert.alert('Error', result.error || 'Failed to activate team mode.');
+    // Show name input modal to simulate complete team setup
+    setCurrentTestToken(token);
+    setShowNameInput(true);
+  };
+
+  const handleTestJoinWithName = async () => {
+    if (!testMemberName.trim()) {
+      Alert.alert('Name Required', 'Please enter a name to test the team member setup.');
+      return;
+    }
+
+    if (!currentTestToken || !proxySessionId) {
+      Alert.alert('Error', 'Missing invite token or session ID.');
+      setShowNameInput(false);
+      return;
+    }
+
+    setShowNameInput(false);
+    
+    try {
+      // Update settings with the test member name temporarily
+      const settingsKey = 'app-settings';
+      const storedSettings = await AsyncStorage.getItem(settingsKey);
+      const settings = storedSettings ? JSON.parse(storedSettings) : {};
+      const originalName = settings.userName || '';
+      
+      // Temporarily set the test member name
+      await AsyncStorage.setItem(settingsKey, JSON.stringify({
+        ...settings,
+        userName: testMemberName.trim()
+      }));
+
+      console.log('[INVITE] Testing invite by joining team:', { 
+        token: currentTestToken, 
+        proxySessionId,
+        memberName: testMemberName.trim()
+      });
+
+      const result = await joinTeam(currentTestToken, proxySessionId);
+      
+      if (result.success) {
+        // Update SettingsContext with the team member name so it's displayed correctly
+        await updateUserInfo(testMemberName.trim());
+        console.log('[INVITE] Updated SettingsContext with team member name:', testMemberName.trim());
+        
+        Alert.alert(
+          'Team Mode Activated',
+          `You have successfully joined the team as "${testMemberName.trim()}". You can switch back to admin mode from Settings to see the connected team member.`,
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Refresh team members list if possible, then navigate to Home
+                fetchTeamMembers().then(() => {
+                  if (navigation) {
+                    navigation.navigate('Home');
+                  }
+                });
               }
-            } catch (error) {
-              console.error('[INVITE] Failed to test invite:', error);
-              Alert.alert('Error', 'Failed to activate team mode. Please try again.');
             }
-          }
+          ]
+        );
+        setTestMemberName('');
+        setCurrentTestToken(null);
+      } else {
+        // Restore original name if join failed
+        await AsyncStorage.setItem(settingsKey, JSON.stringify({
+          ...settings,
+          userName: originalName
+        }));
+        // Also restore in SettingsContext
+        if (originalName) {
+          await updateUserInfo(originalName);
         }
-      ]
-    );
+        Alert.alert('Error', result.error || 'Failed to join team.');
+      }
+    } catch (error) {
+      console.error('[INVITE] Failed to test invite:', error);
+      Alert.alert('Error', 'Failed to join team. Please try again.');
+    }
   };
 
   const handleCopyToken = (token) => {
@@ -198,11 +260,16 @@ export default function InviteManager({ navigation }) {
   };
 
   const renderTeamMemberItem = ({ item }) => {
-    const statusColor = getStatusColor(item.status);
-    const statusText = getStatusText(item.status);
+    // If member has a token, treat as joined (they've used the invite)
+    // Otherwise, they might be pending
+    const memberStatus = item.token ? 'joined' : (item.status || 'pending');
+    const statusColor = getStatusColor(memberStatus);
+    const statusText = getStatusText(memberStatus);
     
-    // Find the invite token for this member
-    const hasActiveInvite = inviteTokens?.includes(item.token);
+    // The team member item should have a token field from the proxy server
+    // This is the invite token they used to join
+    const memberToken = item.token;
+    const hasActiveInvite = memberToken && inviteTokens?.includes(memberToken);
     
     return (
       <View style={styles.memberItem}>
@@ -219,11 +286,55 @@ export default function InviteManager({ navigation }) {
                 Last upload: {new Date(item.lastUploadAt).toLocaleDateString()}
               </Text>
             )}
-            {!hasActiveInvite && (
-              <Text style={styles.memberNote}>Invite revoked</Text>
-            )}
           </View>
+          {/* Show invite token if available */}
+          {memberToken && (
+            <View style={styles.tokenContainer}>
+              <Text style={styles.tokenLabel}>Invite Code:</Text>
+              <Text style={styles.inviteToken} selectable>{memberToken}</Text>
+            </View>
+          )}
         </View>
+        {/* Show revoke button if member has an active invite token */}
+        {memberToken && hasActiveInvite && (
+          <View style={styles.buttonGroup}>
+            <TouchableOpacity 
+              onPress={async () => {
+                Alert.alert(
+                  'Revoke Invite',
+                  'This will revoke the invite token for this team member. They will no longer be able to upload using this code.',
+                  [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                      text: 'Revoke',
+                      style: 'destructive',
+                      onPress: async () => {
+                        try {
+                          if (proxySessionId) {
+                            await proxyService.removeInviteToken(proxySessionId, memberToken);
+                            console.log('[INVITE] Token removed from proxy server');
+                          }
+                          await removeInviteToken(memberToken);
+                          await fetchTeamMembers();
+                          Alert.alert('Invite Revoked', 'The invite has been revoked successfully.');
+                        } catch (error) {
+                          console.error('[INVITE] Failed to revoke invite token:', error);
+                          Alert.alert('Error', 'Failed to revoke invite token. Please try again.');
+                        }
+                      }
+                    }
+                  ]
+                );
+              }} 
+              style={[styles.actionButton, styles.revokeButtonContainer]}
+            >
+              <Text style={styles.revokeButton}>Revoke</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        {!hasActiveInvite && memberToken && (
+          <Text style={styles.memberNote}>Invite revoked</Text>
+        )}
       </View>
     );
   };
@@ -231,12 +342,26 @@ export default function InviteManager({ navigation }) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>Team Invites</Text>
-      <Text style={styles.subtitle}>
-        You have {getRemainingInvites()} invite slots remaining.
-      </Text>
+      {(() => {
+        const unusedInvites = (inviteTokens || []).filter(token => {
+          // Filter out tokens that are already used by team members
+          const isUsedByMember = teamMembers.some(member => member.token === token);
+          return !isUsedByMember;
+        });
+        return (
+          <Text style={styles.subtitle}>
+            You have {unusedInvites.length} unused invite{unusedInvites.length !== 1 ? 's' : ''} remaining.
+          </Text>
+        );
+      })()}
 
       <FlatList
-        data={inviteTokens || []}
+        data={(inviteTokens || []).filter(token => {
+          // Filter out tokens that are already used by team members
+          // Only show invites that haven't been used yet
+          const isUsedByMember = teamMembers.some(member => member.token === token);
+          return !isUsedByMember;
+        })}
         renderItem={renderInviteItem}
         keyExtractor={(item) => item}
         ListEmptyComponent={<Text>No active invites.</Text>}
@@ -266,6 +391,57 @@ export default function InviteManager({ navigation }) {
           <Text style={styles.emptyText}>No team members yet. Share an invite to get started.</Text>
         )}
       </View>
+
+      {/* Name Input Modal for Testing */}
+      <Modal
+        visible={showNameInput}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setShowNameInput(false);
+          setTestMemberName('');
+          setCurrentTestToken(null);
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Test Team Member Setup</Text>
+            <Text style={styles.modalSubtitle}>
+              Enter a name to simulate the complete team member setup process.
+            </Text>
+            <TextInput
+              style={styles.nameInput}
+              placeholder="Enter team member name"
+              placeholderTextColor={COLORS.GRAY}
+              value={testMemberName}
+              onChangeText={setTestMemberName}
+              autoFocus={true}
+              onSubmitEditing={handleTestJoinWithName}
+            />
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonCancel]}
+                onPress={() => {
+                  setShowNameInput(false);
+                  setTestMemberName('');
+                  setCurrentTestToken(null);
+                }}
+              >
+                <Text style={styles.modalButtonTextCancel}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalButtonJoin]}
+                onPress={handleTestJoinWithName}
+                disabled={!testMemberName.trim()}
+              >
+                <Text style={[styles.modalButtonTextJoin, !testMemberName.trim() && styles.modalButtonTextDisabled]}>
+                  Join
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -343,6 +519,16 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
+  revokeButton: {
+    color: '#dc3545',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  revokeButtonContainer: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#dc3545',
+  },
   generateButton: {
     backgroundColor: '#007bff',
     padding: 15,
@@ -414,5 +600,70 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
     paddingVertical: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    width: '80%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#333',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 16,
+  },
+  nameInput: {
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 16,
+    marginBottom: 20,
+    backgroundColor: '#f9f9f9',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+  },
+  modalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    minWidth: 80,
+    alignItems: 'center',
+  },
+  modalButtonCancel: {
+    backgroundColor: '#f0f0f0',
+  },
+  modalButtonJoin: {
+    backgroundColor: COLORS.PRIMARY,
+  },
+  modalButtonTextCancel: {
+    color: '#666',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalButtonTextJoin: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalButtonTextDisabled: {
+    color: '#999',
   },
 });

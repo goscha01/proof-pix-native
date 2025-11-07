@@ -12,6 +12,8 @@ const STORAGE_KEYS = {
   TEAM_MEMBER_INFO: '@team_member_info', // For team members
   PROXY_SESSION_ID: '@proxy_session_id', // Proxy server session ID
   TEAM_NAME: '@team_name', // Team name for admin
+  STORED_INDIVIDUAL_PLAN: '@stored_individual_plan', // Store individual plan when switching to team mode
+  STORED_INDIVIDUAL_MODE: '@stored_individual_mode', // Store individual mode (individual/admin) when switching to team mode
 };
 
 const AdminContext = createContext();
@@ -90,6 +92,7 @@ export function AdminProvider({ children }) {
         if (storedTeamInfo) {
           setTeamInfo(JSON.parse(storedTeamInfo));
         }
+        // Note: Individual plan/mode are stored when joining team, so they're preserved
       }
     } catch (error) {
       console.error("Failed to load admin data:", error);
@@ -171,12 +174,31 @@ export function AdminProvider({ children }) {
         throw new Error('Missing token or sessionId');
       }
 
-      // Get team member's name from settings
-      // We need to access it from AsyncStorage since we can't use the hook here
+      // Store current individual plan, mode, and name before switching to team mode
       const settingsKey = 'app-settings';
       const storedSettings = await AsyncStorage.getItem(settingsKey);
       const settings = storedSettings ? JSON.parse(storedSettings) : {};
+      const currentPlan = settings.userPlan || 'starter';
+      const currentMode = userMode || 'individual';
+      const currentUserName = settings.userName || '';
+      
+      // Only store if not already in team mode (to preserve original settings)
+      const storedPlan = await AsyncStorage.getItem(STORAGE_KEYS.STORED_INDIVIDUAL_PLAN);
+      if (!storedPlan && currentMode !== 'team_member') {
+        await AsyncStorage.setItem(STORAGE_KEYS.STORED_INDIVIDUAL_PLAN, currentPlan);
+        await AsyncStorage.setItem(STORAGE_KEYS.STORED_INDIVIDUAL_MODE, currentMode);
+        // Also store the individual user's name to restore later
+        if (currentUserName) {
+          await AsyncStorage.setItem('@stored_individual_name', currentUserName);
+        }
+        console.log('[ADMIN] Stored individual plan, mode, and name:', { plan: currentPlan, mode: currentMode, userName: currentUserName });
+      }
+
+      // Get team member's name from settings (this should be the name entered in the test modal or join flow)
       const memberName = settings.userName || 'Team Member';
+      
+      // Ensure the team member name is set in settings (this is the name used for the team member account)
+      // Note: The name should already be set from the test modal, but we ensure it's there
 
       // Register team member join with proxy server
       try {
@@ -198,6 +220,69 @@ export function AdminProvider({ children }) {
       return { success: true };
     } catch (error) {
       console.error("Error joining team:", error);
+      return { success: false, error: error.message };
+    }
+  };
+
+  /**
+   * Switch back to individual mode from team mode
+   * Restores the stored individual plan, mode, and name
+   */
+  const switchToIndividualMode = async () => {
+    try {
+      // Get stored individual plan, mode, and name
+      const [storedPlan, storedMode, storedName] = await AsyncStorage.multiGet([
+        STORAGE_KEYS.STORED_INDIVIDUAL_PLAN,
+        STORAGE_KEYS.STORED_INDIVIDUAL_MODE,
+        '@stored_individual_name',
+      ]);
+
+      const individualPlan = storedPlan[1] || 'starter';
+      const individualMode = storedMode[1] || 'individual';
+      const individualName = storedName[1] || '';
+
+      console.log('[ADMIN] Switching back to individual mode:', { plan: individualPlan, mode: individualMode, userName: individualName });
+
+      // Clear team member info
+      await AsyncStorage.removeItem(STORAGE_KEYS.TEAM_MEMBER_INFO);
+      setTeamInfo(null);
+
+      // Restore individual mode and plan
+      await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_USER_MODE, individualMode);
+      setUserMode(individualMode);
+      
+      // Restore the individual user's plan
+      await updateUserPlan(individualPlan);
+      
+      // Restore the individual user's name if it was stored
+      if (individualName) {
+        // Use the SettingsContext method to properly update the name and trigger re-renders
+        if (settingsContext && settingsContext.updateUserInfo) {
+          await settingsContext.updateUserInfo(individualName);
+          console.log('[ADMIN] Restored individual user name via SettingsContext:', individualName);
+        } else {
+          // Fallback: directly update AsyncStorage if SettingsContext is not available
+          const settingsKey = 'app-settings';
+          const storedSettings = await AsyncStorage.getItem(settingsKey);
+          const settings = storedSettings ? JSON.parse(storedSettings) : {};
+          await AsyncStorage.setItem(settingsKey, JSON.stringify({
+            ...settings,
+            userName: individualName
+          }));
+          console.log('[ADMIN] Restored individual user name directly:', individualName);
+        }
+      }
+
+      // If the stored mode was 'admin', we need to restore admin state
+      // But we don't restore folderId/proxySessionId as those require re-authentication
+      if (individualMode === 'admin') {
+        // Keep isAuthenticated and userInfo if they exist
+        // User will need to reconnect team if they want team features
+      }
+
+      return { success: true, plan: individualPlan, mode: individualMode };
+    } catch (error) {
+      console.error("Error switching to individual mode:", error);
       return { success: false, error: error.message };
     }
   };
@@ -431,6 +516,7 @@ export function AdminProvider({ children }) {
     signOut,
     signOutFromTeam,
     joinTeam,
+    switchToIndividualMode,
     saveFolderId,
     addInviteToken,
     removeInviteToken,

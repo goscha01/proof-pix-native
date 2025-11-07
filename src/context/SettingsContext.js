@@ -93,6 +93,11 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ userName: name });
   };
 
+  // Reload settings from AsyncStorage (useful when external changes are made)
+  const reloadSettings = async () => {
+    await loadSettings();
+  };
+
   const updateUserPlan = async (plan) => {
     setUserPlan(plan);
     await saveSettings({ userPlan: plan });
@@ -183,6 +188,7 @@ export const SettingsProvider = ({ children }) => {
     resetCustomRooms,
     userPlan, // Expose userPlan
     updateUserPlan, // Expose updateUserPlan
+    reloadSettings, // Expose reloadSettings
   };
 
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;

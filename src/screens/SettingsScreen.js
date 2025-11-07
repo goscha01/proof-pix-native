@@ -67,9 +67,15 @@ export default function SettingsScreen({ navigation }) {
     initializeProxySession,
     teamName,
     updateTeamName,
+    switchToIndividualMode,
   } = useAdmin();
 
   const [name, setName] = useState(userName);
+  
+  // Update name when userName changes (e.g., when switching back from team mode)
+  useEffect(() => {
+    setName(userName);
+  }, [userName]);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [adminInfo, setAdminInfo] = useState(null);
@@ -322,6 +328,48 @@ export default function SettingsScreen({ navigation }) {
                   </Text>
                 )}
               </View>
+              
+              {/* Switch to Individual Mode Button */}
+              <TouchableOpacity
+                style={styles.switchModeButton}
+                onPress={async () => {
+                  Alert.alert(
+                    'Switch to Individual Mode',
+                    'This will switch you back to your individual account. You can rejoin the team later using the invite code.',
+                    [
+                      { text: 'Cancel', style: 'cancel' },
+                      {
+                        text: 'Switch',
+                        onPress: async () => {
+                          try {
+                            const result = await switchToIndividualMode();
+                            if (result.success) {
+                              // Reload settings to ensure UI updates with restored name and plan
+                              // The SettingsContext should pick up the changes from AsyncStorage
+                              // Force a re-render by waiting a bit for state updates
+                              setTimeout(() => {
+                                Alert.alert(
+                                  'Switched to Individual Mode',
+                                  `You are now in ${result.plan.charAt(0).toUpperCase() + result.plan.slice(1)} mode.`,
+                                  [{ text: 'OK' }]
+                                );
+                              }, 100);
+                            } else {
+                              Alert.alert('Error', result.error || 'Failed to switch to individual mode.');
+                            }
+                          } catch (error) {
+                            console.error('[SETTINGS] Error switching to individual mode:', error);
+                            Alert.alert('Error', 'Failed to switch to individual mode. Please try again.');
+                          }
+                        }
+                      }
+                    ]
+                  );
+                }}
+              >
+                <Text style={styles.switchModeButtonText}>Switch to Individual Mode</Text>
+              </TouchableOpacity>
+              
               <TouchableOpacity
                 style={styles.signOutButton}
                 onPress={handleSignOut}
@@ -1462,5 +1510,19 @@ export default function SettingsScreen({ navigation }) {
       },
       teamNameButtonTextCancel: {
         color: COLORS.GRAY,
+      },
+      switchModeButton: {
+        backgroundColor: COLORS.PRIMARY,
+        borderRadius: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        marginTop: 12,
+        marginBottom: 8,
+      },
+      switchModeButtonText: {
+        color: COLORS.TEXT,
+        fontSize: 16,
+        fontWeight: '600',
       },
     });
