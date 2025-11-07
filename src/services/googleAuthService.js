@@ -353,7 +353,21 @@ class GoogleAuthService {
   async makeAuthenticatedRequest(url, options = {}) {
     this.checkAvailability();
     try {
-      const { accessToken } = await GoogleSignin.getTokens();
+      // Try to get tokens - this will throw an error if user is not signed in
+      let accessToken;
+      try {
+        const tokens = await GoogleSignin.getTokens();
+        accessToken = tokens.accessToken;
+      } catch (tokenError) {
+        console.log('[AUTH] Failed to get tokens:', tokenError.message);
+        const storedUser = await this.getStoredUserInfo();
+        if (storedUser) {
+          console.log('[AUTH] Found stored user info, but SDK session is not active. User needs to sign in again.');
+          throw new Error('Your Google session has expired. Please sign in again.');
+        } else {
+          throw new Error('Please sign in to continue.');
+        }
+      }
       
       if (!accessToken) {
         throw new Error('No access token available. Please sign in again.');
@@ -373,7 +387,7 @@ class GoogleAuthService {
       return response;
     } catch (error) {
       console.error('Error making authenticated request:', error);
-      if (error.message.includes('access token')) {
+      if (error.message.includes('access token') || error.message.includes('sign in')) {
         throw error;
       }
       throw new Error('Failed to make authenticated request: ' + error.message);

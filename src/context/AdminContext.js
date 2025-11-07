@@ -11,6 +11,7 @@ const STORAGE_KEYS = {
   ADMIN_USER_MODE: '@admin_user_mode',
   TEAM_MEMBER_INFO: '@team_member_info', // For team members
   PROXY_SESSION_ID: '@proxy_session_id', // Proxy server session ID
+  TEAM_NAME: '@team_name', // Team name for admin
 };
 
 const AdminContext = createContext();
@@ -32,6 +33,7 @@ export function AdminProvider({ children }) {
   const [teamInfo, setTeamInfo] = useState(null);
   const [proxySessionId, setProxySessionId] = useState(null); // Proxy server session ID
   const [isInitializingProxy, setIsInitializingProxy] = useState(false); // Guard to prevent concurrent initialization
+  const [teamName, setTeamName] = useState('');
 
   // Load saved admin data on mount
   useEffect(() => {
@@ -70,15 +72,18 @@ export function AdminProvider({ children }) {
           storedFolderId,
           storedTokens,
           storedPlanLimit,
+          storedTeamName,
         ] = await AsyncStorage.multiGet([
           STORAGE_KEYS.ADMIN_FOLDER_ID,
           STORAGE_KEYS.ADMIN_INVITE_TOKENS,
           STORAGE_KEYS.ADMIN_PLAN_LIMIT,
+          STORAGE_KEYS.TEAM_NAME,
         ]);
 
         setFolderId(storedFolderId[1]);
         setInviteTokens(storedTokens[1] ? JSON.parse(storedTokens[1]) : []);
         setPlanLimit(storedPlanLimit[1] ? parseInt(storedPlanLimit[1]) : 5);
+        setTeamName(storedTeamName[1] || '');
       } else if (storedMode === 'team_member') {
         // Load team member info
         const storedTeamInfo = await AsyncStorage.getItem(STORAGE_KEYS.TEAM_MEMBER_INFO);
@@ -198,7 +203,33 @@ export function AdminProvider({ children }) {
   };
 
   /**
-   * Sign out
+   * Sign out from team only (keeps Google authentication)
+   * For Business/Enterprise users who want to disconnect team but stay signed in to Google
+   */
+  const signOutFromTeam = async () => {
+    try {
+      // Clear only team setup data, keep Google authentication
+      await AsyncStorage.multiRemove([
+        STORAGE_KEYS.ADMIN_FOLDER_ID,
+        STORAGE_KEYS.ADMIN_INVITE_TOKENS,
+        STORAGE_KEYS.ADMIN_PLAN_LIMIT,
+        STORAGE_KEYS.PROXY_SESSION_ID,
+        STORAGE_KEYS.TEAM_NAME,
+      ]);
+      setFolderId(null);
+      setInviteTokens([]);
+      setProxySessionId(null);
+      setPlanLimit(5); // Reset to default
+      setTeamName(''); // Clear team name
+      // Keep isAuthenticated, userInfo, and userMode='admin'
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  /**
+   * Sign out completely (clears Google authentication and all data)
    */
   const signOut = async () => {
     try {
@@ -367,6 +398,19 @@ export function AdminProvider({ children }) {
     return Math.max(0, planLimit - inviteTokens.length);
   };
 
+  /**
+   * Update team name
+   */
+  const updateTeamName = async (name) => {
+    try {
+      await AsyncStorage.setItem(STORAGE_KEYS.TEAM_NAME, name);
+      setTeamName(name);
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
+  };
+
   const value = {
     // State
     isAuthenticated,
@@ -378,12 +422,14 @@ export function AdminProvider({ children }) {
     userMode,
     teamInfo,
     proxySessionId,
+    teamName,
     isGoogleSignInAvailable: googleAuthService.isAvailable(),
 
     // Actions
     adminSignIn,
     individualSignIn,
     signOut,
+    signOutFromTeam,
     joinTeam,
     saveFolderId,
     addInviteToken,
@@ -396,6 +442,7 @@ export function AdminProvider({ children }) {
     isSetupComplete,
     canAddMoreInvites,
     getRemainingInvites,
+    updateTeamName,
 
     // Direct access to auth service for API calls
     googleAuthService,

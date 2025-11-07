@@ -40,10 +40,11 @@ export default function InviteManager() {
   };
 
   useEffect(() => {
+    if (!proxySessionId) return;
+    
+    // Fetch team members only when component mounts or session changes
+    // No need for constant polling - team members are fetched when invites are generated/revoked
     fetchTeamMembers();
-    // Refresh every 5 seconds to get updated status
-    const interval = setInterval(fetchTeamMembers, 5000);
-    return () => clearInterval(interval);
   }, [proxySessionId]);
 
   const handleGenerateInvite = async () => {

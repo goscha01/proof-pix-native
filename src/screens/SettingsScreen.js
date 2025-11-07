@@ -10,12 +10,12 @@ import {
   Alert,
   Linking,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
 import { useAdmin } from '../context/AdminContext';
 import { COLORS } from '../constants/rooms';
-import { LOCATIONS, getLocationConfig } from '../config/locations';
 import RoomEditor from '../components/RoomEditor';
 import googleDriveService from '../services/googleDriveService';
 import InviteManager from '../components/InviteManager';
@@ -41,14 +41,18 @@ export default function SettingsScreen({ navigation }) {
     saveCustomRooms,
     getRooms,
     resetCustomRooms,
-    userPlan
+    userPlan,
+    updateUserPlan
   } = useSettings();
+  
+  const [showPlanSelection, setShowPlanSelection] = useState(false);
 
   const {
     isAuthenticated,
     userInfo: adminUserInfo,
     signIn,
     signOut,
+    signOutFromTeam,
     isSetupComplete,
     folderId: adminFolderId,
     proxySessionId,
@@ -61,6 +65,8 @@ export default function SettingsScreen({ navigation }) {
     individualSignIn,
     isGoogleSignInAvailable,
     initializeProxySession,
+    teamName,
+    updateTeamName,
   } = useAdmin();
 
   const [name, setName] = useState(userName);
@@ -68,6 +74,9 @@ export default function SettingsScreen({ navigation }) {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [adminInfo, setAdminInfo] = useState(null);
   const [loadingAdminInfo, setLoadingAdminInfo] = useState(false);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [editingTeamName, setEditingTeamName] = useState(false);
+  const [teamNameInput, setTeamNameInput] = useState('');
 
   const handleSetupTeam = async () => {
     if (!isAuthenticated || userMode !== 'admin' || isSigningIn) {
@@ -85,6 +94,7 @@ export default function SettingsScreen({ navigation }) {
       setIsSigningIn(true); // Show a loading indicator
 
       // Step 1: Find or create the Google Drive folder
+      // Note: makeAuthenticatedRequest will handle checking if user is signed in
       const folderId = await googleDriveService.findOrCreateProofPixFolder();
       await saveFolderId(folderId);
       console.log('[SETUP] Admin folder ID saved:', folderId);
@@ -95,6 +105,12 @@ export default function SettingsScreen({ navigation }) {
         throw new Error('Failed to initialize proxy session');
       }
       console.log('[SETUP] Proxy session initialized:', sessionResult.sessionId);
+
+      // Step 3: Set default team name to Google profile name if not already set
+      if (!teamName && adminUserInfo?.name) {
+        await updateTeamName(adminUserInfo.name);
+        console.log('[SETUP] Default team name set to:', adminUserInfo.name);
+      }
 
       Alert.alert(
         'Team Connected!', 
@@ -183,11 +199,34 @@ export default function SettingsScreen({ navigation }) {
     );
   };
 
-  const selectedLocationObj = LOCATIONS.find(loc => loc.id === location) || LOCATIONS[0];
-  const config = getLocationConfig(location);
 
   const handleSignOut = async () => {
-    await signOut();
+    // For Business/Enterprise users in admin mode with team setup, sign out from team only
+    // This keeps Google authentication but clears team setup, showing "Set Up Team" button again
+    if (userMode === 'admin' && isSetupComplete() && (userPlan === 'business' || userPlan === 'enterprise')) {
+      Alert.alert(
+        'Disconnect Team',
+        'This will disconnect your team setup but keep you signed in to Google. You can set up your team again later.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Disconnect',
+            style: 'destructive',
+            onPress: async () => {
+              const result = await signOutFromTeam();
+              if (result.success) {
+                Alert.alert('Success', 'Team disconnected successfully');
+              } else {
+                Alert.alert('Error', result.error || 'Failed to disconnect team');
+              }
+            }
+          }
+        ]
+      );
+    } else {
+      // For all other cases, do full sign out
+      await signOut();
+    }
   };
 
   // Fetch admin info for team members
@@ -218,6 +257,13 @@ export default function SettingsScreen({ navigation }) {
     fetchAdminInfo();
   }, [userMode, teamInfo?.sessionId]);
 
+  // Update team name input when teamName changes from context
+  useEffect(() => {
+    if (!editingTeamName) {
+      setTeamNameInput(teamName || '');
+    }
+  }, [teamName]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -235,6 +281,22 @@ export default function SettingsScreen({ navigation }) {
         {/* Admin Setup Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Cloud & Team Sync</Text>
+          
+          {/* Show current plan above buttons */}
+          {userPlan && (
+            <TouchableOpacity 
+              style={styles.currentPlanBox}
+              onPress={() => setShowPlanModal(true)}
+            >
+              <Text style={styles.currentPlanLabel}>Current Plan:</Text>
+              <View style={styles.currentPlanValueContainer}>
+                <Text style={styles.currentPlanValue}>
+                  {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
+                </Text>
+                <Text style={styles.changePlanText}>Change</Text>
+              </View>
+            </TouchableOpacity>
+          )}
           
           {userMode === 'team_member' ? (
             <>
@@ -274,57 +336,220 @@ export default function SettingsScreen({ navigation }) {
              </View>
           ) : !isAuthenticated ? (
             <>
-              <Text style={styles.sectionDescription}>
-                Sign in to sync your photos to the cloud and enable team features.
-              </Text>
-              {!isGoogleSignInAvailable && (
-                <View style={styles.expoGoWarning}>
-                  <Text style={styles.expoGoWarningText}>
-                    ⚠️ Google Sign-in requires a development build and is not available in Expo Go.
+              {showPlanSelection ? (
+                <>
+                  <TouchableOpacity onPress={() => setShowPlanSelection(false)} style={styles.backLink}>
+                    <Text style={styles.backLinkText}>&larr; Back</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.sectionDescription}>
+                    Choose a Plan
                   </Text>
-                  <Text style={styles.expoGoWarningSubtext}>
-                    Run: npx expo install expo-dev-client && eas build --profile development
+                  
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity 
+                      style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]} 
+                      onPress={async () => {
+                        await updateUserPlan('starter');
+                        setShowPlanSelection(false);
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>Starter</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>Free forever. Easily manage your first project and create stunning before/after photos ready for social sharing.</Text>
+                  </View>
+
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity 
+                      style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]} 
+                      onPress={async () => {
+                        await updateUserPlan('pro');
+                        setShowPlanSelection(false);
+                        navigation.navigate('GoogleSignUp', { plan: 'pro' });
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>Pro</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>For professionals. Cloud sync + bulk upload.</Text>
+                  </View>
+                  
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity 
+                      style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]} 
+                      onPress={async () => {
+                        await updateUserPlan('business');
+                        setShowPlanSelection(false);
+                        navigation.navigate('GoogleSignUp', { plan: 'business' });
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>Business</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>For small teams. Includes team management.</Text>
+                  </View>
+                  
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity 
+                      style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]} 
+                      onPress={async () => {
+                        await updateUserPlan('enterprise');
+                        setShowPlanSelection(false);
+                        navigation.navigate('GoogleSignUp', { plan: 'enterprise' });
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>Enterprise</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>For growing organizations. Unlimited members, multi-location support.</Text>
+                  </View>
+                </>
+              ) : (
+                <>
+                  {/* Show all 3 buttons for all tiers, with enable/disable based on plan */}
+                  <Text style={styles.sectionDescription}>
+                    {userPlan ? 
+                      `Your ${userPlan.charAt(0).toUpperCase() + userPlan.slice(1)} plan features:` :
+                      'Sign in to sync your photos to the cloud and enable team features.'
+                    }
                   </Text>
-                </View>
+                  
+                  {/* Determine which buttons are enabled based on plan */}
+                  {(() => {
+                    const isStarter = !userPlan || userPlan === 'starter';
+                    const isPro = userPlan === 'pro';
+                    const isBusiness = userPlan === 'business';
+                    const isEnterprise = userPlan === 'enterprise';
+                    
+                    const canConnectGoogle = isPro || isBusiness || isEnterprise;
+                    const canSetupTeam = isBusiness || isEnterprise;
+                    const canAddLocation = isEnterprise;
+                    
+                    return (
+                      <>
+                        {/* Connect to Google Account Button */}
+                        <TouchableOpacity
+                          style={[
+                            styles.featureButton,
+                            (!canConnectGoogle || !isGoogleSignInAvailable || isSigningIn) && styles.buttonDisabled
+                          ]}
+                          onPress={async () => {
+                            if (!canConnectGoogle) {
+                              Alert.alert('Feature Unavailable', 'Google Account connection is available for Pro, Business, and Enterprise plans.');
+                              return;
+                            }
+                            setIsSigningIn(true);
+                            try {
+                              // For Pro, use individual sign-in; for Business/Enterprise, use admin sign-in
+                              if (isPro) {
+                                await individualSignIn();
+                              } else {
+                                await adminSignIn();
+                              }
+                            } catch (error) {
+                              console.error("Error during sign in:", error);
+                            } finally {
+                              setIsSigningIn(false);
+                            }
+                          }}
+                          disabled={!canConnectGoogle || !isGoogleSignInAvailable || isSigningIn}
+                        >
+                          {isSigningIn && canConnectGoogle ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Text style={[
+                              styles.featureButtonText,
+                              (!canConnectGoogle || !isGoogleSignInAvailable) && styles.buttonTextDisabled
+                            ]}>
+                              Connect to Google Account
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                        
+                        {/* Set Up Team Button */}
+                        <TouchableOpacity
+                          style={[
+                            styles.featureButton,
+                            (!canSetupTeam || isSigningIn) && styles.buttonDisabled
+                          ]}
+                          onPress={async () => {
+                            if (!canSetupTeam) {
+                              Alert.alert('Feature Unavailable', 'Team setup is available for Business and Enterprise plans.');
+                              return;
+                            }
+                            if (!isAuthenticated) {
+                              Alert.alert('Sign In Required', 'Please connect your Google account first.');
+                              return;
+                            }
+                            await handleSetupTeam();
+                          }}
+                          disabled={!canSetupTeam || isSigningIn}
+                        >
+                          <Text style={[
+                            styles.featureButtonText,
+                            !canSetupTeam && styles.buttonTextDisabled
+                          ]}>
+                            Set Up Team
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        {/* Add Location Button */}
+                        <TouchableOpacity
+                          style={[
+                            styles.featureButton,
+                            !canAddLocation && styles.buttonDisabled
+                          ]}
+                          onPress={() => {
+                            if (!canAddLocation) {
+                              Alert.alert('Feature Unavailable', 'Multi-location support is available for Enterprise plans only.');
+                              return;
+                            }
+                            // TODO: Implement location management for Enterprise
+                            Alert.alert('Coming Soon', 'Location management will be available soon for Enterprise users.');
+                          }}
+                          disabled={!canAddLocation}
+                        >
+                          <Text style={[
+                            styles.featureButtonText,
+                            !canAddLocation && styles.buttonTextDisabled
+                          ]}>
+                            Add Location
+                          </Text>
+                        </TouchableOpacity>
+                        
+                        {!isGoogleSignInAvailable && (canConnectGoogle || canSetupTeam) && (
+                          <View style={styles.expoGoWarning}>
+                            <Text style={styles.expoGoWarningText}>
+                              ⚠️ Google Sign-in requires a development build and is not available in Expo Go.
+                            </Text>
+                            <Text style={styles.expoGoWarningSubtext}>
+                              Run: npx expo install expo-dev-client && eas build --profile development
+                            </Text>
+                          </View>
+                        )}
+                        
+                        {/* Show plan selection option for Starter users */}
+                        {isStarter && (
+                          <>
+                            <TouchableOpacity
+                              style={styles.signInButton}
+                              onPress={() => setShowPlanSelection(true)}
+                            >
+                              <Text style={styles.signInButtonText}>
+                                Upgrade Plan
+                              </Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={styles.googleSignInButton}
+                              onPress={() => navigation.navigate('JoinTeam')}
+                            >
+                              <Text style={styles.googleSignInButtonText}>
+                                Join a Team
+                              </Text>
+                            </TouchableOpacity>
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
+                </>
               )}
-              <TouchableOpacity
-                style={[
-                  styles.signInButton,
-                  !isGoogleSignInAvailable && styles.buttonDisabled
-                ]}
-                onPress={handleIndividualSignIn}
-                disabled={!isGoogleSignInAvailable}
-              >
-                <Text style={[
-                  styles.signInButtonText,
-                  !isGoogleSignInAvailable && styles.buttonTextDisabled
-                ]}>
-                  Use for Individual Work
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[
-                  styles.googleSignInButton,
-                  !isGoogleSignInAvailable && styles.buttonDisabled
-                ]}
-                onPress={handleGoogleSignIn}
-                disabled={!isGoogleSignInAvailable}
-              >
-                <Text style={[
-                  styles.googleSignInButtonText,
-                  !isGoogleSignInAvailable && styles.buttonTextDisabled
-                ]}>
-                  Set Up a Team (Admin)
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.joinTeamButton}
-                onPress={() => navigation.navigate('JoinTeam')}
-              >
-                <Text style={styles.joinTeamButtonText}>
-                  Join an Existing Team
-                </Text>
-              </TouchableOpacity>
             </>
           ) : (
             <>
@@ -338,39 +563,126 @@ export default function SettingsScreen({ navigation }) {
                 </Text>
               </View>
 
-              {userMode === 'admin' && !isSetupComplete() && (
-                <>
-                  {(userPlan === 'business' || userPlan === 'enterprise') && (
-                    <TouchableOpacity
-                      style={[
-                        styles.setupTeamButton,
-                        isSigningIn && styles.buttonDisabled
-                      ]}
-                      onPress={handleSetupTeam}
-                      disabled={isSigningIn}
-                    >
-                      {isSigningIn ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={styles.setupTeamButtonText}>
-                          Connect Team
+              {/* Show all buttons when authenticated, with enable/disable based on plan */}
+              {(() => {
+                const isPro = userPlan === 'pro';
+                const isBusiness = userPlan === 'business';
+                const isEnterprise = userPlan === 'enterprise';
+                
+                const canSetupTeam = isBusiness || isEnterprise;
+                const canAddLocation = isEnterprise;
+                const isAdmin = userMode === 'admin';
+                
+                return (
+                  <>
+                    {/* Set Up Team Button - shown for authenticated Business/Enterprise admins who haven't set up yet */}
+                    {isAdmin && !isSetupComplete() && canSetupTeam && (
+                      <TouchableOpacity
+                        style={[
+                          styles.featureButton,
+                          isSigningIn && styles.buttonDisabled
+                        ]}
+                        onPress={handleSetupTeam}
+                        disabled={isSigningIn}
+                      >
+                        {isSigningIn ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={styles.featureButtonText}>
+                            Set Up Team
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                    
+                    {/* Show Add Location button for all authenticated users (individual and admin) */}
+                    {(userMode === 'individual' || userMode === 'admin') && (
+                      <TouchableOpacity
+                        style={[
+                          styles.featureButton,
+                          !canAddLocation && styles.buttonDisabled
+                        ]}
+                        onPress={() => {
+                          if (!canAddLocation) {
+                            Alert.alert('Feature Unavailable', 'Multi-location support is available for Enterprise plans only.');
+                            return;
+                          }
+                          // TODO: Implement location management for Enterprise
+                          Alert.alert('Coming Soon', 'Location management will be available soon for Enterprise users.');
+                        }}
+                        disabled={!canAddLocation}
+                      >
+                        <Text style={[
+                          styles.featureButtonText,
+                          !canAddLocation && styles.buttonTextDisabled
+                        ]}>
+                          Add Location
                         </Text>
-                      )}
-                    </TouchableOpacity>
-                  )}
-                  {userPlan !== 'business' && userPlan !== 'enterprise' && (
-                    <Text style={styles.setupIncompleteText}>
-                      Team setup requires Business or Enterprise plan.
-                    </Text>
-                  )}
-                </>
-              )}
+                      </TouchableOpacity>
+                    )}
+                  </>
+                );
+              })()}
 
               {userMode === 'admin' && isSetupComplete() && (
                 <>
                   <View style={styles.connectedStatus}>
                     <Text style={styles.connectedText}>✓ Team Connected</Text>
                   </View>
+                  
+                  {/* Editable Team Name */}
+                  <View style={styles.teamNameContainer}>
+                    <Text style={styles.teamNameLabel}>Team Name</Text>
+                    {editingTeamName ? (
+                      <View style={styles.teamNameEditContainer}>
+                        <TextInput
+                          style={styles.teamNameInput}
+                          value={teamNameInput}
+                          onChangeText={setTeamNameInput}
+                          placeholder="Enter team name"
+                          placeholderTextColor={COLORS.GRAY}
+                          autoFocus={true}
+                        />
+                        <View style={styles.teamNameButtons}>
+                          <TouchableOpacity
+                            style={styles.teamNameButton}
+                            onPress={async () => {
+                              await updateTeamName(teamNameInput);
+                              setEditingTeamName(false);
+                            }}
+                          >
+                            <Text style={styles.teamNameButtonText}>Save</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.teamNameButton, styles.teamNameButtonCancel]}
+                            onPress={() => {
+                              setTeamNameInput(teamName || '');
+                              setEditingTeamName(false);
+                            }}
+                          >
+                            <Text style={[styles.teamNameButtonText, styles.teamNameButtonTextCancel]}>Cancel</Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ) : (
+                      <TouchableOpacity
+                        style={styles.teamNameDisplay}
+                        onPress={() => {
+                          setTeamNameInput(teamName || '');
+                          setEditingTeamName(true);
+                        }}
+                      >
+                        <Text style={[
+                          styles.teamNameText,
+                          !teamName && styles.teamNameTextPlaceholder
+                        ]}>
+                          {teamName || 'Tap to add team name'}
+                        </Text>
+                        <Text style={styles.teamNameEditIcon}>✏️</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  
                   <InviteManager />
                 </>
               )}
@@ -507,29 +819,6 @@ export default function SettingsScreen({ navigation }) {
                     </>
                   )}
                 </View>
-
-                {/* Google Drive Configuration (Read-only) */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Google Drive Configuration</Text>
-                  <Text style={styles.sectionDescription}>
-                    Automatically configured based on selected location
-                  </Text>
-
-                  <View style={styles.configRow}>
-                    <Text style={styles.configLabel}>Folder ID:</Text>
-                    <Text style={styles.configValue} numberOfLines={1}>
-                      {config.folderId ? '✓ Configured' : '✗ Not configured'}
-                    </Text>
-                  </View>
-
-                  {!config.folderId && (
-                    <View style={styles.warningBox}>
-                      <Text style={styles.warningText}>
-                        ⚠️ Configuration missing for {selectedLocationObj.name}. Please check environment variables.
-                      </Text>
-                    </View>
-                  )}
-                </View>
               </>
             )}
 
@@ -569,6 +858,91 @@ export default function SettingsScreen({ navigation }) {
             }}
             initialRooms={customRooms}
           />
+
+          {/* Plan Selection Modal */}
+          <Modal
+            visible={showPlanModal}
+            transparent={true}
+            animationType="slide"
+            onRequestClose={() => setShowPlanModal(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Choose a Plan</Text>
+                  <TouchableOpacity 
+                    onPress={() => setShowPlanModal(false)}
+                    style={styles.modalCloseButton}
+                  >
+                    <Text style={styles.modalCloseText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView style={styles.modalScrollView}>
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity 
+                      style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]} 
+                      onPress={async () => {
+                        await updateUserPlan('starter');
+                        setShowPlanModal(false);
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>Starter</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>Free forever. Easily manage your first project and create stunning before/after photos ready for social sharing.</Text>
+                  </View>
+
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity 
+                      style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]} 
+                      onPress={async () => {
+                        await updateUserPlan('pro');
+                        setShowPlanModal(false);
+                        if (!isAuthenticated) {
+                          navigation.navigate('GoogleSignUp', { plan: 'pro' });
+                        }
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>Pro</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>For professionals. Cloud sync + bulk upload.</Text>
+                  </View>
+                  
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity 
+                      style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]} 
+                      onPress={async () => {
+                        await updateUserPlan('business');
+                        setShowPlanModal(false);
+                        if (!isAuthenticated) {
+                          navigation.navigate('GoogleSignUp', { plan: 'business' });
+                        }
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>Business</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>For small teams. Includes team management.</Text>
+                  </View>
+                  
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity 
+                      style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]} 
+                      onPress={async () => {
+                        await updateUserPlan('enterprise');
+                        setShowPlanModal(false);
+                        if (!isAuthenticated) {
+                          navigation.navigate('GoogleSignUp', { plan: 'enterprise' });
+                        }
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>Enterprise</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>For growing organizations. Unlimited members, multi-location support.</Text>
+                  </View>
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
         </SafeAreaView>
       );
     }
@@ -681,27 +1055,6 @@ export default function SettingsScreen({ navigation }) {
         color: COLORS.GRAY,
         marginBottom: 12
       },
-      configRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingVertical: 8
-      },
-      configLabel: {
-        color: COLORS.GRAY
-      },
-      configValue: {
-        color: COLORS.TEXT,
-        maxWidth: '70%'
-      },
-      warningBox: {
-        marginTop: 12,
-        padding: 12,
-        borderRadius: 8,
-        backgroundColor: '#FFF8E1'
-      },
-      warningText: {
-        color: '#8A6D3B'
-      },
       settingRow: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -757,25 +1110,119 @@ export default function SettingsScreen({ navigation }) {
         fontSize: 16,
         fontWeight: '600'
       },
-      joinTeamButton: {
-        backgroundColor: '#28a745',
-        borderRadius: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        alignItems: 'center',
-        marginTop: 8
-      },
-      joinTeamButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '600'
-      },
       buttonDisabled: {
         backgroundColor: '#cccccc',
         opacity: 0.6
       },
       buttonTextDisabled: {
         color: '#666666'
+      },
+      currentPlanBox: {
+        backgroundColor: '#f0f0f0',
+        borderRadius: 8,
+        padding: 12,
+        marginBottom: 16,
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center'
+      },
+      currentPlanLabel: {
+        fontSize: 14,
+        color: COLORS.GRAY,
+        fontWeight: '600'
+      },
+      currentPlanValueContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8
+      },
+      currentPlanValue: {
+        fontSize: 16,
+        color: COLORS.TEXT,
+        fontWeight: 'bold'
+      },
+      changePlanText: {
+        fontSize: 14,
+        color: COLORS.PRIMARY,
+        fontWeight: '600'
+      },
+      modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        justifyContent: 'flex-end'
+      },
+      modalContent: {
+        backgroundColor: 'white',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        maxHeight: '80%',
+        paddingBottom: 20
+      },
+      modalHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 20,
+        borderBottomWidth: 1,
+        borderBottomColor: COLORS.BORDER
+      },
+      modalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: COLORS.TEXT
+      },
+      modalCloseButton: {
+        width: 30,
+        height: 30,
+        justifyContent: 'center',
+        alignItems: 'center'
+      },
+      modalCloseText: {
+        fontSize: 24,
+        color: COLORS.GRAY
+      },
+      modalScrollView: {
+        paddingHorizontal: 20,
+        paddingTop: 20
+      },
+      backLink: {
+        marginBottom: 12,
+        alignSelf: 'flex-start'
+      },
+      backLinkText: {
+        fontSize: 16,
+        color: COLORS.PRIMARY,
+        fontWeight: '600'
+      },
+      planContainer: {
+        marginBottom: 20
+      },
+      planButton: {
+        backgroundColor: '#fff',
+        borderRadius: 12,
+        padding: 20,
+        borderWidth: 2,
+        borderColor: '#ddd',
+        alignItems: 'center'
+      },
+      planButtonSelected: {
+        borderColor: COLORS.PRIMARY,
+        backgroundColor: '#f0f7ff'
+      },
+      planButtonText: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333'
+      },
+      planButtonTextSelected: {
+        color: COLORS.PRIMARY
+      },
+      planSubtext: {
+        fontSize: 14,
+        color: '#666',
+        textAlign: 'center',
+        marginTop: 8,
+        paddingHorizontal: 10
       },
       expoGoWarning: {
         backgroundColor: '#fff3cd',
@@ -904,6 +1351,20 @@ export default function SettingsScreen({ navigation }) {
         textAlign: 'center',
         marginTop: 8,
       },
+      featureButton: {
+        backgroundColor: COLORS.PRIMARY,
+        borderRadius: 12,
+        paddingVertical: 16,
+        paddingHorizontal: 20,
+        alignItems: 'center',
+        marginTop: 12,
+        marginBottom: 8
+      },
+      featureButtonText: {
+        color: COLORS.TEXT,
+        fontSize: 16,
+        fontWeight: '600'
+      },
       setupTeamButton: {
         backgroundColor: COLORS.PRIMARY,
         borderRadius: 12,
@@ -929,5 +1390,77 @@ export default function SettingsScreen({ navigation }) {
         color: '#155724',
         fontSize: 14,
         fontWeight: '600',
+      },
+      teamNameContainer: {
+        marginBottom: 15,
+      },
+      teamNameLabel: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: COLORS.TEXT,
+        marginBottom: 8,
+      },
+      teamNameDisplay: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        backgroundColor: 'white',
+        borderWidth: 1,
+        borderColor: COLORS.BORDER,
+        borderRadius: 8,
+        padding: 12,
+      },
+      teamNameText: {
+        fontSize: 16,
+        color: COLORS.TEXT,
+        flex: 1,
+      },
+      teamNameTextPlaceholder: {
+        color: COLORS.GRAY,
+        fontStyle: 'italic',
+      },
+      teamNameEditIcon: {
+        fontSize: 18,
+        marginLeft: 8,
+      },
+      teamNameEditContainer: {
+        backgroundColor: 'white',
+        borderWidth: 1,
+        borderColor: COLORS.BORDER,
+        borderRadius: 8,
+        padding: 12,
+      },
+      teamNameInput: {
+        fontSize: 16,
+        color: COLORS.TEXT,
+        borderWidth: 1,
+        borderColor: COLORS.BORDER,
+        borderRadius: 6,
+        padding: 10,
+        marginBottom: 8,
+      },
+      teamNameButtons: {
+        flexDirection: 'row',
+        justifyContent: 'flex-end',
+        gap: 8,
+      },
+      teamNameButton: {
+        backgroundColor: COLORS.PRIMARY,
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 6,
+      },
+      teamNameButtonCancel: {
+        backgroundColor: 'transparent',
+        borderWidth: 1,
+        borderColor: COLORS.BORDER,
+      },
+      teamNameButtonText: {
+        color: COLORS.TEXT,
+        fontSize: 14,
+        fontWeight: '600',
+      },
+      teamNameButtonTextCancel: {
+        color: COLORS.GRAY,
       },
     });
