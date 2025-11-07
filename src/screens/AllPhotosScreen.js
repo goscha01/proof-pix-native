@@ -665,8 +665,8 @@ export default function AllPhotosScreen({ navigation, route }) {
             return;
           }
           // Initialize proxy session for uploads
-          const sessionId = await initializeProxySession(userFolderId);
-          if (!sessionId) {
+          const sessionResult = await initializeProxySession(userFolderId);
+          if (!sessionResult || !sessionResult.success || !sessionResult.sessionId) {
             Alert.alert('Error', 'Failed to initialize proxy session. Please try again.');
             return;
           }
@@ -674,7 +674,7 @@ export default function AllPhotosScreen({ navigation, route }) {
           config = { 
             folderId: userFolderId, 
             useDirectDrive: true, // Flag to indicate proxy server upload
-            sessionId: sessionId // Proxy session ID
+            sessionId: sessionResult.sessionId // Extract sessionId string from result object
           };
           uploadConfig = config; // Store for later use
         } catch (error) {

@@ -74,8 +74,8 @@ export default function SettingsScreen({ navigation }) {
       return;
     }
 
-    // Check if already set up (either Apps Script or Proxy Server)
-    if (isSetupComplete() || proxySessionId) {
+    // Check if already set up - only consider it connected if folderId is also saved (admin setup)
+    if (isSetupComplete()) {
       Alert.alert('Already Connected', 'Your team is already connected. You can manage invites below.');
       return;
     }
@@ -338,7 +338,7 @@ export default function SettingsScreen({ navigation }) {
                 </Text>
               </View>
 
-              {userMode === 'admin' && !isSetupComplete() && !proxySessionId && (
+              {userMode === 'admin' && !isSetupComplete() && (
                 <>
                   {(userPlan === 'business' || userPlan === 'enterprise') && (
                     <TouchableOpacity
@@ -366,7 +366,7 @@ export default function SettingsScreen({ navigation }) {
                 </>
               )}
 
-              {userMode === 'admin' && (isSetupComplete() || proxySessionId) && (
+              {userMode === 'admin' && isSetupComplete() && (
                 <>
                   <View style={styles.connectedStatus}>
                     <Text style={styles.connectedText}>✓ Team Connected</Text>
