@@ -370,12 +370,6 @@ export default function SettingsScreen({ navigation }) {
                 <Text style={styles.switchModeButtonText}>Switch to Individual Mode</Text>
               </TouchableOpacity>
               
-              <TouchableOpacity
-                style={styles.signOutButton}
-                onPress={handleSignOut}
-              >
-                <Text style={styles.signOutButtonText}>Sign Out</Text>
-              </TouchableOpacity>
             </>
           ) : isSigningIn ? (
              <View style={styles.loadingContainer}>
@@ -450,7 +444,7 @@ export default function SettingsScreen({ navigation }) {
                 </>
               ) : (
                 <>
-                  {/* Show all 3 buttons for all tiers, with enable/disable based on plan */}
+                  {/* Show feature buttons with enable/disable based on plan */}
                   <Text style={styles.sectionDescription}>
                     {userPlan ? 
                       `Your ${userPlan.charAt(0).toUpperCase() + userPlan.slice(1)} plan features:` :
@@ -467,7 +461,6 @@ export default function SettingsScreen({ navigation }) {
                     
                     const canConnectGoogle = isPro || isBusiness || isEnterprise;
                     const canSetupTeam = isBusiness || isEnterprise;
-                    const canAddLocation = isEnterprise;
                     
                     return (
                       <>
@@ -537,30 +530,6 @@ export default function SettingsScreen({ navigation }) {
                           </Text>
                         </TouchableOpacity>
                         
-                        {/* Add Location Button */}
-                        <TouchableOpacity
-                          style={[
-                            styles.featureButton,
-                            !canAddLocation && styles.buttonDisabled
-                          ]}
-                          onPress={() => {
-                            if (!canAddLocation) {
-                              Alert.alert('Feature Unavailable', 'Multi-location support is available for Enterprise plans only.');
-                              return;
-                            }
-                            // TODO: Implement location management for Enterprise
-                            Alert.alert('Coming Soon', 'Location management will be available soon for Enterprise users.');
-                          }}
-                          disabled={!canAddLocation}
-                        >
-                          <Text style={[
-                            styles.featureButtonText,
-                            !canAddLocation && styles.buttonTextDisabled
-                          ]}>
-                            Add Location
-                          </Text>
-                        </TouchableOpacity>
-                        
                         {!isGoogleSignInAvailable && (canConnectGoogle || canSetupTeam) && (
                           <View style={styles.expoGoWarning}>
                             <Text style={styles.expoGoWarningText}>
@@ -602,13 +571,23 @@ export default function SettingsScreen({ navigation }) {
           ) : (
             <>
               <View style={styles.adminInfoBox}>
-                <Text style={styles.adminInfoLabel}>Signed in as:</Text>
-                <Text style={styles.adminInfoValue}>
-                  {adminUserInfo?.name || 'Unknown Name'}
-                </Text>
-                <Text style={styles.adminInfoEmail}>
-                  {adminUserInfo?.email || 'Unknown Email'}
-                </Text>
+                <View style={styles.adminInfoHeader}>
+                  <View style={styles.adminInfoDetails}>
+                    <Text style={styles.adminInfoLabel}>Signed in as:</Text>
+                    <Text style={styles.adminInfoValue}>
+                      {adminUserInfo?.name || 'Unknown Name'}
+                    </Text>
+                    <Text style={styles.adminInfoEmail}>
+                      {adminUserInfo?.email || 'Unknown Email'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.disconnectButton}
+                    onPress={handleSignOut}
+                  >
+                    <Text style={styles.disconnectButtonText}>Disconnect</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
 
               {/* Show all buttons when authenticated, with enable/disable based on plan */}
@@ -618,11 +597,47 @@ export default function SettingsScreen({ navigation }) {
                 const isEnterprise = userPlan === 'enterprise';
                 
                 const canSetupTeam = isBusiness || isEnterprise;
-                const canAddLocation = isEnterprise;
                 const isAdmin = userMode === 'admin';
+                const connectButtonDisabled = !isEnterprise || !isGoogleSignInAvailable || isSigningIn;
                 
                 return (
                   <>
+                    {/* Keep Connect button visible even after authentication */}
+                    <TouchableOpacity
+                      style={[
+                        styles.featureButton,
+                        connectButtonDisabled && styles.buttonDisabled
+                      ]}
+                      onPress={async () => {
+                        if (connectButtonDisabled) {
+                          return;
+                        }
+                        setIsSigningIn(true);
+                        try {
+                          if (isAdmin) {
+                            await adminSignIn();
+                          } else {
+                            await individualSignIn();
+                          }
+                        } catch (error) {
+                          console.error('Error reconnecting Google account:', error);
+                        } finally {
+                          setIsSigningIn(false);
+                        }
+                      }}
+                      disabled={connectButtonDisabled}
+                    >
+                      {isSigningIn && !connectButtonDisabled ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={[
+                          styles.featureButtonText,
+                          connectButtonDisabled && styles.buttonTextDisabled
+                        ]}>
+                          Connect to Google Account
+                        </Text>
+                      )}
+                    </TouchableOpacity>
                     {/* Set Up Team Button - shown for authenticated Business/Enterprise admins who haven't set up yet */}
                     {isAdmin && !isSetupComplete() && canSetupTeam && (
                       <TouchableOpacity
@@ -643,31 +658,7 @@ export default function SettingsScreen({ navigation }) {
                       </TouchableOpacity>
                     )}
                     
-                    {/* Show Add Location button for all authenticated users (individual and admin) */}
-                    {(userMode === 'individual' || userMode === 'admin') && (
-                      <TouchableOpacity
-                        style={[
-                          styles.featureButton,
-                          !canAddLocation && styles.buttonDisabled
-                        ]}
-                        onPress={() => {
-                          if (!canAddLocation) {
-                            Alert.alert('Feature Unavailable', 'Multi-location support is available for Enterprise plans only.');
-                            return;
-                          }
-                          // TODO: Implement location management for Enterprise
-                          Alert.alert('Coming Soon', 'Location management will be available soon for Enterprise users.');
-                        }}
-                        disabled={!canAddLocation}
-                      >
-                        <Text style={[
-                          styles.featureButtonText,
-                          !canAddLocation && styles.buttonTextDisabled
-                        ]}>
-                          Add Location
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+                    {/* Add Location button removed */}
                   </>
                 );
               })()}
@@ -734,13 +725,6 @@ export default function SettingsScreen({ navigation }) {
                   <InviteManager navigation={navigation} />
                 </>
               )}
-
-              <TouchableOpacity
-                style={styles.signOutButton}
-                onPress={handleSignOut}
-              >
-                <Text style={styles.signOutButtonText}>Sign Out</Text>
-              </TouchableOpacity>
             </>
           )}
         </View>
@@ -1303,6 +1287,16 @@ export default function SettingsScreen({ navigation }) {
         padding: 12,
         marginBottom: 12
       },
+      adminInfoHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 12,
+      },
+      adminInfoDetails: {
+        flex: 1,
+        paddingRight: 8,
+      },
       adminInfoLabel: {
         color: COLORS.GRAY,
         fontSize: 12,
@@ -1316,6 +1310,17 @@ export default function SettingsScreen({ navigation }) {
       adminInfoEmail: {
         color: COLORS.GRAY,
         fontSize: 12,
+      },
+      disconnectButton: {
+        backgroundColor: '#FFE6E6',
+        borderRadius: 8,
+        paddingVertical: 8,
+        paddingHorizontal: 14,
+      },
+      disconnectButtonText: {
+        color: '#CC0000',
+        fontSize: 14,
+        fontWeight: '600',
       },
       setupStatusBox: {
         backgroundColor: '#E8F5E9',
@@ -1342,18 +1347,6 @@ export default function SettingsScreen({ navigation }) {
         color: COLORS.TEXT,
         fontSize: 12,
         maxWidth: '60%'
-      },
-      signOutButton: {
-        backgroundColor: '#FFE6E6',
-        borderRadius: 12,
-        paddingVertical: 12,
-        paddingHorizontal: 20,
-        alignItems: 'center'
-      },
-      signOutButtonText: {
-        color: '#CC0000',
-        fontSize: 14,
-        fontWeight: '600'
       },
       signInButton: {
         backgroundColor: '#34A853',
