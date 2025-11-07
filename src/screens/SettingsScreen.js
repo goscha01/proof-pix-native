@@ -68,6 +68,7 @@ export default function SettingsScreen({ navigation }) {
     teamName,
     updateTeamName,
     switchToIndividualMode,
+    disconnectAllAccounts,
   } = useAdmin();
 
   const [name, setName] = useState(userName);
@@ -150,11 +151,20 @@ export default function SettingsScreen({ navigation }) {
           text: 'Reset',
           style: 'destructive',
           onPress: async () => {
-            await resetUserData();
-            navigation.reset({
-              index: 0,
-              routes: [{ name: 'FirstLoad' }],
-            });
+            try {
+              await disconnectAllAccounts();
+            } catch (error) {
+              console.warn('[SETTINGS] Failed to disconnect accounts during reset:', error?.message || error);
+            }
+
+            try {
+              await resetUserData();
+            } finally {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'FirstLoad' }],
+              });
+            }
           }
         }
       ]

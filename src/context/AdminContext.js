@@ -336,6 +336,77 @@ export function AdminProvider({ children }) {
   };
 
   /**
+   * Fully disconnect all Google accounts and clear stored admin state.
+   * Used when resetting user data to ensure a clean slate.
+   */
+  const disconnectAllAccounts = async () => {
+    try {
+      // Attempt to revoke and sign out to ensure all permissions are cleared.
+      if (googleAuthService.isAvailable()) {
+        try {
+          await googleAuthService.signOutAndRevoke();
+        } catch (revokeError) {
+          console.warn('[ADMIN] Failed to revoke access, falling back to signOut:', revokeError.message);
+          try {
+            await googleAuthService.signOut();
+          } catch (signOutError) {
+            console.warn('[ADMIN] Fallback signOut failed:', signOutError.message);
+          }
+        }
+      }
+
+      // Ensure any stored auth artifacts are removed even in Expo Go (where native sign-out isn't available)
+      try {
+        await googleAuthService.clearUserInfo();
+        await googleAuthService.clearServerAuthCode();
+      } catch (clearError) {
+        console.warn('[ADMIN] Error clearing stored auth info:', clearError.message);
+      }
+    } catch (authError) {
+      console.warn('[ADMIN] Error while disconnecting Google accounts:', authError.message);
+    }
+
+    // Remove all admin-related AsyncStorage keys
+    try {
+      await AsyncStorage.multiRemove([
+        STORAGE_KEYS.ADMIN_FOLDER_ID,
+        STORAGE_KEYS.ADMIN_INVITE_TOKENS,
+        STORAGE_KEYS.ADMIN_PLAN_LIMIT,
+        STORAGE_KEYS.ADMIN_USER_MODE,
+        STORAGE_KEYS.TEAM_MEMBER_INFO,
+        STORAGE_KEYS.PROXY_SESSION_ID,
+        STORAGE_KEYS.TEAM_NAME,
+        STORAGE_KEYS.STORED_INDIVIDUAL_PLAN,
+        STORAGE_KEYS.STORED_INDIVIDUAL_MODE,
+      ]);
+      await AsyncStorage.removeItem('@stored_individual_name');
+    } catch (storageError) {
+      console.warn('[ADMIN] Error clearing stored admin data:', storageError.message);
+    }
+
+    // Reset in-memory state
+    setIsAuthenticated(false);
+    setUserInfo(null);
+    setFolderId(null);
+    setInviteTokens([]);
+    setPlanLimit(5);
+    setTeamInfo(null);
+    setUserMode(null);
+    setProxySessionId(null);
+    setIsInitializingProxy(false);
+    setTeamName('');
+
+    // Reset user plan back to starter if available
+    try {
+      await updateUserPlan('starter');
+    } catch (planError) {
+      console.warn('[ADMIN] Failed to reset user plan during disconnect:', planError.message);
+    }
+
+    return { success: true };
+  };
+
+  /**
    * Save folder ID
    */
   const saveFolderId = async (id) => {
@@ -523,6 +594,7 @@ export function AdminProvider({ children }) {
     updatePlanLimit,
     clearAdminData,
     initializeProxySession,
+    disconnectAllAccounts,
 
     // Helpers
     isSetupComplete,
