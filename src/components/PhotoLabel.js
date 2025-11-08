@@ -7,6 +7,9 @@ const FONT_FAMILY_MAP = {
   montserratBold: 'Montserrat_700Bold',
   playfairBold: 'PlayfairDisplay_700Bold',
   robotoMonoBold: 'RobotoMono_700Bold',
+  latoBold: 'Lato_700Bold',
+  poppinsSemiBold: 'Poppins_600SemiBold',
+  oswaldSemiBold: 'Oswald_600SemiBold',
   serif: 'PlayfairDisplay_700Bold',
   monospace: 'RobotoMono_700Bold',
   // legacy fallbacks
@@ -20,9 +23,13 @@ const FONT_FAMILY_MAP = {
  */
 export default function PhotoLabel({ label, style = {}, textStyle = {} }) {
   const { labelBackgroundColor, labelTextColor, labelFontFamily } = useSettings();
-  const normalizedKey = labelFontFamily ? labelFontFamily.toLowerCase() : 'system';
+  const canonicalKey = labelFontFamily || 'system';
+  const normalizedKey = canonicalKey.toLowerCase();
   const selectedFontFamily =
-    FONT_FAMILY_MAP[normalizedKey] || FONT_FAMILY_MAP[`${normalizedKey}legacy`] || null;
+    FONT_FAMILY_MAP[canonicalKey] ||
+    FONT_FAMILY_MAP[normalizedKey] ||
+    FONT_FAMILY_MAP[`${normalizedKey}legacy`] ||
+    null;
 
   return (
     <View style={[styles.label, { backgroundColor: labelBackgroundColor }, style]}>

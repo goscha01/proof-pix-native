@@ -26,6 +26,17 @@ const normalizeFontKey = (value) => {
     case 'montserratbold':
     case 'montserrat_700bold':
       return 'montserratBold';
+    case 'latobold':
+    case 'lato_700bold':
+      return 'latoBold';
+    case 'poppins':
+    case 'poppinssemibold':
+    case 'poppins_600semibold':
+      return 'poppinsSemiBold';
+    case 'oswald':
+    case 'oswaldsemibold':
+    case 'oswald_600semibold':
+      return 'oswaldSemiBold';
     default:
       return mapped || 'system';
   }

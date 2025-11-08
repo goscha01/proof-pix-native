@@ -10,6 +10,9 @@ import { useFonts } from 'expo-font';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
 import { RobotoMono_700Bold } from '@expo-google-fonts/roboto-mono';
+import { Lato_700Bold } from '@expo-google-fonts/lato';
+import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
+import { Oswald_600SemiBold } from '@expo-google-fonts/oswald';
 
 // Screens
 import HomeScreen from './src/screens/HomeScreen';
@@ -140,6 +143,9 @@ export default function App() {
     Montserrat_700Bold,
     PlayfairDisplay_700Bold,
     RobotoMono_700Bold,
+    Lato_700Bold,
+    Poppins_600SemiBold,
+    Oswald_600SemiBold,
   });
 
   if (!fontsLoaded) {

@@ -43,16 +43,34 @@ const FONT_OPTIONS = [
     fontFamily: 'Montserrat_700Bold',
   },
   {
+    key: 'latoBold',
+    label: 'Lato Bold',
+    description: 'Friendly sans-serif',
+    fontFamily: 'Lato_700Bold',
+  },
+  {
     key: 'playfairBold',
     label: 'Playfair Display',
     description: 'Elegant serif',
     fontFamily: 'PlayfairDisplay_700Bold',
   },
   {
+    key: 'poppinsSemiBold',
+    label: 'Poppins SemiBold',
+    description: 'Rounded modern style',
+    fontFamily: 'Poppins_600SemiBold',
+  },
+  {
     key: 'robotoMonoBold',
     label: 'Roboto Mono',
     description: 'Monospaced tech feel',
     fontFamily: 'RobotoMono_700Bold',
+  },
+  {
+    key: 'oswaldSemiBold',
+    label: 'Oswald SemiBold',
+    description: 'Condensed headline style',
+    fontFamily: 'Oswald_600SemiBold',
   },
 ];
 
@@ -1631,7 +1649,7 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
                     <ColorPicker
                       key={`${colorModalType}-${colorPickerKey}`}
                       color={draftColor}
-                      onColorChange={handleDraftColorChange}
+                      onColorChange={(value, hsv) => handleDraftColorChange(value, hsv)}
                       onColorChangeComplete={(value, hsv) => handleDraftColorChange(value, { source: 'complete' }, hsv)}
                       thumbSize={26}
                       sliderSize={28}
