@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import googleAuthService from '../services/googleAuthService';
 import proxyService from '../services/proxyService';
@@ -14,7 +14,10 @@ const STORAGE_KEYS = {
   TEAM_NAME: '@team_name', // Team name for admin
   STORED_INDIVIDUAL_PLAN: '@stored_individual_plan', // Store individual plan when switching to team mode
   STORED_INDIVIDUAL_MODE: '@stored_individual_mode', // Store individual mode (individual/admin) when switching to team mode
+  CONNECTED_ACCOUNTS: '@admin_connected_accounts', // Persist multiple connected admin accounts
 };
+
+const GOOGLE_USER_INFO_KEY = '@admin_user_info';
 
 const AdminContext = createContext();
 
@@ -24,7 +27,7 @@ const AdminContext = createContext();
  */
 export function AdminProvider({ children }) {
   const settingsContext = useSettings();
-  const { updateUserPlan } = settingsContext;
+  const { updateUserPlan, userPlan: currentUserPlan } = settingsContext;
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userInfo, setUserInfo] = useState(null);
   const [folderId, setFolderId] = useState(null);
@@ -36,6 +39,310 @@ export function AdminProvider({ children }) {
   const [proxySessionId, setProxySessionId] = useState(null); // Proxy server session ID
   const [isInitializingProxy, setIsInitializingProxy] = useState(false); // Guard to prevent concurrent initialization
   const [teamName, setTeamName] = useState('');
+  const [connectedAccounts, setConnectedAccounts] = useState([]);
+  const connectedAccountsRef = useRef([]);
+
+  const persistConnectedAccounts = async (accounts) => {
+    try {
+      if (!accounts || accounts.length === 0) {
+        await AsyncStorage.removeItem(STORAGE_KEYS.CONNECTED_ACCOUNTS);
+      } else {
+        await AsyncStorage.setItem(STORAGE_KEYS.CONNECTED_ACCOUNTS, JSON.stringify(accounts));
+      }
+    } catch (error) {
+      console.warn('[ADMIN] Failed to persist connected accounts:', error?.message || error);
+    }
+  };
+
+  const setConnectedAccountsState = async (accounts, { persist = true } = {}) => {
+    setConnectedAccounts(accounts);
+    connectedAccountsRef.current = accounts;
+    if (persist) {
+      await persistConnectedAccounts(accounts);
+    }
+  };
+
+  const getActiveAccount = (accountsList = connectedAccounts) =>
+    accountsList.find((account) => account?.isActive);
+
+  const applyAccountState = async (account, options = {}) => {
+    const { syncStorage = true } = options;
+
+    if (account) {
+      const normalizedUserInfo = account.userInfo || {
+        id: account.id,
+        email: account.email,
+        name: account.name,
+        photo: account.photo,
+        givenName: account.userInfo?.givenName || account.name,
+      };
+      const nextPlanLimit = Number.isFinite(account.planLimit)
+        ? account.planLimit
+        : Number.isFinite(Number(account.planLimit))
+          ? Number(account.planLimit)
+          : 5;
+
+      setIsAuthenticated(true);
+      setUserInfo(normalizedUserInfo);
+      setUserMode(account.userMode || 'admin');
+      setFolderId(account.folderId || null);
+      setInviteTokens(account.inviteTokens || []);
+      setPlanLimit(nextPlanLimit);
+      setProxySessionId(account.proxySessionId || null);
+      setTeamName(account.teamName || '');
+      setTeamInfo(account.teamInfo || null);
+    } else {
+      setIsAuthenticated(false);
+      setUserInfo(null);
+      setUserMode(null);
+      setFolderId(null);
+      setInviteTokens([]);
+      setPlanLimit(5);
+      setProxySessionId(null);
+      setTeamName('');
+      setTeamInfo(null);
+    }
+
+    if (!syncStorage) {
+      return;
+    }
+
+    try {
+      if (account) {
+        if (account.userInfo) {
+          await AsyncStorage.setItem(GOOGLE_USER_INFO_KEY, JSON.stringify(account.userInfo));
+        }
+
+        await AsyncStorage.setItem(
+          STORAGE_KEYS.ADMIN_USER_MODE,
+          account.userMode || 'admin'
+        );
+
+        if (account.folderId) {
+          await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_FOLDER_ID, account.folderId);
+        } else {
+          await AsyncStorage.removeItem(STORAGE_KEYS.ADMIN_FOLDER_ID);
+        }
+
+        await AsyncStorage.setItem(
+          STORAGE_KEYS.ADMIN_INVITE_TOKENS,
+          JSON.stringify(account.inviteTokens || [])
+        );
+
+        await AsyncStorage.setItem(
+          STORAGE_KEYS.ADMIN_PLAN_LIMIT,
+          String(account.planLimit ?? 5)
+        );
+
+        if (account.proxySessionId) {
+          await AsyncStorage.setItem(STORAGE_KEYS.PROXY_SESSION_ID, account.proxySessionId);
+        } else {
+          await AsyncStorage.removeItem(STORAGE_KEYS.PROXY_SESSION_ID);
+        }
+
+        if (account.teamName) {
+          await AsyncStorage.setItem(STORAGE_KEYS.TEAM_NAME, account.teamName);
+        } else {
+          await AsyncStorage.removeItem(STORAGE_KEYS.TEAM_NAME);
+        }
+
+        if (account.teamInfo) {
+          await AsyncStorage.setItem(
+            STORAGE_KEYS.TEAM_MEMBER_INFO,
+            JSON.stringify(account.teamInfo)
+          );
+        } else {
+          await AsyncStorage.removeItem(STORAGE_KEYS.TEAM_MEMBER_INFO);
+        }
+      } else {
+        await AsyncStorage.multiRemove([
+          GOOGLE_USER_INFO_KEY,
+          STORAGE_KEYS.ADMIN_USER_MODE,
+          STORAGE_KEYS.ADMIN_FOLDER_ID,
+          STORAGE_KEYS.ADMIN_INVITE_TOKENS,
+          STORAGE_KEYS.ADMIN_PLAN_LIMIT,
+          STORAGE_KEYS.PROXY_SESSION_ID,
+          STORAGE_KEYS.TEAM_NAME,
+          STORAGE_KEYS.TEAM_MEMBER_INFO,
+        ]);
+      }
+    } catch (error) {
+      console.warn('[ADMIN] Failed to synchronise storage for account state:', error?.message || error);
+    }
+  };
+
+  const upsertConnectedAccount = async (user, overrides = {}) => {
+    if (!user?.id) {
+      return null;
+    }
+
+    const now = Date.now();
+    const prevAccounts = connectedAccountsRef.current || [];
+    const allowMultipleAccounts = currentUserPlan === 'enterprise';
+    const existing = prevAccounts.find((account) => account.id === user.id);
+    const rawPlanLimit = overrides.planLimit ?? existing?.planLimit ?? 5;
+    const normalizedPlanLimit = Number.isFinite(rawPlanLimit)
+      ? rawPlanLimit
+      : Number.isFinite(Number(rawPlanLimit))
+      ? Number(rawPlanLimit)
+      : 5;
+
+    const updatedAccount = {
+      ...(existing || {}),
+      ...overrides,
+      id: user.id,
+      email: user.email,
+      name: user.name || user.givenName || existing?.name || '',
+      photo: user.photo || existing?.photo || null,
+      userInfo: {
+        ...(existing?.userInfo || {}),
+        ...user,
+      },
+      isActive: true,
+      lastConnectedAt: now,
+      folderId: overrides.folderId ?? existing?.folderId ?? null,
+      inviteTokens: overrides.inviteTokens ?? existing?.inviteTokens ?? [],
+      planLimit: normalizedPlanLimit,
+      proxySessionId: overrides.proxySessionId ?? existing?.proxySessionId ?? null,
+      teamName: overrides.teamName ?? existing?.teamName ?? '',
+      userMode: overrides.userMode ?? existing?.userMode ?? 'admin',
+      teamInfo: overrides.teamInfo ?? existing?.teamInfo ?? null,
+    };
+
+    let updatedList;
+    if (allowMultipleAccounts) {
+      updatedList = [
+        updatedAccount,
+        ...prevAccounts
+          .filter((account) => account.id !== user.id)
+          .map((account) => ({ ...account, isActive: false })),
+      ];
+    } else {
+      updatedList = [updatedAccount];
+    }
+
+    console.log('[ADMIN] Adding/updating connected account:', user.id);
+    await setConnectedAccountsState(updatedList);
+    console.log(
+      '[ADMIN] Connected accounts after add:',
+      JSON.stringify(
+        updatedList.map(({ id, email, name, photo, isActive }) => ({
+          id,
+          email,
+          name,
+          photo,
+          isActive,
+        }))
+      )
+    );
+    await applyAccountState(updatedAccount, { syncStorage: true });
+    return updatedAccount;
+  };
+
+  const updateActiveAccount = async (updates = {}) => {
+    const prevAccounts = connectedAccountsRef.current || [];
+    const allowMultipleAccounts = currentUserPlan === 'enterprise';
+    if (!prevAccounts.length) {
+      return null;
+    }
+
+    let updatedAccount = null;
+    const updatedList = prevAccounts.map((account, index) => {
+      if (allowMultipleAccounts) {
+        if (account.isActive) {
+          updatedAccount = { ...account, ...updates };
+          return updatedAccount;
+        }
+        return account;
+      }
+
+      if (index === 0) {
+        updatedAccount = { ...account, ...updates, isActive: true };
+        return updatedAccount;
+      }
+      return { ...account, isActive: false };
+    });
+
+    if (updatedAccount) {
+      await setConnectedAccountsState(updatedList);
+    }
+
+    return updatedAccount;
+  };
+
+  const removeConnectedAccount = async (accountId) => {
+    const prevAccounts = connectedAccountsRef.current || [];
+    const allowMultipleAccounts = currentUserPlan === 'enterprise';
+    let removedAccount = null;
+
+    const filteredAccounts = prevAccounts.filter((account) => {
+      if (account.id === accountId) {
+        removedAccount = account;
+        return false;
+      }
+      return true;
+    });
+
+    let nextActiveAccount = null;
+    let updatedList = filteredAccounts;
+
+    if (filteredAccounts.length > 0) {
+      const existingActive = filteredAccounts.find((account) => account.isActive);
+      if (existingActive) {
+        nextActiveAccount = existingActive;
+      } else if (allowMultipleAccounts) {
+        updatedList = filteredAccounts.map((account, index) => {
+          const isActive = index === 0;
+          if (isActive) {
+            nextActiveAccount = { ...account, isActive: true };
+            return nextActiveAccount;
+          }
+          return { ...account, isActive: false };
+        });
+      } else {
+        nextActiveAccount = { ...filteredAccounts[0], isActive: true };
+        updatedList = [nextActiveAccount];
+      }
+    }
+
+    await setConnectedAccountsState(updatedList);
+    if (removedAccount) {
+      console.log(
+        '[ADMIN] Removing connected account:',
+        JSON.stringify({
+          email: removedAccount.email,
+          id: removedAccount.id,
+          name: removedAccount.name,
+          photo: removedAccount.photo,
+        })
+      );
+    }
+    console.log(
+      '[ADMIN] Connected accounts after removal:',
+      JSON.stringify(
+        updatedList.map(({ id, email, name, photo, isActive }) => ({
+          id,
+          email,
+          name,
+          photo,
+          isActive,
+        }))
+      )
+    );
+
+    if (nextActiveAccount) {
+      await applyAccountState(nextActiveAccount, { syncStorage: true });
+    } else {
+      await applyAccountState(null, { syncStorage: true });
+    }
+
+    return { removedAccount, activeAccount: nextActiveAccount };
+  };
+
+  const clearAllConnectedAccounts = async () => {
+    await setConnectedAccountsState([]);
+    await applyAccountState(null, { syncStorage: true });
+  };
 
   // Load saved admin data on mount
   useEffect(() => {
@@ -49,26 +356,53 @@ export function AdminProvider({ children }) {
     try {
       setIsLoading(true);
 
-      // NEW LOGIC: Trust stored data as the source of truth for session state.
+      let storedAccounts = [];
+      try {
+        const accountsRaw = await AsyncStorage.getItem(STORAGE_KEYS.CONNECTED_ACCOUNTS);
+        storedAccounts = accountsRaw ? JSON.parse(accountsRaw) || [] : [];
+      } catch (error) {
+        console.warn('[ADMIN] Failed to parse stored connected accounts:', error?.message || error);
+      }
+
+      if (storedAccounts.length > 0) {
+        let activeAccount = storedAccounts.find((account) => account.isActive);
+        if (!activeAccount) {
+          activeAccount = { ...storedAccounts[0], isActive: true };
+          storedAccounts = storedAccounts.map((account, index) => ({
+            ...account,
+            isActive: index === 0,
+          }));
+          await persistConnectedAccounts(storedAccounts);
+        }
+
+        await setConnectedAccountsState(storedAccounts, { persist: false });
+        await applyAccountState(activeAccount, { syncStorage: true });
+        return;
+      }
+
       const storedUser = await googleAuthService.getStoredUserInfo();
+      const storedMode = await AsyncStorage.getItem(STORAGE_KEYS.ADMIN_USER_MODE);
+      const storedProxySessionId = await AsyncStorage.getItem(STORAGE_KEYS.PROXY_SESSION_ID);
+
+      let storedTeamInfo = null;
+      let folderValue = null;
+      let inviteTokensValue = [];
+      let planLimitValue = 5;
+      let teamNameValue = '';
+
+      if (storedProxySessionId) {
+        setProxySessionId(storedProxySessionId);
+      }
+
       if (storedUser) {
         setUserInfo(storedUser);
         setIsAuthenticated(true);
       } else {
         setIsAuthenticated(false);
       }
-      
-      // Load user mode
-      const storedMode = await AsyncStorage.getItem(STORAGE_KEYS.ADMIN_USER_MODE);
+
       setUserMode(storedMode);
 
-      // Load proxy session ID (for both individual and admin modes)
-      const storedProxySessionId = await AsyncStorage.getItem(STORAGE_KEYS.PROXY_SESSION_ID);
-      if (storedProxySessionId) {
-        setProxySessionId(storedProxySessionId);
-      }
-
-      // Load admin-specific data only if in admin mode and authenticated
       if (storedMode === 'admin' && storedUser) {
         const [
           storedFolderId,
@@ -82,20 +416,49 @@ export function AdminProvider({ children }) {
           STORAGE_KEYS.TEAM_NAME,
         ]);
 
-        setFolderId(storedFolderId[1]);
-        setInviteTokens(storedTokens[1] ? JSON.parse(storedTokens[1]) : []);
-        setPlanLimit(storedPlanLimit[1] ? parseInt(storedPlanLimit[1]) : 5);
-        setTeamName(storedTeamName[1] || '');
+        folderValue = storedFolderId[1] || null;
+        inviteTokensValue = storedTokens[1] ? JSON.parse(storedTokens[1]) : [];
+        planLimitValue = storedPlanLimit[1] ? parseInt(storedPlanLimit[1], 10) : 5;
+        teamNameValue = storedTeamName[1] || '';
+
+        setFolderId(folderValue);
+        setInviteTokens(inviteTokensValue);
+        setPlanLimit(planLimitValue);
+        setTeamName(teamNameValue);
       } else if (storedMode === 'team_member') {
-        // Load team member info
-        const storedTeamInfo = await AsyncStorage.getItem(STORAGE_KEYS.TEAM_MEMBER_INFO);
-        if (storedTeamInfo) {
-          setTeamInfo(JSON.parse(storedTeamInfo));
+        const storedTeamInfoRaw = await AsyncStorage.getItem(STORAGE_KEYS.TEAM_MEMBER_INFO);
+        if (storedTeamInfoRaw) {
+          try {
+            storedTeamInfo = JSON.parse(storedTeamInfoRaw);
+            setTeamInfo(storedTeamInfo);
+          } catch (error) {
+            console.warn('[ADMIN] Failed to parse stored team info:', error?.message || error);
+          }
         }
-        // Note: Individual plan/mode are stored when joining team, so they're preserved
+      }
+
+      if (storedUser) {
+        const migratedAccount = {
+          id: storedUser.id,
+          email: storedUser.email,
+          name: storedUser.name || storedUser.givenName || '',
+          photo: storedUser.photo || null,
+          userInfo: storedUser,
+          isActive: true,
+          lastConnectedAt: Date.now(),
+          folderId: folderValue,
+          inviteTokens: inviteTokensValue,
+          planLimit: planLimitValue,
+          proxySessionId: storedProxySessionId || null,
+          teamName: teamNameValue,
+          userMode: storedMode || 'admin',
+          teamInfo: storedTeamInfo,
+        };
+
+        await setConnectedAccountsState([migratedAccount]);
       }
     } catch (error) {
-      console.error("Failed to load admin data:", error);
+      console.error('Failed to load admin data:', error);
       setIsAuthenticated(false);
       setUserInfo(null);
     } finally {
@@ -121,8 +484,8 @@ export function AdminProvider({ children }) {
         console.log("Sign-in successful, user info found.");
         setIsAuthenticated(true);
         setUserInfo(result.userInfo);
-        await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_USER_MODE, 'admin');
         setUserMode('admin');
+        await upsertConnectedAccount(result.userInfo, { userMode: 'admin' });
         return { success: true };
       }
 
@@ -152,8 +515,8 @@ export function AdminProvider({ children }) {
         console.log("Sign-in successful, user info found.");
         setIsAuthenticated(true);
         setUserInfo(result.userInfo);
-        await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_USER_MODE, 'individual');
         setUserMode('individual');
+        await upsertConnectedAccount(result.userInfo, { userMode: 'individual' });
         return { success: true };
       }
 
@@ -216,6 +579,10 @@ export function AdminProvider({ children }) {
       setTeamInfo(newTeamInfo);
       setUserMode('team_member');
       await updateUserPlan('Team Member');
+      await updateActiveAccount({
+        userMode: 'team_member',
+        teamInfo: newTeamInfo,
+      });
       // No Google Sign-In for team members, so auth status is not changed
       return { success: true };
     } catch (error) {
@@ -280,6 +647,11 @@ export function AdminProvider({ children }) {
         // User will need to reconnect team if they want team features
       }
 
+      await updateActiveAccount({
+        userMode: individualMode,
+        teamInfo: null,
+      });
+
       return { success: true, plan: individualPlan, mode: individualMode };
     } catch (error) {
       console.error("Error switching to individual mode:", error);
@@ -307,6 +679,13 @@ export function AdminProvider({ children }) {
       setPlanLimit(5); // Reset to default
       setTeamName(''); // Clear team name
       // Keep isAuthenticated, userInfo, and userMode='admin'
+      await updateActiveAccount({
+        folderId: null,
+        inviteTokens: [],
+        proxySessionId: null,
+        planLimit: 5,
+        teamName: '',
+      });
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -318,17 +697,16 @@ export function AdminProvider({ children }) {
    */
   const signOut = async () => {
     try {
+      const activeAccount = getActiveAccount();
       await googleAuthService.signOut();
       await clearAdminData();
-      setIsAuthenticated(false);
-      setUserInfo(null);
-      setFolderId(null);
-      setInviteTokens([]);
-      setTeamInfo(null);
-      setUserMode(null);
-      setProxySessionId(null);
       await AsyncStorage.removeItem(STORAGE_KEYS.ADMIN_USER_MODE);
       await AsyncStorage.removeItem(STORAGE_KEYS.TEAM_MEMBER_INFO);
+      if (activeAccount) {
+        await removeConnectedAccount(activeAccount.id);
+      } else {
+        await applyAccountState(null, { syncStorage: true });
+      }
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -384,17 +762,8 @@ export function AdminProvider({ children }) {
       console.warn('[ADMIN] Error clearing stored admin data:', storageError.message);
     }
 
-    // Reset in-memory state
-    setIsAuthenticated(false);
-    setUserInfo(null);
-    setFolderId(null);
-    setInviteTokens([]);
-    setPlanLimit(5);
-    setTeamInfo(null);
-    setUserMode(null);
-    setProxySessionId(null);
+    await clearAllConnectedAccounts();
     setIsInitializingProxy(false);
-    setTeamName('');
 
     // Reset user plan back to starter if available
     try {
@@ -413,6 +782,7 @@ export function AdminProvider({ children }) {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_FOLDER_ID, id);
       setFolderId(id);
+      await updateActiveAccount({ folderId: id });
     } catch (error) {
       throw error;
     }
@@ -427,6 +797,7 @@ export function AdminProvider({ children }) {
       const newTokens = [...inviteTokens, token];
       await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_INVITE_TOKENS, JSON.stringify(newTokens));
       setInviteTokens(newTokens);
+      await updateActiveAccount({ inviteTokens: newTokens });
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -441,6 +812,7 @@ export function AdminProvider({ children }) {
       const newTokens = inviteTokens.filter(t => t !== token);
       await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_INVITE_TOKENS, JSON.stringify(newTokens));
       setInviteTokens(newTokens);
+      await updateActiveAccount({ inviteTokens: newTokens });
       return { success: true };
     } catch (error) {
       return { success: false, error: error.message };
@@ -454,6 +826,7 @@ export function AdminProvider({ children }) {
     try {
       await AsyncStorage.setItem(STORAGE_KEYS.ADMIN_PLAN_LIMIT, limit.toString());
       setPlanLimit(limit);
+      await updateActiveAccount({ planLimit: limit });
     } catch (error) {
       throw error;
     }
@@ -472,6 +845,14 @@ export function AdminProvider({ children }) {
         STORAGE_KEYS.PROXY_SESSION_ID,
       ]);
       setProxySessionId(null);
+      await updateActiveAccount({
+        folderId: null,
+        inviteTokens: [],
+        planLimit: 5,
+        proxySessionId: null,
+        teamName: '',
+        teamInfo: null,
+      });
     } catch (error) {
       throw error;
     }
@@ -498,6 +879,7 @@ export function AdminProvider({ children }) {
       // If we already have a session ID, return it
       if (proxySessionId) {
         console.log('[ADMIN] Using existing proxy session ID');
+        await updateActiveAccount({ proxySessionId });
         return { sessionId: proxySessionId, success: true };
       }
 
@@ -506,6 +888,7 @@ export function AdminProvider({ children }) {
       if (storedSessionId) {
         console.log('[ADMIN] Found stored proxy session ID');
         setProxySessionId(storedSessionId);
+        await updateActiveAccount({ proxySessionId: storedSessionId });
         return { sessionId: storedSessionId, success: true };
       }
 
@@ -519,6 +902,7 @@ export function AdminProvider({ children }) {
       if (result && result.sessionId) {
         await AsyncStorage.setItem(STORAGE_KEYS.PROXY_SESSION_ID, result.sessionId);
         setProxySessionId(result.sessionId);
+        await updateActiveAccount({ proxySessionId: result.sessionId });
         console.log('[ADMIN] Proxy session initialized successfully');
         setIsInitializingProxy(false);
         return { sessionId: result.sessionId, success: true };
@@ -579,6 +963,7 @@ export function AdminProvider({ children }) {
     teamInfo,
     proxySessionId,
     teamName,
+    connectedAccounts,
     isGoogleSignInAvailable: googleAuthService.isAvailable(),
 
     // Actions
@@ -595,6 +980,7 @@ export function AdminProvider({ children }) {
     clearAdminData,
     initializeProxySession,
     disconnectAllAccounts,
+    removeConnectedAccount,
 
     // Helpers
     isSetupComplete,

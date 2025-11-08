@@ -69,7 +69,17 @@ export default function SettingsScreen({ navigation }) {
     updateTeamName,
     switchToIndividualMode,
     disconnectAllAccounts,
+    connectedAccounts,
+    removeConnectedAccount,
   } = useAdmin();
+  const isEnterprisePlan = userPlan === 'enterprise';
+  const activeEnterpriseAccount = isEnterprisePlan
+    ? connectedAccounts?.find((account) => account.isActive)
+    : null;
+  const otherEnterpriseAccounts = isEnterprisePlan
+    ? (connectedAccounts || []).filter((account) => !account.isActive)
+    : [];
+  const displayedActiveAccount = activeEnterpriseAccount || adminUserInfo;
 
   const [name, setName] = useState(userName);
   
@@ -180,6 +190,76 @@ export default function SettingsScreen({ navigation }) {
     } finally {
       setIsSigningIn(false);
     }
+  };
+
+  const handleActivateConnectedAccount = (account) => {
+    if (!account || account.isActive) {
+      return;
+    }
+
+    if (!isGoogleSignInAvailable) {
+      Alert.alert(
+        'Unavailable',
+        'Google Sign-In is not available in this build. Please use a development build.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Switch Google Account',
+      `Switch active account to ${account.email}? You will be prompted to sign in again with this account.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Switch',
+          onPress: async () => {
+            setIsSigningIn(true);
+            try {
+              await adminSignIn();
+            } catch (error) {
+              console.error('[SETTINGS] Error switching connected account:', error);
+              Alert.alert('Error', 'Failed to switch accounts. Please try again.');
+            } finally {
+              setIsSigningIn(false);
+            }
+          },
+        },
+      ]
+    );
+  };
+
+  const handleRemoveConnectedAccount = (account) => {
+    if (!account) {
+      return;
+    }
+
+    if (account.isActive) {
+      Alert.alert(
+        'Account Active',
+        'Switch to another account before removing this one.'
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Remove Google Account',
+      `Remove ${account.email} from your connected accounts?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await removeConnectedAccount(account.id);
+            } catch (error) {
+              console.error('[SETTINGS] Failed to remove connected account:', error);
+              Alert.alert('Error', 'Failed to remove account. Please try again.');
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleGoogleSignIn = async () => {
@@ -582,13 +662,13 @@ export default function SettingsScreen({ navigation }) {
             <>
               <View style={styles.adminInfoBox}>
                 <View style={styles.adminInfoHeader}>
-                  <View style={styles.adminInfoDetails}>
-                    <Text style={styles.adminInfoLabel}>Signed in as:</Text>
-                    <Text style={styles.adminInfoValue}>
-                      {adminUserInfo?.name || 'Unknown Name'}
+                  <View style={styles.activeAccountContainer}>
+                    <Text style={styles.activeAccountLabel}>Active Google Account</Text>
+                    <Text style={styles.activeAccountName}>
+                      {displayedActiveAccount?.name || 'Unknown Name'}
                     </Text>
-                    <Text style={styles.adminInfoEmail}>
-                      {adminUserInfo?.email || 'Unknown Email'}
+                    <Text style={styles.activeAccountEmail}>
+                      {displayedActiveAccount?.email || 'Unknown Email'}
                     </Text>
                   </View>
                   <TouchableOpacity
@@ -598,6 +678,64 @@ export default function SettingsScreen({ navigation }) {
                     <Text style={styles.disconnectButtonText}>Disconnect</Text>
                   </TouchableOpacity>
                 </View>
+
+                {isEnterprisePlan && otherEnterpriseAccounts.length > 0 && (
+                  <View style={styles.connectedAccountsList}>
+                    <Text style={styles.connectedAccountsTitle}>Other connected accounts</Text>
+                    {otherEnterpriseAccounts.map((account, index) => (
+                      <View
+                        key={account.id}
+                        style={[
+                          styles.connectedAccountRow,
+                          index === otherEnterpriseAccounts.length - 1 && styles.connectedAccountRowLast,
+                        ]}
+                      >
+                        <View style={styles.connectedAccountHeader}>
+                          <View style={styles.connectedAccountInfo}>
+                            <Text style={styles.connectedAccountName}>
+                              {account.name || account.email}
+                            </Text>
+                            <Text style={styles.connectedAccountEmail}>
+                              {account.email}
+                            </Text>
+                          </View>
+                          <View style={[styles.accountStatusBadge, styles.accountStatusInactive]}>
+                            <Text style={[styles.accountStatusText, styles.accountStatusTextInactive]}>
+                              Inactive
+                            </Text>
+                          </View>
+                        </View>
+                        <View style={styles.connectedAccountActions}>
+                          <TouchableOpacity
+                            style={[
+                              styles.accountActionButton,
+                              isSigningIn && styles.accountActionButtonDisabled,
+                            ]}
+                            onPress={() => handleActivateConnectedAccount(account)}
+                            disabled={isSigningIn}
+                          >
+                            <Text style={styles.accountActionButtonText}>
+                              {isSigningIn ? 'Switching…' : 'Make Active'}
+                            </Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity
+                            style={[styles.accountActionButton, styles.accountRemoveButton]}
+                            onPress={() => handleRemoveConnectedAccount(account)}
+                          >
+                            <Text
+                              style={[
+                                styles.accountActionButtonText,
+                                styles.accountRemoveButtonText,
+                              ]}
+                            >
+                              Remove
+                            </Text>
+                          </TouchableOpacity>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                )}
               </View>
 
               {/* Show all buttons when authenticated, with enable/disable based on plan */}
@@ -1303,23 +1441,118 @@ export default function SettingsScreen({ navigation }) {
         justifyContent: 'space-between',
         gap: 12,
       },
-      adminInfoDetails: {
+      activeAccountContainer: {
         flex: 1,
         paddingRight: 8,
+        backgroundColor: '#E6F0FF',
+        borderRadius: 8,
+        padding: 14,
       },
-      adminInfoLabel: {
-        color: COLORS.GRAY,
+      activeAccountLabel: {
+        color: '#3366CC',
         fontSize: 12,
-        marginBottom: 4
+        fontWeight: '600',
+        marginBottom: 6,
+        textTransform: 'uppercase',
       },
-      adminInfoValue: {
+      activeAccountName: {
         color: COLORS.TEXT,
-        fontSize: 14,
-        fontWeight: '600'
+        fontSize: 16,
+        fontWeight: '700',
       },
-      adminInfoEmail: {
+      activeAccountEmail: {
         color: COLORS.GRAY,
         fontSize: 12,
+        marginTop: 4,
+      },
+      connectedAccountsList: {
+        marginTop: 16,
+        paddingTop: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#D8E1F6',
+      },
+      connectedAccountsTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: COLORS.TEXT,
+        marginBottom: 8,
+      },
+      connectedAccountRow: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#E0E6F5',
+        padding: 12,
+        marginBottom: 8,
+      },
+      connectedAccountRowLast: {
+        marginBottom: 0,
+      },
+      connectedAccountHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 10,
+      },
+      connectedAccountInfo: {
+        flex: 1,
+        paddingRight: 12,
+      },
+      connectedAccountName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: COLORS.TEXT,
+        marginBottom: 2,
+      },
+      connectedAccountEmail: {
+        fontSize: 12,
+        color: COLORS.GRAY,
+      },
+      accountStatusBadge: {
+        borderRadius: 999,
+        paddingVertical: 4,
+        paddingHorizontal: 10,
+      },
+      accountStatusActive: {
+        backgroundColor: '#E8F5E9',
+      },
+      accountStatusInactive: {
+        backgroundColor: '#FFF4E5',
+      },
+      accountStatusText: {
+        fontSize: 12,
+        fontWeight: '600',
+      },
+      accountStatusTextActive: {
+        color: '#2E7D32',
+      },
+      accountStatusTextInactive: {
+        color: '#C77800',
+      },
+      connectedAccountActions: {
+        flexDirection: 'row',
+        gap: 8,
+      },
+      accountActionButton: {
+        flex: 1,
+        borderRadius: 8,
+        paddingVertical: 10,
+        alignItems: 'center',
+        backgroundColor: COLORS.PRIMARY,
+      },
+      accountActionButtonDisabled: {
+        opacity: 0.6,
+      },
+      accountActionButtonText: {
+        color: '#FFFFFF',
+        fontSize: 12,
+        fontWeight: '600',
+      },
+      accountRemoveButton: {
+        backgroundColor: '#FFE6E6',
+      },
+      accountRemoveButtonText: {
+        color: '#CC0000',
       },
       disconnectButton: {
         backgroundColor: '#FFE6E6',
