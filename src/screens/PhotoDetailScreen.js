@@ -17,13 +17,14 @@ import { useSettings } from '../context/SettingsContext';
 import { COLORS, PHOTO_MODES } from '../constants/rooms';
 import * as FileSystem from 'expo-file-system/legacy';
 import PhotoLabel from '../components/PhotoLabel';
+import PhotoWatermark from '../components/PhotoWatermark';
 
 const { width, height } = Dimensions.get('window');
 
 export default function PhotoDetailScreen({ route, navigation }) {
   const { photo } = route.params;
   const { deletePhoto } = usePhotos();
-  const { showLabels } = useSettings();
+  const { showLabels, showWatermark } = useSettings();
   const [sharing, setSharing] = useState(false);
   const [containerLayout, setContainerLayout] = useState(null);
   const [imageSize, setImageSize] = useState(null);
@@ -64,9 +65,9 @@ export default function PhotoDetailScreen({ route, navigation }) {
       setSharing(true);
       
       let tempUri;
-      
-      // If labels are enabled, capture the view (image + label)
-      if (showLabels && photo.mode && captureDimensions) {
+
+      // If labels or watermark are enabled, capture the view (image + label + watermark)
+      if ((showLabels || showWatermark) && photo.mode && captureDimensions) {
         try {
 
           // Capture the hidden view which has exact image dimensions (no white padding)
@@ -172,9 +173,23 @@ export default function PhotoDetailScreen({ route, navigation }) {
       };
     };
 
+    // Calculate watermark position based on actual image display area
+    const getWatermarkStyle = () => {
+      const bounds = getImageDisplayBounds();
+      if (!bounds) {
+        return { bottom: 10, right: 10 };
+      }
+
+      // Position watermark 10px from the bottom-right of the actual image display area
+      return {
+        bottom: bounds.offsetY + 10,
+        right: bounds.offsetX + 10
+      };
+    };
+
     // Show all photos as they are - no dimming, no frame
     return (
-      <View 
+      <View
         ref={imageContainerRef}
         style={styles.imageContainer}
         collapsable={false}
@@ -183,10 +198,10 @@ export default function PhotoDetailScreen({ route, navigation }) {
           setContainerLayout({ width, height });
         }}
       >
-        <Image 
+        <Image
           ref={imageRef}
-          source={{ uri: photo.uri }} 
-          style={styles.image} 
+          source={{ uri: photo.uri }}
+          style={styles.image}
           resizeMode="contain"
           onLoad={(event) => {
             const { width, height } = event.nativeEvent.source;
@@ -196,10 +211,14 @@ export default function PhotoDetailScreen({ route, navigation }) {
         />
         {/* Show label overlay for before/after photos if showLabels is true */}
         {showLabels && photo.mode && (
-          <PhotoLabel 
-            label={photo.mode.toUpperCase()} 
-            style={getLabelStyle()} 
+          <PhotoLabel
+            label={photo.mode.toUpperCase()}
+            style={getLabelStyle()}
           />
+        )}
+        {/* Show watermark if enabled */}
+        {showWatermark && (
+          <PhotoWatermark style={getWatermarkStyle()} />
         )}
       </View>
     );
@@ -233,7 +252,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
       {renderPhoto()}
 
       {/* Hidden capture view - exact image size, no white padding */}
-      {showLabels && photo.mode && captureDimensions && (
+      {(showLabels || showWatermark) && photo.mode && captureDimensions && (
         <View
           ref={captureViewRef}
           style={{
@@ -262,19 +281,35 @@ export default function PhotoDetailScreen({ route, navigation }) {
             const scaleFactor = referenceWidth / screenWidth;
 
             return (
-              <PhotoLabel
-                label={photo.mode.toUpperCase()}
-                style={{
-                  top: 10 * scaleFactor,
-                  left: 10 * scaleFactor,
-                  paddingHorizontal: 12 * scaleFactor,
-                  paddingVertical: 6 * scaleFactor,
-                  borderRadius: 6 * scaleFactor
-                }}
-                textStyle={{
-                  fontSize: 14 * scaleFactor
-                }}
-              />
+              <>
+                {showLabels && (
+                  <PhotoLabel
+                    label={photo.mode.toUpperCase()}
+                    style={{
+                      top: 10 * scaleFactor,
+                      left: 10 * scaleFactor,
+                      paddingHorizontal: 12 * scaleFactor,
+                      paddingVertical: 6 * scaleFactor,
+                      borderRadius: 6 * scaleFactor
+                    }}
+                    textStyle={{
+                      fontSize: 14 * scaleFactor
+                    }}
+                  />
+                )}
+                {showWatermark && (
+                  <PhotoWatermark
+                    style={{
+                      bottom: 10 * scaleFactor,
+                      right: 10 * scaleFactor,
+                      paddingHorizontal: 10 * scaleFactor,
+                      paddingVertical: 4 * scaleFactor,
+                      borderRadius: 4 * scaleFactor
+                    }}
+                    onPress={null}
+                  />
+                )}
+              </>
             );
           })()}
         </View>

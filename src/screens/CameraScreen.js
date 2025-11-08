@@ -25,6 +25,7 @@ import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
 import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS } from '../constants/rooms';
 import PhotoLabel from '../components/PhotoLabel';
+import PhotoWatermark from '../components/PhotoWatermark';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as MediaLibrary from 'expo-media-library';
@@ -95,7 +96,7 @@ export default function CameraScreen({ route, navigation }) {
   const enlargedGalleryPhotoRef = useRef(enlargedGalleryPhoto);
   const isGalleryAnimatingRef = useRef(false);
   const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom, activeProjectId } = usePhotos();
-  const { showLabels, getRooms } = useSettings();
+  const { showLabels, showWatermark, getRooms } = useSettings();
   
   // Get rooms from settings (custom or default)
   const rooms = getRooms();
@@ -2070,19 +2071,33 @@ export default function CameraScreen({ route, navigation }) {
           const screenWidth = Dimensions.get('window').width;
           const scaleFactor = referenceWidth / screenWidth;
           return (
-            <PhotoLabel
-              label={tempPhotoLabel}
-              style={{
-                top: 10 * scaleFactor,
-                left: 10 * scaleFactor,
-                paddingHorizontal: 12 * scaleFactor,
-                paddingVertical: 6 * scaleFactor,
-                borderRadius: 6 * scaleFactor
-              }}
-              textStyle={{
-                fontSize: 14 * scaleFactor
-              }}
-            />
+            <>
+              <PhotoLabel
+                label={tempPhotoLabel}
+                style={{
+                  top: 10 * scaleFactor,
+                  left: 10 * scaleFactor,
+                  paddingHorizontal: 12 * scaleFactor,
+                  paddingVertical: 6 * scaleFactor,
+                  borderRadius: 6 * scaleFactor
+                }}
+                textStyle={{
+                  fontSize: 14 * scaleFactor
+                }}
+              />
+              {showWatermark && (
+                <PhotoWatermark
+                  style={{
+                    bottom: 10 * scaleFactor,
+                    right: 10 * scaleFactor,
+                    paddingHorizontal: 10 * scaleFactor,
+                    paddingVertical: 4 * scaleFactor,
+                    borderRadius: 4 * scaleFactor
+                  }}
+                  onPress={null}
+                />
+              )}
+            </>
           );
         })()}
         </View>

@@ -29,6 +29,8 @@ export default function SettingsScreen({ navigation }) {
   const {
     showLabels,
     toggleLabels,
+    showWatermark,
+    toggleWatermark,
     userName,
     location,
     updateUserInfo,
@@ -1004,6 +1006,21 @@ export default function SettingsScreen({ navigation }) {
                 <Switch
                   value={showLabels}
                   onValueChange={toggleLabels}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
+              </View>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Show Watermark</Text>
+                  <Text style={styles.settingDescription}>
+                    Display ProofPix watermark on all photos
+                  </Text>
+                </View>
+                <Switch
+                  value={showWatermark}
+                  onValueChange={toggleWatermark}
                   trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
                   thumbColor="white"
                 />

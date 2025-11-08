@@ -23,6 +23,7 @@ export const SettingsProvider = ({ children }) => {
   // 
   
   const [showLabels, setShowLabels] = useState(true);
+  const [showWatermark, setShowWatermark] = useState(true);
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('tampa'); // Default to Tampa
   const [isBusiness, setIsBusiness] = useState(false);
@@ -44,6 +45,7 @@ export const SettingsProvider = ({ children }) => {
       if (stored) {
         const settings = JSON.parse(stored);
         setShowLabels(settings.showLabels ?? true);
+        setShowWatermark(settings.showWatermark ?? true);
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? 'tampa');
         setIsBusiness(settings.isBusiness ?? false);
@@ -68,6 +70,7 @@ export const SettingsProvider = ({ children }) => {
     try {
       const settings = {
         showLabels,
+        showWatermark,
         userName,
         location,
         isBusiness,
@@ -86,6 +89,12 @@ export const SettingsProvider = ({ children }) => {
     const newValue = !showLabels;
     setShowLabels(newValue);
     await saveSettings({ showLabels: newValue });
+  };
+
+  const toggleWatermark = async () => {
+    const newValue = !showWatermark;
+    setShowWatermark(newValue);
+    await saveSettings({ showWatermark: newValue });
   };
 
   const updateUserInfo = async (name) => {
@@ -158,6 +167,7 @@ export const SettingsProvider = ({ children }) => {
       setUserName('');
       setLocation('tampa');
       setShowLabels(true);
+      setShowWatermark(true);
       setIsBusiness(false);
       setUseFolderStructure(true);
       setEnabledFolders({ before: true, after: true, combined: true });
@@ -171,6 +181,8 @@ export const SettingsProvider = ({ children }) => {
   const value = {
     showLabels,
     toggleLabels,
+    showWatermark,
+    toggleWatermark,
     userName,
     location,
     updateUserInfo,

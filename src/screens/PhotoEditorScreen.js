@@ -18,6 +18,7 @@ import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
 import { COLORS, TEMPLATE_TYPES, TEMPLATE_CONFIGS } from '../constants/rooms';
 import PhotoLabel from '../components/PhotoLabel';
+import PhotoWatermark from '../components/PhotoWatermark';
 
 export default function PhotoEditorScreen({ route, navigation }) {
   const { beforePhoto, afterPhoto } = route.params;
@@ -40,7 +41,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const combinedRef = useRef(null);
   const templateScrollRef = useRef(null);
   const { getUnpairedBeforePhotos } = usePhotos();
-  const { showLabels } = useSettings();
+  const { showLabels, showWatermark } = useSettings();
   
   // Debug: Log showLabels value
   const templateTypeRef = useRef(templateType);
@@ -427,6 +428,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
               )}
             </>
           )}
+          {/* Show watermark if enabled */}
+          {showWatermark && <PhotoWatermark />}
         </View>
       );
     }
@@ -474,6 +477,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
             <PhotoLabel label="AFTER" />
           )}
         </View>
+        {/* Show watermark if enabled */}
+        {showWatermark && <PhotoWatermark />}
       </View>
     );
   };
