@@ -32,14 +32,14 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 10,
     right: 10,
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: 'transparent',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
-    opacity: 0.8
+    opacity: 0.5
   },
   watermarkText: {
-    color: COLORS.TEXT,
+    color: '#FFD700',
     fontSize: 14,
     fontWeight: 'bold'
   },
