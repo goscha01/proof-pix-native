@@ -41,7 +41,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const combinedRef = useRef(null);
   const templateScrollRef = useRef(null);
   const { getUnpairedBeforePhotos } = usePhotos();
-  const { showLabels, showWatermark } = useSettings();
+  const { showLabels, shouldShowWatermark } = useSettings();
   
   // Debug: Log showLabels value
   const templateTypeRef = useRef(templateType);
@@ -429,7 +429,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
             </>
           )}
           {/* Show watermark if enabled */}
-          {showWatermark && <PhotoWatermark />}
+          {shouldShowWatermark && <PhotoWatermark />}
         </View>
       );
     }
@@ -478,7 +478,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
           )}
         </View>
         {/* Show watermark if enabled */}
-        {showWatermark && <PhotoWatermark />}
+        {shouldShowWatermark && <PhotoWatermark />}
       </View>
     );
   };

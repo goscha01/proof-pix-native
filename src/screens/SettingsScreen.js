@@ -74,51 +74,53 @@ const FONT_OPTIONS = [
   },
 ];
 
-export default function SettingsScreen({ navigation }) {
-  const {
-    showLabels,
-    toggleLabels,
-    showWatermark,
-    toggleWatermark,
-    labelBackgroundColor,
-    labelTextColor,
-    labelFontFamily,
-    updateLabelBackgroundColor,
-    updateLabelTextColor,
-    updateLabelFontFamily,
-    userName,
-    location,
-    updateUserInfo,
-    isBusiness,
-    toggleBusiness,
-    useFolderStructure,
-    toggleUseFolderStructure,
-    enabledFolders,
-    updateEnabledFolders,
-    resetUserData,
-    customRooms,
-    saveCustomRooms,
-    getRooms,
-    resetCustomRooms,
-    userPlan,
-    updateUserPlan
-  } = useSettings();
-  
-  const [showPlanSelection, setShowPlanSelection] = useState(false);
-  const [colorModalVisible, setColorModalVisible] = useState(false);
-  const [colorModalType, setColorModalType] = useState(null);
-  const [draftColor, setDraftColor] = useState(labelBackgroundColor);
-  const [colorInput, setColorInput] = useState(labelBackgroundColor?.toUpperCase() || '');
-  const [hexModalVisible, setHexModalVisible] = useState(false);
-  const [hexModalValue, setHexModalValue] = useState(labelBackgroundColor?.toUpperCase() || '');
-  const [hexModalError, setHexModalError] = useState(null);
-  const [fontModalVisible, setFontModalVisible] = useState(false);
-  const [colorPickerKey, setColorPickerKey] = useState(0);
-
 const DEFAULT_LABEL_BACKGROUND = '#FFD700';
 const DEFAULT_LABEL_TEXT = '#000000';
+const RGB_COLOR_REGEX = /^RGB\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i;
 
-const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
+function normalizeHex(value) {
+  if (!value) return null;
+  let trimmed = String(value).trim().toUpperCase();
+
+  if (/^[0-9A-F]{6}$/.test(trimmed)) {
+    trimmed = `#${trimmed}`;
+  } else if (/^[0-9A-F]{3}$/.test(trimmed)) {
+    trimmed = `#${trimmed}`;
+  }
+
+  if (/^#[0-9A-F]{4}$/.test(trimmed)) {
+    const [r, g, b] = trimmed.slice(1, 4).split('');
+    trimmed = `#${r}${r}${g}${g}${b}${b}`;
+  }
+  if (/^[0-9A-F]{4}$/.test(trimmed)) {
+    const [r, g, b] = trimmed.slice(0, 3).split('');
+    trimmed = `#${r}${r}${g}${g}${b}${b}`;
+  }
+
+  if (/^#[0-9A-F]{6}$/.test(trimmed)) {
+    return trimmed;
+  }
+  if (/^#[0-9A-F]{3}$/.test(trimmed)) {
+    const [r, g, b] = trimmed.slice(1).split('');
+    return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+  }
+
+  const rgbMatch = trimmed.match(RGB_COLOR_REGEX);
+  if (rgbMatch) {
+    const [r, g, b] = rgbMatch.slice(1).map((segment) => {
+      const numeric = parseInt(segment, 10);
+      return Math.min(255, Math.max(0, numeric));
+    });
+    return `#${[r, g, b]
+      .map((channel) => channel.toString(16).padStart(2, '0'))
+      .join('')
+      .toUpperCase()}`;
+  }
+
+  return null;
+}
+
+function hsvToHex({ h = 0, s = 0, v = 0 }) {
   const normalizedH = ((h % 360) + 360) % 360;
   const normalizedS = Math.min(Math.max(s, 0), 100) / 100;
   const normalizedV = Math.min(Math.max(v, 0), 100) / 100;
@@ -155,11 +157,76 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
   const g = Math.round((gPrime + m) * 255);
   const b = Math.round((bPrime + m) * 255);
 
-  return `#${r.toString(16).padStart(2, '0').toUpperCase()}${g
-    .toString(16)
-    .padStart(2, '0')
-    .toUpperCase()}${b.toString(16).padStart(2, '0').toUpperCase()}`;
-};
+  return `#${[r, g, b]
+    .map((value) => value.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase()}`;
+}
+
+export default function SettingsScreen({ navigation }) {
+  const {
+    showLabels,
+    toggleLabels,
+    customWatermarkEnabled,
+    watermarkText,
+    watermarkLink,
+    watermarkColor,
+    watermarkOpacity,
+    toggleWatermark,
+    updateWatermarkText,
+    updateWatermarkLink,
+    updateWatermarkColor,
+    updateWatermarkOpacity,
+    labelBackgroundColor,
+    labelTextColor,
+    labelFontFamily,
+    updateLabelBackgroundColor,
+    updateLabelTextColor,
+    updateLabelFontFamily,
+    userName,
+    location,
+    updateUserInfo,
+    isBusiness,
+    toggleBusiness,
+    useFolderStructure,
+    toggleUseFolderStructure,
+    enabledFolders,
+    updateEnabledFolders,
+    resetUserData,
+    customRooms,
+    saveCustomRooms,
+    getRooms,
+    resetCustomRooms,
+    userPlan,
+    updateUserPlan
+  } = useSettings();
+  
+  const [showPlanSelection, setShowPlanSelection] = useState(false);
+  const [colorModalVisible, setColorModalVisible] = useState(false);
+  const [colorModalType, setColorModalType] = useState(null);
+  const [draftColor, setDraftColor] = useState(labelBackgroundColor);
+  const [colorInput, setColorInput] = useState(labelBackgroundColor?.toUpperCase() || '');
+  const [hexModalVisible, setHexModalVisible] = useState(false);
+  const [hexModalValue, setHexModalValue] = useState(labelBackgroundColor?.toUpperCase() || '');
+  const [hexModalError, setHexModalError] = useState(null);
+  const [fontModalVisible, setFontModalVisible] = useState(false);
+  const [colorPickerKey, setColorPickerKey] = useState(0);
+  const [watermarkOpacityPreview, setWatermarkOpacityPreview] = useState(
+    typeof watermarkOpacity === 'number' ? watermarkOpacity : 0.5
+  );
+
+  const watermarkSwatchColor = useMemo(() => {
+    const baseColor = customWatermarkEnabled
+      ? watermarkColor || labelBackgroundColor
+      : labelBackgroundColor;
+    return normalizeHex(baseColor) || '#FFFFFF';
+  }, [customWatermarkEnabled, watermarkColor, labelBackgroundColor]);
+
+  useEffect(() => {
+    if (typeof watermarkOpacity === 'number') {
+      setWatermarkOpacityPreview(watermarkOpacity);
+    }
+  }, [watermarkOpacity]);
 
   const {
     isAuthenticated,
@@ -249,79 +316,39 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
 
   useEffect(() => {
     if (colorModalVisible) {
-      const baseColor =
-        colorModalType === 'text' ? labelTextColor : labelBackgroundColor;
-      const normalized = (baseColor || '').toUpperCase();
+      let baseColor = labelBackgroundColor;
+      if (colorModalType === 'text') {
+        baseColor = labelTextColor;
+      } else if (colorModalType === 'watermark') {
+        baseColor = customWatermarkEnabled
+          ? watermarkColor || labelBackgroundColor
+          : labelBackgroundColor;
+      }
+      const normalized = normalizeHex(baseColor) || '#FFFFFF';
       setDraftColor(normalized);
       setColorInput(normalized);
       setHexModalValue(normalized);
       setHexModalError(null);
     }
-  }, [colorModalVisible, colorModalType, labelBackgroundColor, labelTextColor]);
-
-  const normalizeHex = (value) => {
-    if (!value) return null;
-    let trimmed = value.trim().toUpperCase();
-
-    // allow users to omit the leading "#"
-    if (/^[0-9A-F]{6}$/.test(trimmed)) {
-      trimmed = `#${trimmed}`;
-    } else if (/^[0-9A-F]{3}$/.test(trimmed)) {
-      trimmed = `#${trimmed}`;
-    }
-
-    // Allow 4-digit shorthand (#RGBA) → expand to #RRGGBBAA by ignoring alpha
-    if (/^#[0-9A-F]{4}$/.test(trimmed)) {
-      const [r, g, b] = trimmed.slice(1, 4).split('');
-      trimmed = `#${r}${r}${g}${g}${b}${b}`;
-    }
-    if (/^[0-9A-F]{4}$/.test(trimmed)) {
-      const [r, g, b] = trimmed.slice(0, 3).split('');
-      trimmed = `#${r}${r}${g}${g}${b}${b}`;
-    }
-
-    if (/^#[0-9A-F]{6}$/.test(trimmed)) {
-      return trimmed;
-    }
-    if (/^#[0-9A-F]{3}$/.test(trimmed)) {
-      const [r, g, b] = trimmed.slice(1).split('');
-      return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
-    }
-    const rgbMatch = trimmed.match(
-      /^RGB\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i
-    );
-    if (rgbMatch) {
-      const [r, g, b] = rgbMatch.slice(1).map((segment) => {
-        const numeric = parseInt(segment, 10);
-        return Math.min(255, Math.max(0, numeric));
-      });
-      return `#${[r, g, b]
-        .map((channel) => channel.toString(16).padStart(2, '0'))
-        .join('')
-        .toUpperCase()}`;
-    }
-    return null;
-  };
-
-  const hexToRgbString = (hex) => {
-    const normalized = normalizeHex(hex);
-    if (!normalized) return null;
-    const value = normalized.replace('#', '');
-    const r = parseInt(value.slice(0, 2), 16);
-    const g = parseInt(value.slice(2, 4), 16);
-    const b = parseInt(value.slice(4, 6), 16);
-    return `rgb(${r}, ${g}, ${b})`;
-  };
+  }, [
+    colorModalVisible,
+    colorModalType,
+    labelBackgroundColor,
+    labelTextColor,
+    customWatermarkEnabled,
+    watermarkColor,
+  ]);
 
   const handleOpenHexModal = () => {
-    if (__DEV__) {
-      console.log('[HexModal] Opening hex modal', {
-        currentColor: colorInput,
-        modalVisible: hexModalVisible,
-      });
+    // reset preview to persisted value when opening modal
+    let persisted = labelBackgroundColor;
+    if (colorModalType === 'text') {
+      persisted = labelTextColor;
+    } else if (colorModalType === 'watermark') {
+      persisted = customWatermarkEnabled
+        ? watermarkColor || labelBackgroundColor
+        : labelBackgroundColor;
     }
-    // reset preview to persisted value when opening text modal
-    const persisted = colorModalType === 'text' ? labelTextColor : labelBackgroundColor;
     const normalized = normalizeHex(persisted) || '#FFFFFF';
     setDraftColor(normalized);
     setColorInput(normalized);
@@ -338,9 +365,6 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
       return;
     }
     const normalized = normalizeHex(input);
-    if (__DEV__) {
-      console.log('[HexModal] Change', { input, normalized });
-    }
     if (normalized) {
       setHexModalError(null);
     } else if (input.length >= 4) {
@@ -351,9 +375,6 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
   };
 
   const handleHexModalCancel = () => {
-    if (__DEV__) {
-      console.log('[HexModal] Cancel');
-    }
     setHexModalVisible(false);
     setHexModalError(null);
   };
@@ -363,9 +384,6 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
     if (!normalized) {
       setHexModalError('Enter #RRGGBB, #RGB, or rgb(r, g, b)');
       return;
-    }
-    if (__DEV__) {
-      console.log('[HexModal] Apply', { value: normalized });
     }
     handleDraftColorChange(normalized, { source: 'complete' });
     setHexModalVisible(false);
@@ -397,9 +415,6 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
     const normalized = normalizeHex(candidateHex);
     if (!normalized) {
       return;
-    }
-    if (__DEV__ && source === 'complete') {
-      console.log('[ColorPicker] onColorChange', { hex: normalized, rgb: hexToRgbString(normalized) });
     }
     setDraftColor(normalized);
     setColorInput(normalized);
@@ -661,6 +676,19 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
   };
 
   const openColorModal = (type) => {
+    let initialColor = labelBackgroundColor;
+    if (type === 'text') {
+      initialColor = labelTextColor;
+    } else if (type === 'watermark') {
+      initialColor = customWatermarkEnabled
+        ? watermarkColor || labelBackgroundColor
+        : labelBackgroundColor;
+    }
+    const normalized = normalizeHex(initialColor) || '#FFFFFF';
+    setDraftColor(normalized);
+    setColorInput(normalized);
+    setHexModalValue(normalized);
+    setHexModalError(null);
     setColorModalType(type);
     setColorPickerKey((prev) => prev + 1);
     setColorModalVisible(true);
@@ -672,25 +700,25 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
       setHexModalError('Please enter a valid color code before applying.');
       return;
     }
-    if (__DEV__) {
-      console.log('[ColorPicker] Apply color', {
-        type: colorModalType,
-        hex: normalized,
-        rgb: hexToRgbString(normalized),
-      });
-    }
     if (colorModalType === 'background') {
       await updateLabelBackgroundColor(normalized);
     } else if (colorModalType === 'text') {
       await updateLabelTextColor(normalized);
+    } else if (colorModalType === 'watermark') {
+      await updateWatermarkColor(normalized);
     }
     setColorModalVisible(false);
   };
 
   const handleDefaultColor = async () => {
-    const defaultColor =
-      colorModalType === 'text' ? DEFAULT_LABEL_TEXT : DEFAULT_LABEL_BACKGROUND;
-    if (colorModalType === 'background') {
+    let defaultColor =
+      colorModalType === 'text'
+        ? DEFAULT_LABEL_TEXT
+        : DEFAULT_LABEL_BACKGROUND;
+    if (colorModalType === 'watermark') {
+      defaultColor = normalizeHex(labelBackgroundColor) || DEFAULT_LABEL_BACKGROUND;
+      await updateWatermarkColor(defaultColor);
+    } else if (colorModalType === 'background') {
       await updateLabelBackgroundColor(defaultColor);
     } else if (colorModalType === 'text') {
       await updateLabelTextColor(defaultColor);
@@ -1341,18 +1369,83 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
 
               <View style={styles.settingRow}>
                 <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Show Watermark</Text>
+                  <Text style={styles.settingLabel}>Remove / Customize Watermark</Text>
                   <Text style={styles.settingDescription}>
-                    Display ProofPix watermark on all photos
+                    {customWatermarkEnabled
+                      ? 'Update watermark text or leave blank to remove it'
+                      : 'Use the default ProofPix watermark on exported photos'}
                   </Text>
                 </View>
                 <Switch
-                  value={showWatermark}
+                  value={customWatermarkEnabled}
                   onValueChange={toggleWatermark}
                   trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
                   thumbColor="white"
                 />
               </View>
+              {customWatermarkEnabled && (
+                <View style={styles.watermarkCustomization}>
+                  <View style={styles.watermarkField}>
+                    <Text style={styles.watermarkFieldLabel}>Watermark Text</Text>
+                    <TextInput
+                      style={styles.watermarkInput}
+                      value={watermarkText}
+                      onChangeText={updateWatermarkText}
+                      placeholder="Leave blank to remove watermark"
+                      placeholderTextColor={COLORS.GRAY}
+                    />
+                  </View>
+                  <View style={styles.watermarkField}>
+                    <Text style={styles.watermarkFieldLabel}>Click Through Link (optional)</Text>
+                    <TextInput
+                      style={styles.watermarkInput}
+                      value={watermarkLink}
+                      onChangeText={updateWatermarkLink}
+                      placeholder="https://your-site.com"
+                      placeholderTextColor={COLORS.GRAY}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                    />
+                  </View>
+                  <View style={styles.watermarkColorRow}>
+                    <View style={styles.watermarkColorInfo}>
+                      <Text style={styles.watermarkFieldLabel}>Watermark Color</Text>
+                      <Text style={styles.watermarkColorValue}>{watermarkSwatchColor}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.watermarkColorButton}
+                      onPress={() => openColorModal('watermark')}
+                    >
+                      <View
+                        style={[
+                          styles.colorPreviewSwatch,
+                          styles.watermarkColorSwatch,
+                          { backgroundColor: watermarkSwatchColor },
+                        ]}
+                      />
+                      <Text style={styles.customSelectorButtonText}>Pick color</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.watermarkOpacityRow}>
+                    <Text style={styles.watermarkFieldLabel}>Opacity</Text>
+                    <View style={styles.watermarkOpacityControls}>
+                      <WatermarkOpacitySlider
+                        value={watermarkOpacityPreview}
+                        onChange={setWatermarkOpacityPreview}
+                        onChangeEnd={updateWatermarkOpacity}
+                        fillColor={watermarkSwatchColor}
+                      />
+                      <Text style={styles.watermarkOpacityValue}>
+                        {Math.round(watermarkOpacityPreview * 100)}%
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.watermarkHelperText}>
+                    Leave the text empty to remove the watermark entirely. The link is opened when viewers tap the watermark.
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.settingRow}>
                 <View style={styles.settingInfo}>
@@ -1601,7 +1694,11 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
             <View style={styles.customModalSheet}>
               <View style={styles.customModalHeader}>
                 <Text style={styles.customModalTitle}>
-                  {colorModalType === 'text' ? 'Text Color' : 'Background Color'}
+                  {colorModalType === 'text'
+                    ? 'Text Color'
+                    : colorModalType === 'watermark'
+                    ? 'Watermark Color'
+                    : 'Background Color'}
                 </Text>
                 <TouchableOpacity
                   onPress={handleCancelColor}
@@ -1859,6 +1956,95 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
     );
   }
 
+function WatermarkOpacitySlider({ value = 0, onChange, onChangeEnd, fillColor = '#FFD700' }) {
+  const [trackWidth, setTrackWidth] = useState(0);
+
+  const clamp = (val) => Math.max(0, Math.min(1, val));
+
+  const handleGesture = (event, commit = false) => {
+    if (!trackWidth || !event || !event.nativeEvent) {
+      if (commit && onChangeEnd) {
+        onChangeEnd(clamp(value));
+      }
+      return;
+    }
+    const { locationX } = event.nativeEvent;
+    const ratio = clamp(locationX / trackWidth);
+    if (onChange) {
+      onChange(ratio);
+    }
+    if (commit && onChangeEnd) {
+      onChangeEnd(ratio);
+    }
+  };
+
+  const thumbSize = 20;
+  const fillWidth = trackWidth ? clamp(value) * trackWidth : 0;
+  const thumbLeft = trackWidth ? clamp(value) * trackWidth - thumbSize / 2 : 0;
+
+  return (
+    <View style={sliderStyles.container}>
+      <View
+        style={sliderStyles.track}
+        onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
+        onStartShouldSetResponder={() => true}
+        onResponderGrant={(event) => handleGesture(event, false)}
+        onResponderMove={(event) => handleGesture(event, false)}
+        onResponderRelease={(event) => handleGesture(event, true)}
+        onResponderTerminationRequest={() => false}
+        onResponderTerminate={(event) => handleGesture(event, true)}
+      >
+        <View
+          style={[
+            sliderStyles.fill,
+            {
+              width: fillWidth,
+              backgroundColor: fillColor,
+            },
+          ]}
+        />
+        <View
+          style={[
+            sliderStyles.thumb,
+            {
+              left: Math.max(0, Math.min(trackWidth - thumbSize, thumbLeft)),
+              borderColor: fillColor,
+              width: thumbSize,
+              height: thumbSize,
+              borderRadius: thumbSize / 2,
+            },
+          ]}
+        />
+      </View>
+    </View>
+  );
+}
+
+const sliderStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingVertical: 4,
+    paddingRight: 12,
+  },
+  track: {
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#E0E0E0',
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  fill: {
+    height: '100%',
+  },
+  thumb: {
+    position: 'absolute',
+    top: -2,
+    borderWidth: 2,
+    backgroundColor: '#FFFFFF',
+    elevation: 2,
+  },
+});
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -1992,6 +2178,84 @@ const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
     settingDescription: {
       color: COLORS.GRAY,
       fontSize: 12
+    },
+    watermarkCustomization: {
+      marginTop: 8,
+      marginBottom: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      borderRadius: 12,
+      backgroundColor: '#f9f9f9',
+    },
+    watermarkField: {
+      marginBottom: 12,
+    },
+    watermarkFieldLabel: {
+      color: COLORS.TEXT,
+      fontWeight: '600',
+      marginBottom: 6,
+    },
+    watermarkInput: {
+      backgroundColor: 'white',
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: COLORS.TEXT,
+    },
+    watermarkHelperText: {
+      color: COLORS.GRAY,
+      fontSize: 12,
+      lineHeight: 16,
+      marginTop: 4,
+    },
+    watermarkColorRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+      gap: 12,
+    },
+    watermarkColorInfo: {
+      flex: 1,
+    },
+    watermarkColorValue: {
+      color: COLORS.GRAY,
+      fontSize: 12,
+    },
+    watermarkColorButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      backgroundColor: 'white',
+      gap: 8,
+    },
+    watermarkColorSwatch: {
+      width: 28,
+      height: 28,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+    },
+    watermarkOpacityRow: {
+      marginBottom: 16,
+    },
+    watermarkOpacityControls: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    watermarkOpacityValue: {
+      minWidth: 48,
+      textAlign: 'right',
+      color: COLORS.TEXT,
+      fontWeight: '600',
     },
     resetButton: {
       backgroundColor: '#FFE6E6',

@@ -4,6 +4,11 @@ import { ROOMS } from '../constants/rooms';
 
 const SETTINGS_KEY = 'app-settings';
 const CUSTOM_ROOMS_KEY = 'custom-rooms';
+const DEFAULT_LABEL_BACKGROUND = '#FFD700';
+const DEFAULT_LABEL_TEXT = '#000000';
+const DEFAULT_WATERMARK_TEXT = 'Created with ProofPix.com';
+const DEFAULT_WATERMARK_LINK = 'https://geos-ai.com/';
+const DEFAULT_WATERMARK_OPACITY = 0.5;
 
 // Helper function to get project-specific custom rooms key
 const getProjectRoomsKey = (projectId) => `custom-rooms-${projectId}`;
@@ -42,6 +47,24 @@ const normalizeFontKey = (value) => {
   }
 };
 
+const normalizeColorHex = (value, fallback = null) => {
+  if (!value) return fallback;
+  const input = String(value).trim();
+  if (!input) return fallback;
+  if (/^rgb/i.test(input)) {
+    return input;
+  }
+  let normalized = input.startsWith('#') ? input : `#${input}`;
+  normalized = normalized.toUpperCase();
+  if (/^#[0-9A-F]{3}$/.test(normalized)) {
+    return `#${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}${normalized[3]}${normalized[3]}`;
+  }
+  if (/^#[0-9A-F]{6}$/.test(normalized)) {
+    return normalized;
+  }
+  return fallback ?? normalized;
+};
+
 const SettingsContext = createContext();
 
 export const useSettings = () => {
@@ -54,12 +77,15 @@ export const useSettings = () => {
 };
 
 export const SettingsProvider = ({ children }) => {
-  // 
-  
   const [showLabels, setShowLabels] = useState(true);
   const [showWatermark, setShowWatermark] = useState(true);
-  const [labelBackgroundColor, setLabelBackgroundColor] = useState('#FFD700'); // Default yellow
-  const [labelTextColor, setLabelTextColor] = useState('#000000'); // Default black
+  const [customWatermarkEnabled, setCustomWatermarkEnabled] = useState(false);
+  const [watermarkText, setWatermarkText] = useState(DEFAULT_WATERMARK_TEXT);
+  const [watermarkLink, setWatermarkLink] = useState(DEFAULT_WATERMARK_LINK);
+  const [watermarkColor, setWatermarkColor] = useState(DEFAULT_LABEL_BACKGROUND);
+  const [watermarkOpacity, setWatermarkOpacity] = useState(DEFAULT_WATERMARK_OPACITY);
+  const [labelBackgroundColor, setLabelBackgroundColor] = useState(DEFAULT_LABEL_BACKGROUND);
+  const [labelTextColor, setLabelTextColor] = useState(DEFAULT_LABEL_TEXT);
   const [labelFontFamily, setLabelFontFamily] = useState('system'); // Default system font
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('tampa'); // Default to Tampa
@@ -83,8 +109,23 @@ export const SettingsProvider = ({ children }) => {
         const settings = JSON.parse(stored);
         setShowLabels(settings.showLabels ?? true);
         setShowWatermark(settings.showWatermark ?? true);
-        setLabelBackgroundColor(settings.labelBackgroundColor ?? '#FFD700');
-        setLabelTextColor(settings.labelTextColor ?? '#000000');
+        setCustomWatermarkEnabled(settings.customWatermarkEnabled ?? false);
+        setWatermarkText(settings.watermarkText ?? DEFAULT_WATERMARK_TEXT);
+        setWatermarkLink(settings.watermarkLink ?? DEFAULT_WATERMARK_LINK);
+        setWatermarkColor(
+          normalizeColorHex(settings.watermarkColor, DEFAULT_LABEL_BACKGROUND)
+        );
+        setWatermarkOpacity(
+          typeof settings.watermarkOpacity === 'number'
+            ? settings.watermarkOpacity
+            : DEFAULT_WATERMARK_OPACITY
+        );
+        setLabelBackgroundColor(
+          normalizeColorHex(settings.labelBackgroundColor, DEFAULT_LABEL_BACKGROUND)
+        );
+        setLabelTextColor(
+          normalizeColorHex(settings.labelTextColor, DEFAULT_LABEL_TEXT)
+        );
         setLabelFontFamily(normalizeFontKey(settings.labelFontFamily));
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? 'tampa');
@@ -111,6 +152,11 @@ export const SettingsProvider = ({ children }) => {
       const settings = {
         showLabels,
         showWatermark,
+        customWatermarkEnabled,
+        watermarkText,
+        watermarkLink,
+        watermarkColor,
+        watermarkOpacity,
         labelBackgroundColor,
         labelTextColor,
         labelFontFamily,
@@ -135,19 +181,86 @@ export const SettingsProvider = ({ children }) => {
   };
 
   const toggleWatermark = async () => {
-    const newValue = !showWatermark;
-    setShowWatermark(newValue);
-    await saveSettings({ showWatermark: newValue });
+    const wasEnabled = customWatermarkEnabled;
+    const newValue = !wasEnabled;
+    setCustomWatermarkEnabled(newValue);
+    let nextShowWatermark = showWatermark;
+    const normalizedLabelColor = normalizeColorHex(labelBackgroundColor, DEFAULT_LABEL_BACKGROUND);
+    const existingColor = normalizeColorHex(watermarkColor, DEFAULT_LABEL_BACKGROUND);
+    let nextWatermarkColor = existingColor;
+    let nextWatermarkOpacity = typeof watermarkOpacity === 'number'
+      ? watermarkOpacity
+      : DEFAULT_WATERMARK_OPACITY;
+    if (!newValue) {
+      nextShowWatermark = true;
+      setShowWatermark(true);
+    } else if (!watermarkText?.trim()) {
+      nextShowWatermark = false;
+      setShowWatermark(false);
+    }
+    if (newValue) {
+      nextWatermarkColor =
+        !wasEnabled && (!existingColor || existingColor === DEFAULT_LABEL_BACKGROUND)
+          ? normalizedLabelColor
+          : existingColor || normalizedLabelColor;
+      setWatermarkColor(nextWatermarkColor);
+      if (typeof watermarkOpacity !== 'number') {
+        nextWatermarkOpacity = DEFAULT_WATERMARK_OPACITY;
+        setWatermarkOpacity(nextWatermarkOpacity);
+      }
+    }
+    await saveSettings({
+      customWatermarkEnabled: newValue,
+      showWatermark: nextShowWatermark,
+      watermarkColor: newValue ? nextWatermarkColor : existingColor,
+      watermarkOpacity: newValue
+        ? nextWatermarkOpacity
+        : watermarkOpacity,
+    });
+  };
+
+  const updateWatermarkText = async (text) => {
+    setWatermarkText(text);
+    if (customWatermarkEnabled) {
+      const trimmed = text.trim();
+      const shouldShow = trimmed.length > 0;
+      setShowWatermark(shouldShow);
+      await saveSettings({
+        watermarkText: text,
+        showWatermark: shouldShow,
+      });
+    } else {
+      await saveSettings({ watermarkText: text });
+    }
+  };
+
+  const updateWatermarkLink = async (link) => {
+    setWatermarkLink(link);
+    await saveSettings({ watermarkLink: link });
+  };
+
+  const updateWatermarkColor = async (color) => {
+    const nextColor = normalizeColorHex(color, DEFAULT_LABEL_BACKGROUND);
+    setWatermarkColor(nextColor);
+    await saveSettings({ watermarkColor: nextColor });
+  };
+
+  const updateWatermarkOpacity = async (value) => {
+    const clamped = Math.max(0, Math.min(1, typeof value === 'number' ? value : DEFAULT_WATERMARK_OPACITY));
+    setWatermarkOpacity(clamped);
+    await saveSettings({ watermarkOpacity: clamped });
   };
 
   const updateLabelBackgroundColor = async (color) => {
-    setLabelBackgroundColor(color);
-    await saveSettings({ labelBackgroundColor: color });
+    const normalized = normalizeColorHex(color, DEFAULT_LABEL_BACKGROUND);
+    setLabelBackgroundColor(normalized);
+    await saveSettings({ labelBackgroundColor: normalized });
   };
 
   const updateLabelTextColor = async (color) => {
-    setLabelTextColor(color);
-    await saveSettings({ labelTextColor: color });
+    const normalized = normalizeColorHex(color, DEFAULT_LABEL_TEXT);
+    setLabelTextColor(normalized);
+    await saveSettings({ labelTextColor: normalized });
   };
 
   const updateLabelFontFamily = async (font) => {
@@ -227,8 +340,13 @@ export const SettingsProvider = ({ children }) => {
       setLocation('tampa');
       setShowLabels(true);
       setShowWatermark(true);
-      setLabelBackgroundColor('#FFD700');
-      setLabelTextColor('#000000');
+      setCustomWatermarkEnabled(false);
+      setWatermarkText(DEFAULT_WATERMARK_TEXT);
+      setWatermarkLink(DEFAULT_WATERMARK_LINK);
+      setWatermarkColor(DEFAULT_LABEL_BACKGROUND);
+      setWatermarkOpacity(DEFAULT_WATERMARK_OPACITY);
+      setLabelBackgroundColor(DEFAULT_LABEL_BACKGROUND);
+      setLabelTextColor(DEFAULT_LABEL_TEXT);
       setLabelFontFamily('system');
       setIsBusiness(false);
       setUseFolderStructure(true);
@@ -240,11 +358,23 @@ export const SettingsProvider = ({ children }) => {
     }
   };
 
+  const shouldShowWatermark = customWatermarkEnabled ? Boolean(watermarkText?.trim()) : showWatermark;
+
   const value = {
     showLabels,
     toggleLabels,
     showWatermark,
+    shouldShowWatermark,
+    customWatermarkEnabled,
+    watermarkText,
+    watermarkLink,
+    watermarkColor,
+    watermarkOpacity,
     toggleWatermark,
+    updateWatermarkText,
+    updateWatermarkLink,
+    updateWatermarkColor,
+    updateWatermarkOpacity,
     labelBackgroundColor,
     labelTextColor,
     labelFontFamily,

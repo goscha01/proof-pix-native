@@ -96,7 +96,7 @@ export default function CameraScreen({ route, navigation }) {
   const enlargedGalleryPhotoRef = useRef(enlargedGalleryPhoto);
   const isGalleryAnimatingRef = useRef(false);
   const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom, activeProjectId } = usePhotos();
-  const { showLabels, showWatermark, getRooms } = useSettings();
+  const { showLabels, shouldShowWatermark, getRooms } = useSettings();
   
   // Get rooms from settings (custom or default)
   const rooms = getRooms();
@@ -2085,7 +2085,7 @@ export default function CameraScreen({ route, navigation }) {
                   fontSize: 14 * scaleFactor
                 }}
               />
-              {showWatermark && (
+              {shouldShowWatermark && (
                 <PhotoWatermark
                   style={{
                     bottom: 10 * scaleFactor,

@@ -24,7 +24,7 @@ const { width, height } = Dimensions.get('window');
 export default function PhotoDetailScreen({ route, navigation }) {
   const { photo } = route.params;
   const { deletePhoto } = usePhotos();
-  const { showLabels, showWatermark } = useSettings();
+  const { showLabels, shouldShowWatermark } = useSettings();
   const [sharing, setSharing] = useState(false);
   const [containerLayout, setContainerLayout] = useState(null);
   const [imageSize, setImageSize] = useState(null);
@@ -67,7 +67,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
       let tempUri;
 
       // If labels or watermark are enabled, capture the view (image + label + watermark)
-      if ((showLabels || showWatermark) && photo.mode && captureDimensions) {
+      if ((showLabels || shouldShowWatermark) && photo.mode && captureDimensions) {
         try {
 
           // Capture the hidden view which has exact image dimensions (no white padding)
@@ -217,7 +217,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
           />
         )}
         {/* Show watermark if enabled */}
-        {showWatermark && (
+        {shouldShowWatermark && (
           <PhotoWatermark style={getWatermarkStyle()} />
         )}
       </View>
@@ -252,7 +252,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
       {renderPhoto()}
 
       {/* Hidden capture view - exact image size, no white padding */}
-      {(showLabels || showWatermark) && photo.mode && captureDimensions && (
+      {(showLabels || shouldShowWatermark) && photo.mode && captureDimensions && (
         <View
           ref={captureViewRef}
           style={{
@@ -297,7 +297,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
                     }}
                   />
                 )}
-                {showWatermark && (
+                {shouldShowWatermark && (
                   <PhotoWatermark
                     style={{
                       bottom: 10 * scaleFactor,
