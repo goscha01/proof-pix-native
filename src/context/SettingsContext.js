@@ -9,6 +9,8 @@ const DEFAULT_LABEL_TEXT = '#000000';
 const DEFAULT_WATERMARK_TEXT = 'Created with ProofPix.com';
 const DEFAULT_WATERMARK_LINK = 'https://geos-ai.com/';
 const DEFAULT_WATERMARK_OPACITY = 0.5;
+const DEFAULT_LABEL_SIZE = 'medium';
+const DEFAULT_LABEL_CORNER_STYLE = 'rounded';
 
 // Helper function to get project-specific custom rooms key
 const getProjectRoomsKey = (projectId) => `custom-rooms-${projectId}`;
@@ -86,6 +88,8 @@ export const SettingsProvider = ({ children }) => {
   const [watermarkOpacity, setWatermarkOpacity] = useState(DEFAULT_WATERMARK_OPACITY);
   const [labelBackgroundColor, setLabelBackgroundColor] = useState(DEFAULT_LABEL_BACKGROUND);
   const [labelTextColor, setLabelTextColor] = useState(DEFAULT_LABEL_TEXT);
+  const [labelSize, setLabelSize] = useState(DEFAULT_LABEL_SIZE);
+  const [labelCornerStyle, setLabelCornerStyle] = useState(DEFAULT_LABEL_CORNER_STYLE);
   const [labelFontFamily, setLabelFontFamily] = useState('system'); // Default system font
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('tampa'); // Default to Tampa
@@ -126,6 +130,8 @@ export const SettingsProvider = ({ children }) => {
         setLabelTextColor(
           normalizeColorHex(settings.labelTextColor, DEFAULT_LABEL_TEXT)
         );
+        setLabelSize(settings.labelSize ?? DEFAULT_LABEL_SIZE);
+        setLabelCornerStyle(settings.labelCornerStyle ?? DEFAULT_LABEL_CORNER_STYLE);
         setLabelFontFamily(normalizeFontKey(settings.labelFontFamily));
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? 'tampa');
@@ -160,6 +166,8 @@ export const SettingsProvider = ({ children }) => {
         labelBackgroundColor,
         labelTextColor,
         labelFontFamily,
+        labelSize,
+        labelCornerStyle,
         userName,
         location,
         isBusiness,
@@ -263,6 +271,20 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ labelTextColor: normalized });
   };
 
+  const updateLabelSize = async (size) => {
+    const allowed = ['small', 'medium', 'large'];
+    const normalized = allowed.includes(size) ? size : DEFAULT_LABEL_SIZE;
+    setLabelSize(normalized);
+    await saveSettings({ labelSize: normalized });
+  };
+
+  const updateLabelCornerStyle = async (style) => {
+    const allowed = ['rounded', 'square'];
+    const normalized = allowed.includes(style) ? style : DEFAULT_LABEL_CORNER_STYLE;
+    setLabelCornerStyle(normalized);
+    await saveSettings({ labelCornerStyle: normalized });
+  };
+
   const updateLabelFontFamily = async (font) => {
     const normalized = normalizeFontKey(font);
     setLabelFontFamily(normalized);
@@ -347,6 +369,8 @@ export const SettingsProvider = ({ children }) => {
       setWatermarkOpacity(DEFAULT_WATERMARK_OPACITY);
       setLabelBackgroundColor(DEFAULT_LABEL_BACKGROUND);
       setLabelTextColor(DEFAULT_LABEL_TEXT);
+      setLabelSize(DEFAULT_LABEL_SIZE);
+      setLabelCornerStyle(DEFAULT_LABEL_CORNER_STYLE);
       setLabelFontFamily('system');
       setIsBusiness(false);
       setUseFolderStructure(true);
@@ -378,9 +402,13 @@ export const SettingsProvider = ({ children }) => {
     labelBackgroundColor,
     labelTextColor,
     labelFontFamily,
+    labelSize,
+    labelCornerStyle,
     updateLabelBackgroundColor,
     updateLabelTextColor,
     updateLabelFontFamily,
+    updateLabelSize,
+    updateLabelCornerStyle,
     userName,
     location,
     updateUserInfo,

@@ -17,12 +17,42 @@ const FONT_FAMILY_MAP = {
   monospacelegacy: 'RobotoMono_700Bold',
 };
 
+const LABEL_SIZE_MAP = {
+  small: {
+    fontSize: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+    minWidth: 70,
+  },
+  medium: {
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    minWidth: 88,
+  },
+  large: {
+    fontSize: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 104,
+  },
+};
+
 /**
  * Centralized photo label component for consistent styling across all screens
  * Supports custom background color, text color, and font family from settings
  */
 export default function PhotoLabel({ label, style = {}, textStyle = {} }) {
-  const { labelBackgroundColor, labelTextColor, labelFontFamily } = useSettings();
+  const {
+    labelBackgroundColor,
+    labelTextColor,
+    labelFontFamily,
+    labelSize,
+    labelCornerStyle,
+  } = useSettings();
   const canonicalKey = labelFontFamily || 'system';
   const normalizedKey = canonicalKey.toLowerCase();
   const selectedFontFamily =
@@ -31,12 +61,28 @@ export default function PhotoLabel({ label, style = {}, textStyle = {} }) {
     FONT_FAMILY_MAP[`${normalizedKey}legacy`] ||
     null;
 
+  const sizeKey = labelSize && LABEL_SIZE_MAP[labelSize] ? labelSize : 'medium';
+  const sizeStyle = LABEL_SIZE_MAP[sizeKey];
+  const cornerRadius = labelCornerStyle === 'square' ? 0 : sizeStyle.borderRadius;
+
   return (
-    <View style={[styles.label, { backgroundColor: labelBackgroundColor }, style]}>
+    <View
+      style={[
+        styles.label,
+        {
+          backgroundColor: labelBackgroundColor,
+          paddingHorizontal: sizeStyle.paddingHorizontal,
+          paddingVertical: sizeStyle.paddingVertical,
+          borderRadius: cornerRadius,
+            minWidth: sizeStyle.minWidth,
+        },
+        style,
+      ]}
+    >
       <Text
         style={[
           styles.labelText,
-          { color: labelTextColor },
+          { color: labelTextColor, fontSize: sizeStyle.fontSize },
           selectedFontFamily ? { fontFamily: selectedFontFamily } : null,
           textStyle,
         ]}
@@ -52,12 +98,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     left: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
   },
   labelText: {
-    fontSize: 14,
     fontWeight: 'bold',
   },
 });

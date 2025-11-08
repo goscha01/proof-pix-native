@@ -74,6 +74,41 @@ const FONT_OPTIONS = [
   },
 ];
 
+const LABEL_SIZE_OPTIONS = [
+  { key: 'small', label: 'Small' },
+  { key: 'medium', label: 'Default' },
+  { key: 'large', label: 'Large' },
+];
+
+const LABEL_SIZE_STYLE_MAP = {
+  small: {
+    fontSize: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+    minWidth: 70,
+  },
+  medium: {
+    fontSize: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    minWidth: 88,
+  },
+  large: {
+    fontSize: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 104,
+  },
+};
+
+const LABEL_CORNER_OPTIONS = [
+  { key: 'rounded', label: 'Rounded' },
+  { key: 'square', label: 'Straight' },
+];
+
 const DEFAULT_LABEL_BACKGROUND = '#FFD700';
 const DEFAULT_LABEL_TEXT = '#000000';
 const RGB_COLOR_REGEX = /^RGB\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i;
@@ -180,6 +215,10 @@ export default function SettingsScreen({ navigation }) {
     labelBackgroundColor,
     labelTextColor,
     labelFontFamily,
+    labelSize,
+    labelCornerStyle,
+    updateLabelSize,
+    updateLabelCornerStyle,
     updateLabelBackgroundColor,
     updateLabelTextColor,
     updateLabelFontFamily,
@@ -1527,19 +1566,91 @@ export default function SettingsScreen({ navigation }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Preview */}
-              <View style={styles.labelPreviewContainer}>
-                <Text style={styles.settingLabel}>Preview</Text>
-                <View style={styles.labelPreview}>
-                  <View style={[styles.previewLabel, { backgroundColor: labelBackgroundColor }]}>
-                    <Text style={[
-                      styles.previewLabelText,
-                      { color: labelTextColor },
-                      currentFontOption?.fontFamily && { fontFamily: currentFontOption.fontFamily },
-                    ]}>
-                      BEFORE
-                    </Text>
+              <View style={styles.settingRowStacked}>
+                <View style={styles.cornerControlsRow}>
+                  <Text style={styles.settingLabel}>Corner Style</Text>
+                  <View style={styles.cornerOptions}>
+                    {LABEL_CORNER_OPTIONS.map((option) => {
+                      const isSelected = labelCornerStyle === option.key;
+                      return (
+                        <TouchableOpacity
+                          key={option.key}
+                          style={[
+                            styles.cornerOption,
+                            isSelected && styles.cornerOptionSelected,
+                          ]}
+                          onPress={() => updateLabelCornerStyle(option.key)}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            style={[
+                              styles.cornerOptionText,
+                              isSelected && styles.cornerOptionTextSelected,
+                            ]}
+                          >
+                            {option.label}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </View>
+                </View>
+              </View>
+
+              <Text style={styles.settingLabel}>Label Size</Text>
+              <View style={styles.labelPreviewContainer}>
+                <View style={styles.labelPreview}>
+                  {LABEL_SIZE_OPTIONS.map((option) => {
+                    const sizeStyle =
+                      LABEL_SIZE_STYLE_MAP[option.key] || LABEL_SIZE_STYLE_MAP.medium;
+                    const cornerRadius =
+                      labelCornerStyle === 'square' ? 0 : sizeStyle.borderRadius;
+                    const isSelected = labelSize === option.key;
+                    const swatchBackground = isSelected ? labelBackgroundColor : '#E0E0E0';
+                    const swatchTextColor = isSelected ? labelTextColor : '#666666';
+                    return (
+                      <TouchableOpacity
+                        key={option.key}
+                        style={styles.previewLabelOption}
+                        onPress={() => updateLabelSize(option.key)}
+                        activeOpacity={0.85}
+                      >
+                        <View
+                          style={[
+                            styles.previewLabel,
+                            {
+                              backgroundColor: swatchBackground,
+                              paddingHorizontal: sizeStyle.paddingHorizontal,
+                              paddingVertical: sizeStyle.paddingVertical,
+                              borderRadius: cornerRadius,
+                              borderWidth: 1,
+                              borderColor: isSelected ? 'transparent' : '#D0D0D0',
+                              minWidth: sizeStyle.minWidth,
+                              maxWidth: sizeStyle.minWidth,
+                            },
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.previewLabelText,
+                              {
+                                color: swatchTextColor,
+                                fontSize: sizeStyle.fontSize,
+                              },
+                              currentFontOption?.fontFamily && {
+                                fontFamily: currentFontOption.fontFamily,
+                              },
+                            ]}
+                            numberOfLines={1}
+                            adjustsFontSizeToFit
+                            minimumFontScale={0.85}
+                          >
+                            BEFORE
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
               </View>
             </View>
@@ -2167,6 +2278,10 @@ const sliderStyles = StyleSheet.create({
       justifyContent: 'space-between',
       paddingVertical: 12
     },
+    settingRowStacked: {
+      paddingVertical: 12,
+      gap: 8,
+    },
     settingInfo: {
       flex: 1,
       paddingRight: 16
@@ -2178,6 +2293,30 @@ const sliderStyles = StyleSheet.create({
     settingDescription: {
       color: COLORS.GRAY,
       fontSize: 12
+    },
+    optionGroup: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    optionPill: {
+      paddingHorizontal: 14,
+      paddingVertical: 8,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      backgroundColor: 'white',
+    },
+    optionPillSelected: {
+      backgroundColor: COLORS.PRIMARY,
+      borderColor: COLORS.PRIMARY,
+    },
+    optionPillText: {
+      color: COLORS.TEXT,
+      fontWeight: '600',
+    },
+    optionPillTextSelected: {
+      color: COLORS.TEXT,
     },
     watermarkCustomization: {
       marginTop: 8,
@@ -2884,23 +3023,68 @@ const sliderStyles = StyleSheet.create({
       color: COLORS.TEXT,
     },
     labelPreviewContainer: {
-      marginTop: 16,
+      marginTop: 12,
+      alignSelf: 'stretch',
     },
     labelPreview: {
       backgroundColor: '#f0f0f0',
-      padding: 20,
+      paddingHorizontal: 6,
+      paddingVertical: 9,
       borderRadius: 8,
+      flexDirection: 'row',
       alignItems: 'center',
-      marginTop: 8,
+      justifyContent: 'space-around',
     },
     previewLabel: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 6,
+      alignItems: 'center',
+      minWidth: 0,
     },
     previewLabelText: {
-      fontSize: 14,
       fontWeight: 'bold',
+    },
+    previewLabelOption: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 2,
+      paddingHorizontal: 2,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: 'transparent',
+      flex: 0,
+      flexShrink: 0,
+      marginHorizontal: 4,
+    },
+    cornerControlsRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 8,
+    },
+    cornerOptions: {
+      flexDirection: 'row',
+      gap: 8,
+      alignItems: 'center',
+    },
+    cornerOption: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 999,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      backgroundColor: 'white',
+    },
+    cornerOptionSelected: {
+      borderColor: COLORS.PRIMARY,
+      backgroundColor: COLORS.PRIMARY,
+    },
+    cornerOptionText: {
+      fontSize: 12,
+      color: COLORS.GRAY,
+      fontWeight: '600',
+      textTransform: 'uppercase',
+    },
+    cornerOptionTextSelected: {
+      color: COLORS.TEXT,
     },
     bottomModal: {
       justifyContent: 'flex-end',
