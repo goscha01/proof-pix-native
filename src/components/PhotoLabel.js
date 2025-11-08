@@ -98,8 +98,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 10,
     left: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   labelText: {
     fontWeight: 'bold',
+    textAlign: 'center',
   },
 });
