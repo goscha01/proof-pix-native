@@ -100,6 +100,7 @@ export default {
           }
         }
       ],
+      "expo-font",
       "./plugins/withUseModularHeaders.js"
     ],
     extra: {

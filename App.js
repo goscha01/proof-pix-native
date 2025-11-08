@@ -1,11 +1,15 @@
 import React from 'react';
-import { View, StyleSheet, Text } from 'react-native';
+import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PhotoProvider } from './src/context/PhotoContext';
-import { SettingsProvider, useSettings } from './src/context/SettingsContext';
-import { AdminProvider, useAdmin } from './src/context/AdminContext';
+import { SettingsProvider } from './src/context/SettingsContext';
+import { AdminProvider } from './src/context/AdminContext';
+import { useFonts } from 'expo-font';
+import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
+import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
+import { RobotoMono_700Bold } from '@expo-google-fonts/roboto-mono';
 
 // Screens
 import HomeScreen from './src/screens/HomeScreen';
@@ -132,6 +136,21 @@ const linking = {
 };
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    Montserrat_700Bold,
+    PlayfairDisplay_700Bold,
+    RobotoMono_700Bold,
+  });
+
+  if (!fontsLoaded) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#ffffff" />
+        <Text style={styles.loadingText}>Loading assets…</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
       <SafeAreaProvider>
@@ -148,3 +167,18 @@ export default function App() {
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    backgroundColor: '#000',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+});

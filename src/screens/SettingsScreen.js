@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,13 @@ import {
   Switch,
   ScrollView,
   Alert,
-  Linking,
   ActivityIndicator,
-  Modal,
+  Modal as RNModal,
   Clipboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
@@ -20,10 +23,38 @@ import { COLORS } from '../constants/rooms';
 import RoomEditor from '../components/RoomEditor';
 import googleDriveService from '../services/googleDriveService';
 import InviteManager from '../components/InviteManager';
-import { generateInviteToken } from '../utils/tokens';
 import { useNavigation } from '@react-navigation/native';
 import proxyService from '../services/proxyService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import Modal from 'react-native-modal';
+import ColorPicker from 'react-native-wheel-color-picker';
+
+const FONT_OPTIONS = [
+  {
+    key: 'system',
+    label: 'System Default',
+    description: 'Matches the device font',
+    fontFamily: null,
+  },
+  {
+    key: 'montserratBold',
+    label: 'Montserrat Bold',
+    description: 'Modern sans-serif',
+    fontFamily: 'Montserrat_700Bold',
+  },
+  {
+    key: 'playfairBold',
+    label: 'Playfair Display',
+    description: 'Elegant serif',
+    fontFamily: 'PlayfairDisplay_700Bold',
+  },
+  {
+    key: 'robotoMonoBold',
+    label: 'Roboto Mono',
+    description: 'Monospaced tech feel',
+    fontFamily: 'RobotoMono_700Bold',
+  },
+];
 
 export default function SettingsScreen({ navigation }) {
   const {
@@ -56,6 +87,61 @@ export default function SettingsScreen({ navigation }) {
   } = useSettings();
   
   const [showPlanSelection, setShowPlanSelection] = useState(false);
+  const [colorModalVisible, setColorModalVisible] = useState(false);
+  const [colorModalType, setColorModalType] = useState(null);
+  const [draftColor, setDraftColor] = useState(labelBackgroundColor);
+  const [colorInput, setColorInput] = useState(labelBackgroundColor?.toUpperCase() || '');
+  const [hexModalVisible, setHexModalVisible] = useState(false);
+  const [hexModalValue, setHexModalValue] = useState(labelBackgroundColor?.toUpperCase() || '');
+  const [hexModalError, setHexModalError] = useState(null);
+  const [fontModalVisible, setFontModalVisible] = useState(false);
+  const [colorPickerKey, setColorPickerKey] = useState(0);
+
+const DEFAULT_LABEL_BACKGROUND = '#FFD700';
+const DEFAULT_LABEL_TEXT = '#000000';
+
+const hsvToHex = ({ h = 0, s = 0, v = 0 }) => {
+  const normalizedH = ((h % 360) + 360) % 360;
+  const normalizedS = Math.min(Math.max(s, 0), 100) / 100;
+  const normalizedV = Math.min(Math.max(v, 0), 100) / 100;
+
+  const c = normalizedV * normalizedS;
+  const x = c * (1 - Math.abs(((normalizedH / 60) % 2) - 1));
+  const m = normalizedV - c;
+
+  let rPrime = 0;
+  let gPrime = 0;
+  let bPrime = 0;
+
+  if (normalizedH < 60) {
+    rPrime = c;
+    gPrime = x;
+  } else if (normalizedH < 120) {
+    rPrime = x;
+    gPrime = c;
+  } else if (normalizedH < 180) {
+    gPrime = c;
+    bPrime = x;
+  } else if (normalizedH < 240) {
+    gPrime = x;
+    bPrime = c;
+  } else if (normalizedH < 300) {
+    rPrime = x;
+    bPrime = c;
+  } else {
+    rPrime = c;
+    bPrime = x;
+  }
+
+  const r = Math.round((rPrime + m) * 255);
+  const g = Math.round((gPrime + m) * 255);
+  const b = Math.round((bPrime + m) * 255);
+
+  return `#${r.toString(16).padStart(2, '0').toUpperCase()}${g
+    .toString(16)
+    .padStart(2, '0')
+    .toUpperCase()}${b.toString(16).padStart(2, '0').toUpperCase()}`;
+};
 
   const {
     isAuthenticated,
@@ -135,6 +221,173 @@ export default function SettingsScreen({ navigation }) {
 
   const isTeamMember = userMode === 'team_member';
   const [canSwitchBack, setCanSwitchBack] = useState(false);
+
+  const currentFontOption = useMemo(() => {
+    return (
+      FONT_OPTIONS.find((option) => option.key === labelFontFamily) ||
+      FONT_OPTIONS[0]
+    );
+  }, [labelFontFamily]);
+
+  useEffect(() => {
+    if (colorModalVisible) {
+      const baseColor =
+        colorModalType === 'text' ? labelTextColor : labelBackgroundColor;
+      const normalized = (baseColor || '').toUpperCase();
+      setDraftColor(normalized);
+      setColorInput(normalized);
+      setHexModalValue(normalized);
+      setHexModalError(null);
+    }
+  }, [colorModalVisible, colorModalType, labelBackgroundColor, labelTextColor]);
+
+  const normalizeHex = (value) => {
+    if (!value) return null;
+    let trimmed = value.trim().toUpperCase();
+
+    // allow users to omit the leading "#"
+    if (/^[0-9A-F]{6}$/.test(trimmed)) {
+      trimmed = `#${trimmed}`;
+    } else if (/^[0-9A-F]{3}$/.test(trimmed)) {
+      trimmed = `#${trimmed}`;
+    }
+
+    // Allow 4-digit shorthand (#RGBA) → expand to #RRGGBBAA by ignoring alpha
+    if (/^#[0-9A-F]{4}$/.test(trimmed)) {
+      const [r, g, b] = trimmed.slice(1, 4).split('');
+      trimmed = `#${r}${r}${g}${g}${b}${b}`;
+    }
+    if (/^[0-9A-F]{4}$/.test(trimmed)) {
+      const [r, g, b] = trimmed.slice(0, 3).split('');
+      trimmed = `#${r}${r}${g}${g}${b}${b}`;
+    }
+
+    if (/^#[0-9A-F]{6}$/.test(trimmed)) {
+      return trimmed;
+    }
+    if (/^#[0-9A-F]{3}$/.test(trimmed)) {
+      const [r, g, b] = trimmed.slice(1).split('');
+      return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+    }
+    const rgbMatch = trimmed.match(
+      /^RGB\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i
+    );
+    if (rgbMatch) {
+      const [r, g, b] = rgbMatch.slice(1).map((segment) => {
+        const numeric = parseInt(segment, 10);
+        return Math.min(255, Math.max(0, numeric));
+      });
+      return `#${[r, g, b]
+        .map((channel) => channel.toString(16).padStart(2, '0'))
+        .join('')
+        .toUpperCase()}`;
+    }
+    return null;
+  };
+
+  const hexToRgbString = (hex) => {
+    const normalized = normalizeHex(hex);
+    if (!normalized) return null;
+    const value = normalized.replace('#', '');
+    const r = parseInt(value.slice(0, 2), 16);
+    const g = parseInt(value.slice(2, 4), 16);
+    const b = parseInt(value.slice(4, 6), 16);
+    return `rgb(${r}, ${g}, ${b})`;
+  };
+
+  const handleOpenHexModal = () => {
+    if (__DEV__) {
+      console.log('[HexModal] Opening hex modal', {
+        currentColor: colorInput,
+        modalVisible: hexModalVisible,
+      });
+    }
+    // reset preview to persisted value when opening text modal
+    const persisted = colorModalType === 'text' ? labelTextColor : labelBackgroundColor;
+    const normalized = normalizeHex(persisted) || '#FFFFFF';
+    setDraftColor(normalized);
+    setColorInput(normalized);
+    setHexModalValue(normalized);
+    setHexModalError(null);
+    setHexModalVisible(true);
+  };
+
+  const handleHexModalChange = (text) => {
+    const input = text.toUpperCase();
+    setHexModalValue(input);
+    if (!input) {
+      setHexModalError(null);
+      return;
+    }
+    const normalized = normalizeHex(input);
+    if (__DEV__) {
+      console.log('[HexModal] Change', { input, normalized });
+    }
+    if (normalized) {
+      setHexModalError(null);
+    } else if (input.length >= 4) {
+      setHexModalError('Enter #RRGGBB, #RGB, or rgb(r, g, b)');
+    } else {
+      setHexModalError(null);
+    }
+  };
+
+  const handleHexModalCancel = () => {
+    if (__DEV__) {
+      console.log('[HexModal] Cancel');
+    }
+    setHexModalVisible(false);
+    setHexModalError(null);
+  };
+
+  const handleHexModalApply = () => {
+    const normalized = normalizeHex(hexModalValue);
+    if (!normalized) {
+      setHexModalError('Enter #RRGGBB, #RGB, or rgb(r, g, b)');
+      return;
+    }
+    if (__DEV__) {
+      console.log('[HexModal] Apply', { value: normalized });
+    }
+    handleDraftColorChange(normalized, { source: 'complete' });
+    setHexModalVisible(false);
+  };
+
+  const handleDraftColorChange = (color, arg1 = {}, arg2 = null) => {
+    let options = {};
+    let hsvMeta = null;
+
+    if (arg1 && typeof arg1 === 'object' && 'source' in arg1) {
+      options = arg1;
+      hsvMeta = arg2;
+    } else {
+      hsvMeta = arg1;
+      options = arg2 && typeof arg2 === 'object' ? arg2 : {};
+    }
+
+    const { source } = options;
+
+    let candidateHex = normalizeHex(color);
+    if (hsvMeta && typeof hsvMeta === 'object') {
+      const { h = 0, s = 0, v = 0 } = hsvMeta;
+      if (colorModalType === 'text' && v <= 1) {
+        candidateHex = hsvToHex({ h, s, v: 100 });
+      } else {
+        candidateHex = hsvToHex({ h, s, v });
+      }
+    }
+    const normalized = normalizeHex(candidateHex);
+    if (!normalized) {
+      return;
+    }
+    if (__DEV__ && source === 'complete') {
+      console.log('[ColorPicker] onColorChange', { hex: normalized, rgb: hexToRgbString(normalized) });
+    }
+    setDraftColor(normalized);
+    setColorInput(normalized);
+    setHexModalValue(normalized);
+    setHexModalError(null);
+  };
 
   const handleSetupTeam = async () => {
     if (!isAuthenticated || userMode !== 'admin' || isSigningIn) {
@@ -387,6 +640,57 @@ export default function SettingsScreen({ navigation }) {
         }
       ]
     );
+  };
+
+  const openColorModal = (type) => {
+    setColorModalType(type);
+    setColorPickerKey((prev) => prev + 1);
+    setColorModalVisible(true);
+  };
+
+  const handleApplyColor = async () => {
+    const normalized = normalizeHex(draftColor);
+    if (!normalized) {
+      setHexModalError('Please enter a valid color code before applying.');
+      return;
+    }
+    if (__DEV__) {
+      console.log('[ColorPicker] Apply color', {
+        type: colorModalType,
+        hex: normalized,
+        rgb: hexToRgbString(normalized),
+      });
+    }
+    if (colorModalType === 'background') {
+      await updateLabelBackgroundColor(normalized);
+    } else if (colorModalType === 'text') {
+      await updateLabelTextColor(normalized);
+    }
+    setColorModalVisible(false);
+  };
+
+  const handleDefaultColor = async () => {
+    const defaultColor =
+      colorModalType === 'text' ? DEFAULT_LABEL_TEXT : DEFAULT_LABEL_BACKGROUND;
+    if (colorModalType === 'background') {
+      await updateLabelBackgroundColor(defaultColor);
+    } else if (colorModalType === 'text') {
+      await updateLabelTextColor(defaultColor);
+    }
+    handleDraftColorChange(defaultColor, { source: 'complete' });
+    setColorPickerKey((prev) => prev + 1);
+    setColorModalVisible(false);
+  };
+
+  const handleCancelColor = () => {
+    setColorModalVisible(false);
+    setHexModalVisible(false);
+    setHexModalError(null);
+  };
+
+  const handleSelectFont = async (fontKey) => {
+    await updateLabelFontFamily(fontKey);
+    setFontModalVisible(false);
   };
 
 
@@ -1055,69 +1359,61 @@ export default function SettingsScreen({ navigation }) {
                 Customize the appearance of BEFORE and AFTER labels
               </Text>
 
-              {/* Background Color */}
-              <View style={styles.colorPickerRow}>
-                <Text style={styles.settingLabel}>Background Color</Text>
-                <View style={styles.colorOptions}>
-                  {['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DFE6E9', '#000000'].map((color) => (
-                    <TouchableOpacity
-                      key={color}
-                      style={[
-                        styles.colorOption,
-                        { backgroundColor: color },
-                        labelBackgroundColor === color && styles.colorOptionSelected
-                      ]}
-                      onPress={() => updateLabelBackgroundColor(color)}
-                    />
-                  ))}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Background Color</Text>
+                  <Text style={styles.settingDescription}>
+                    {labelBackgroundColor?.toUpperCase()}
+                  </Text>
                 </View>
+                <TouchableOpacity
+                  style={styles.customSelectorButton}
+                  onPress={() => openColorModal('background')}
+                >
+                  <View
+                    style={[
+                      styles.colorPreviewSwatch,
+                      { backgroundColor: labelBackgroundColor },
+                    ]}
+                  />
+                  <Text style={styles.customSelectorButtonText}>Pick color</Text>
+                </TouchableOpacity>
               </View>
 
-              {/* Text Color */}
-              <View style={styles.colorPickerRow}>
-                <Text style={styles.settingLabel}>Text Color</Text>
-                <View style={styles.colorOptions}>
-                  {['#000000', '#FFFFFF', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DFE6E9'].map((color) => (
-                    <TouchableOpacity
-                      key={color}
-                      style={[
-                        styles.colorOption,
-                        { backgroundColor: color },
-                        labelTextColor === color && styles.colorOptionSelected
-                      ]}
-                      onPress={() => updateLabelTextColor(color)}
-                    />
-                  ))}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Text Color</Text>
+                  <Text style={styles.settingDescription}>
+                    {labelTextColor?.toUpperCase()}
+                  </Text>
                 </View>
+                <TouchableOpacity
+                  style={styles.customSelectorButton}
+                  onPress={() => openColorModal('text')}
+                >
+                  <View
+                    style={[
+                      styles.colorPreviewSwatch,
+                      { backgroundColor: labelTextColor },
+                    ]}
+                  />
+                  <Text style={styles.customSelectorButtonText}>Pick color</Text>
+                </TouchableOpacity>
               </View>
 
-              {/* Font Family */}
               <View style={styles.settingRow}>
                 <View style={styles.settingInfo}>
                   <Text style={styles.settingLabel}>Font Style</Text>
                   <Text style={styles.settingDescription}>
-                    Current: {labelFontFamily}
+                    {currentFontOption?.label}
                   </Text>
                 </View>
-                <View style={styles.fontOptions}>
-                  {['System', 'Serif', 'Monospace'].map((font) => (
-                    <TouchableOpacity
-                      key={font}
-                      style={[
-                        styles.fontOption,
-                        labelFontFamily === font && styles.fontOptionSelected
-                      ]}
-                      onPress={() => updateLabelFontFamily(font)}
-                    >
-                      <Text style={[
-                        styles.fontOptionText,
-                        labelFontFamily === font && styles.fontOptionTextSelected
-                      ]}>
-                        {font}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                <TouchableOpacity
+                  style={styles.fontSelectorButton}
+                  onPress={() => setFontModalVisible(true)}
+                >
+                  <Text style={styles.fontSelectorButtonText}>Choose font</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Preview */}
@@ -1128,8 +1424,7 @@ export default function SettingsScreen({ navigation }) {
                     <Text style={[
                       styles.previewLabelText,
                       { color: labelTextColor },
-                      labelFontFamily === 'Serif' && { fontFamily: 'serif' },
-                      labelFontFamily === 'Monospace' && { fontFamily: 'monospace' }
+                      currentFontOption?.fontFamily && { fontFamily: currentFontOption.fontFamily },
                     ]}>
                       BEFORE
                     </Text>
@@ -1272,8 +1567,194 @@ export default function SettingsScreen({ navigation }) {
           initialRooms={customRooms}
         />
 
-        {/* Plan Selection Modal */}
+      <Modal
+        isVisible={colorModalVisible}
+        onBackdropPress={handleCancelColor}
+        onBackButtonPress={handleCancelColor}
+        style={styles.bottomModal}
+        useNativeDriver
+      >
+        <KeyboardAvoidingView
+          style={styles.keyboardAvoiding}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 110 : 0}
+        >
+          <View style={styles.bottomSheetContainer}>
+            <View style={styles.customModalSheet}>
+              <View style={styles.customModalHeader}>
+                <Text style={styles.customModalTitle}>
+                  {colorModalType === 'text' ? 'Text Color' : 'Background Color'}
+                </Text>
+                <TouchableOpacity
+                  onPress={handleCancelColor}
+                  style={styles.customModalCloseButton}
+                >
+                  <Text style={styles.customModalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+              <ScrollView
+                bounces={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={styles.customModalScroll}
+              >
+                <View style={styles.customModalContent}>
+                  <View style={styles.colorPreviewRow}>
+                    <View
+                      style={[
+                        styles.colorPreviewSwatchLarge,
+                        { backgroundColor: draftColor },
+                      ]}
+                    />
+                    <View style={styles.inlineHexContainer}>
+                      <Pressable
+                        onPress={handleOpenHexModal}
+                        style={({ pressed }) => [
+                          styles.inlineHexButton,
+                          pressed && styles.inlineHexButtonPressed,
+                        ]}
+                        hitSlop={8}
+                      >
+                        <Text style={styles.inlineHexText}>
+                          {colorInput || '#FFFFFF'}
+                        </Text>
+                      </Pressable>
+                      <TouchableOpacity
+                        style={styles.inlineDefaultButton}
+                        onPress={handleDefaultColor}
+                        activeOpacity={0.7}
+                      >
+                        <Text style={styles.inlineDefaultButtonText}>Default</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <View style={styles.colorPicker}>
+                    <ColorPicker
+                      key={`${colorModalType}-${colorPickerKey}`}
+                      color={draftColor}
+                      onColorChange={handleDraftColorChange}
+                      onColorChangeComplete={(value, hsv) => handleDraftColorChange(value, { source: 'complete' }, hsv)}
+                      thumbSize={26}
+                      sliderSize={28}
+                      sliderHidden={false}
+                      swatches={false}
+                      shadeWheelThumb
+                      shadeSliderThumb
+                      gapSize={20}
+                      noSnap
+                    />
+                  </View>
+                  <TouchableOpacity
+                    style={styles.customApplyButton}
+                    onPress={handleApplyColor}
+                  >
+                    <Text style={styles.customApplyButtonText}>Apply</Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
+              {hexModalVisible && (
+                <View style={styles.inlineOverlay}>
+                  <TouchableWithoutFeedback onPress={handleHexModalCancel}>
+                    <View style={styles.inlineOverlayBackdrop} />
+                  </TouchableWithoutFeedback>
+                  <View style={styles.inlineModal}>
+                    <Text style={styles.inlineModalTitle}>Enter Color Code</Text>
+                    <TextInput
+                      style={[
+                        styles.inlineModalInput,
+                        hexModalError && styles.inlineModalInputError,
+                      ]}
+                      value={hexModalValue}
+                      onChangeText={handleHexModalChange}
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                      placeholder="#FFFFFF or rgb(255, 255, 255)"
+                      placeholderTextColor="#888"
+                      returnKeyType="done"
+                      autoFocus
+                    />
+                    {!!hexModalError && (
+                      <Text style={styles.inlineModalErrorText}>{hexModalError}</Text>
+                    )}
+                    <View style={styles.inlineModalActions}>
+                      <TouchableOpacity
+                        style={[styles.inlineModalButton, styles.inlineModalCancel]}
+                        onPress={handleHexModalCancel}
+                      >
+                        <Text style={styles.inlineModalCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.inlineModalButton, styles.inlineModalApply]}
+                        onPress={handleHexModalApply}
+                      >
+                        <Text style={styles.inlineModalApplyText}>Apply</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              )}
+            </View>
+            </View>
+          </KeyboardAvoidingView>
+        </Modal>
+
         <Modal
+          isVisible={fontModalVisible}
+          onBackdropPress={() => setFontModalVisible(false)}
+          onBackButtonPress={() => setFontModalVisible(false)}
+          style={styles.bottomModal}
+          useNativeDriver
+        >
+          <View style={styles.customModalSheet}>
+            <View style={styles.customModalHeader}>
+              <Text style={styles.customModalTitle}>Choose Font</Text>
+              <TouchableOpacity
+                onPress={() => setFontModalVisible(false)}
+                style={styles.customModalCloseButton}
+              >
+                <Text style={styles.customModalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.fontList}>
+              {FONT_OPTIONS.map((option) => {
+                const isSelected = option.key === labelFontFamily;
+                return (
+                  <TouchableOpacity
+                    key={option.key}
+                    style={[
+                      styles.fontOptionRow,
+                      isSelected && styles.fontOptionRowSelected,
+                    ]}
+                    onPress={() => handleSelectFont(option.key)}
+                  >
+                    <Text
+                      style={[
+                        styles.fontOptionTitle,
+                        option.fontFamily ? { fontFamily: option.fontFamily } : null,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    <Text style={styles.fontOptionSubtitle}>{option.description}</Text>
+                    <Text
+                      style={[
+                        styles.fontOptionPreview,
+                        option.fontFamily ? { fontFamily: option.fontFamily } : null,
+                      ]}
+                    >
+                      BEFORE / AFTER
+                    </Text>
+                    {isSelected && <Text style={styles.fontSelectedBadge}>Selected</Text>}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        </Modal>
+
+        {/* hex modal rendered inside color modal */}
+
+        {/* Plan Selection Modal */}
+        <RNModal
           visible={showPlanModal}
           transparent={true}
           animationType="slide"
@@ -1355,7 +1836,7 @@ export default function SettingsScreen({ navigation }) {
               </ScrollView>
             </View>
           </View>
-        </Modal>
+        </RNModal>
       </SafeAreaView>
     );
   }
@@ -2056,25 +2537,45 @@ export default function SettingsScreen({ navigation }) {
       fontSize: 16,
       fontWeight: '600',
     },
-    colorPickerRow: {
-      marginVertical: 12,
-    },
-    colorOptions: {
+    customSelectorButton: {
       flexDirection: 'row',
-      flexWrap: 'wrap',
-      gap: 10,
-      marginTop: 8,
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: '#f7f7f7',
+      borderRadius: 24,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
     },
-    colorOption: {
-      width: 40,
-      height: 40,
-      borderRadius: 20,
-      borderWidth: 2,
-      borderColor: 'transparent',
+    customSelectorButtonText: {
+      color: COLORS.TEXT,
+      fontWeight: '600',
     },
-    colorOptionSelected: {
-      borderColor: COLORS.PRIMARY,
-      borderWidth: 3,
+    colorPreviewSwatch: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+    },
+    colorPreviewSwatchLarge: {
+      width: 48,
+      height: 48,
+      borderRadius: 24,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      marginRight: 12,
+    },
+    fontSelectorButton: {
+      backgroundColor: COLORS.PRIMARY,
+      borderRadius: 24,
+      paddingHorizontal: 20,
+      paddingVertical: 10,
+    },
+    fontSelectorButtonText: {
+      color: COLORS.TEXT,
+      fontWeight: '600',
     },
     fontOptions: {
       flexDirection: 'row',
@@ -2118,5 +2619,322 @@ export default function SettingsScreen({ navigation }) {
     previewLabelText: {
       fontSize: 14,
       fontWeight: 'bold',
+    },
+    bottomModal: {
+      justifyContent: 'flex-end',
+      margin: 0,
+    },
+    customModalSheet: {
+      backgroundColor: 'white',
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingBottom: 24,
+      paddingTop: 4,
+    },
+    customModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: COLORS.BORDER,
+      paddingTop: Platform.OS === 'ios' ? 28 : 16,
+    },
+    customModalTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: COLORS.TEXT,
+    },
+    customModalCloseButton: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#f0f0f0',
+    },
+    customModalCloseText: {
+      fontSize: 16,
+      color: COLORS.GRAY,
+    },
+    customModalContent: {
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 24,
+      gap: 16,
+    },
+    keyboardAvoiding: {
+      flex: 1,
+    },
+    bottomSheetContainer: {
+      flex: 1,
+      justifyContent: 'flex-end',
+    },
+    customModalScroll: {
+      paddingBottom: 12,
+    },
+    colorPicker: {
+      width: '100%',
+      minHeight: 260,
+      justifyContent: 'center',
+    },
+    colorPreviewRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
+    },
+    inlineHexContainer: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+    },
+    inlineHexButton: {
+      flex: 1,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      borderRadius: 10,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      minHeight: 44,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: 'white',
+    },
+    inlineHexButtonPressed: {
+      backgroundColor: '#EFEFEF',
+    },
+    inlineHexText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: COLORS.TEXT,
+    },
+    inlineDefaultButton: {
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      minHeight: 44,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#f2f2f2',
+    },
+    inlineDefaultButtonText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: COLORS.TEXT,
+    },
+    inlineOverlay: {
+      position: 'absolute',
+      top: 0,
+      bottom: 0,
+      left: 0,
+      right: 0,
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingHorizontal: 24,
+    },
+    inlineOverlayBackdrop: {
+      ...StyleSheet.absoluteFillObject,
+      backgroundColor: 'rgba(0,0,0,0.45)',
+    },
+    inlineModal: {
+      width: '100%',
+      backgroundColor: 'white',
+      borderRadius: 16,
+      paddingHorizontal: 20,
+      paddingVertical: 24,
+      shadowColor: '#000',
+      shadowOpacity: 0.25,
+      shadowRadius: 10,
+      shadowOffset: { width: 0, height: 4 },
+      elevation: 8,
+    },
+    inlineModalTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: COLORS.TEXT,
+      marginBottom: 12,
+      textAlign: 'center',
+    },
+    inlineModalInput: {
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 14,
+      color: COLORS.TEXT,
+    },
+    inlineModalInputError: {
+      borderColor: '#E53935',
+    },
+    inlineModalErrorText: {
+      marginTop: 8,
+      color: '#E53935',
+      fontSize: 12,
+      textAlign: 'center',
+    },
+    inlineModalActions: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginTop: 16,
+    },
+    inlineModalButton: {
+      flex: 1,
+      paddingVertical: 12,
+      borderRadius: 12,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+    },
+    inlineModalCancel: {
+      backgroundColor: 'white',
+    },
+    inlineModalApply: {
+      backgroundColor: COLORS.PRIMARY,
+      borderColor: COLORS.PRIMARY,
+    },
+    inlineModalCancelText: {
+      color: COLORS.TEXT,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    inlineModalApplyText: {
+      color: COLORS.TEXT,
+      fontSize: 15,
+      fontWeight: '600',
+    },
+    colorCodeInput: {
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 14,
+      color: COLORS.TEXT,
+    },
+    colorCodeInputError: {
+      borderColor: '#E53935',
+    },
+    colorInputErrorText: {
+      marginTop: 8,
+      color: '#E53935',
+      fontSize: 12,
+    },
+    customApplyButton: {
+      backgroundColor: COLORS.PRIMARY,
+      borderRadius: 12,
+      paddingVertical: 14,
+      alignItems: 'center',
+      marginTop: 16,
+    },
+    customApplyButtonText: {
+      color: COLORS.TEXT,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    hexModalSheet: {
+      backgroundColor: 'white',
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingHorizontal: 20,
+      paddingBottom: 24,
+      paddingTop: Platform.OS === 'ios' ? 28 : 16,
+    },
+    hexModalHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    hexModalTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: COLORS.TEXT,
+    },
+    hexModalBody: {
+      gap: 12,
+    },
+    hexModalLabel: {
+      fontSize: 14,
+      color: COLORS.GRAY,
+    },
+    hexModalActions: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      gap: 12,
+      marginTop: 8,
+    },
+    hexModalButton: {
+      flex: 1,
+      paddingVertical: 14,
+      borderRadius: 12,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+    },
+    hexModalCancel: {
+      backgroundColor: 'white',
+    },
+    hexModalApply: {
+      backgroundColor: COLORS.PRIMARY,
+      borderColor: COLORS.PRIMARY,
+    },
+    hexModalCancelText: {
+      color: COLORS.TEXT,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    hexModalApplyText: {
+      color: COLORS.TEXT,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    fontList: {
+      maxHeight: 320,
+    },
+    fontOptionRow: {
+      paddingHorizontal: 20,
+      paddingVertical: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: COLORS.BORDER,
+      backgroundColor: 'white',
+    },
+    fontOptionRowSelected: {
+      backgroundColor: '#f0f7ff',
+      borderLeftWidth: 4,
+      borderLeftColor: COLORS.PRIMARY,
+      paddingLeft: 16,
+    },
+    fontOptionTitle: {
+      fontSize: 16,
+      color: COLORS.TEXT,
+      fontWeight: '700',
+    },
+    fontOptionSubtitle: {
+      fontSize: 12,
+      color: COLORS.GRAY,
+      marginTop: 4,
+    },
+    fontOptionPreview: {
+      fontSize: 14,
+      color: COLORS.TEXT,
+      marginTop: 8,
+    },
+    fontSelectedBadge: {
+      marginTop: 8,
+      alignSelf: 'flex-start',
+      backgroundColor: COLORS.PRIMARY,
+      color: COLORS.TEXT,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      borderRadius: 10,
+      fontSize: 12,
+      fontWeight: '600',
     },
   });

@@ -8,6 +8,29 @@ const CUSTOM_ROOMS_KEY = 'custom-rooms';
 // Helper function to get project-specific custom rooms key
 const getProjectRoomsKey = (projectId) => `custom-rooms-${projectId}`;
 
+const normalizeFontKey = (value) => {
+  if (!value) return 'system';
+  const mapped = String(value).toLowerCase();
+  switch (mapped) {
+    case 'system':
+      return 'system';
+    case 'serif':
+    case 'playfairbold':
+    case 'playfairdisplay_700bold':
+      return 'playfairBold';
+    case 'monospace':
+    case 'robotomonobold':
+    case 'robotomono_700bold':
+      return 'robotoMonoBold';
+    case 'montserrat':
+    case 'montserratbold':
+    case 'montserrat_700bold':
+      return 'montserratBold';
+    default:
+      return mapped || 'system';
+  }
+};
+
 const SettingsContext = createContext();
 
 export const useSettings = () => {
@@ -26,7 +49,7 @@ export const SettingsProvider = ({ children }) => {
   const [showWatermark, setShowWatermark] = useState(true);
   const [labelBackgroundColor, setLabelBackgroundColor] = useState('#FFD700'); // Default yellow
   const [labelTextColor, setLabelTextColor] = useState('#000000'); // Default black
-  const [labelFontFamily, setLabelFontFamily] = useState('System'); // Default system font
+  const [labelFontFamily, setLabelFontFamily] = useState('system'); // Default system font
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('tampa'); // Default to Tampa
   const [isBusiness, setIsBusiness] = useState(false);
@@ -51,7 +74,7 @@ export const SettingsProvider = ({ children }) => {
         setShowWatermark(settings.showWatermark ?? true);
         setLabelBackgroundColor(settings.labelBackgroundColor ?? '#FFD700');
         setLabelTextColor(settings.labelTextColor ?? '#000000');
-        setLabelFontFamily(settings.labelFontFamily ?? 'System');
+        setLabelFontFamily(normalizeFontKey(settings.labelFontFamily));
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? 'tampa');
         setIsBusiness(settings.isBusiness ?? false);
@@ -117,8 +140,9 @@ export const SettingsProvider = ({ children }) => {
   };
 
   const updateLabelFontFamily = async (font) => {
-    setLabelFontFamily(font);
-    await saveSettings({ labelFontFamily: font });
+    const normalized = normalizeFontKey(font);
+    setLabelFontFamily(normalized);
+    await saveSettings({ labelFontFamily: normalized });
   };
 
   const updateUserInfo = async (name) => {
@@ -194,7 +218,7 @@ export const SettingsProvider = ({ children }) => {
       setShowWatermark(true);
       setLabelBackgroundColor('#FFD700');
       setLabelTextColor('#000000');
-      setLabelFontFamily('System');
+      setLabelFontFamily('system');
       setIsBusiness(false);
       setUseFolderStructure(true);
       setEnabledFolders({ before: true, after: true, combined: true });
