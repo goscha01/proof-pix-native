@@ -146,6 +146,12 @@ class GoogleAuthService {
       const response = await GoogleSignin.signIn({ scopes });
       console.log('Raw userInfo from Google Sign-In:', JSON.stringify(response, null, 2));
 
+      // If the user cancelled, Google Sign-In SDK returns an object with type "cancelled"
+      if (response?.type === 'cancelled') {
+        console.log('Google Sign-In was cancelled by the user.');
+        return { error: 'Sign in was cancelled.' };
+      }
+
       // The user object can be in `response.user` (native) or `response.data.user` (web/Expo Go)
       const user = response?.user || response?.data?.user;
 

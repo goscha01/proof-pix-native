@@ -11,6 +11,7 @@ import {
   Linking,
   ActivityIndicator,
   Modal,
+  Clipboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
@@ -22,6 +23,7 @@ import InviteManager from '../components/InviteManager';
 import { generateInviteToken } from '../utils/tokens';
 import { useNavigation } from '@react-navigation/native';
 import proxyService from '../services/proxyService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function SettingsScreen({ navigation }) {
   const {
@@ -87,6 +89,34 @@ export default function SettingsScreen({ navigation }) {
   useEffect(() => {
     setName(userName);
   }, [userName]);
+  useEffect(() => {
+    let isMounted = true;
+    const checkStoredIndividual = async () => {
+      if (!isTeamMember) {
+        if (isMounted) {
+          setCanSwitchBack(false);
+        }
+        return;
+      }
+      try {
+        const [storedPlan, storedMode] = await Promise.all([
+          AsyncStorage.getItem('@stored_individual_plan'),
+          AsyncStorage.getItem('@stored_individual_mode'),
+        ]);
+        if (isMounted) {
+          setCanSwitchBack(Boolean(storedPlan || storedMode));
+        }
+      } catch (error) {
+        if (isMounted) {
+          setCanSwitchBack(false);
+        }
+      }
+    };
+    checkStoredIndividual();
+    return () => {
+      isMounted = false;
+    };
+  }, [isTeamMember]);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [adminInfo, setAdminInfo] = useState(null);
@@ -94,6 +124,9 @@ export default function SettingsScreen({ navigation }) {
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [editingTeamName, setEditingTeamName] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
+
+  const isTeamMember = userMode === 'team_member';
+  const [canSwitchBack, setCanSwitchBack] = useState(false);
 
   const handleSetupTeam = async () => {
     if (!isAuthenticated || userMode !== 'admin' || isSigningIn) {
@@ -151,20 +184,73 @@ export default function SettingsScreen({ navigation }) {
     await updateUserInfo(name, location);
   };
 
+  const handleLeaveTeam = () => {
+    Alert.alert(
+      'Leave Team',
+      'This will disconnect you from the team on this device while keeping your existing projects. Your invite token is shown above—copy it if you plan to rejoin later.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave Team',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const signOutResult = await signOutFromTeam();
+              if (!signOutResult?.success) {
+                Alert.alert('Error', signOutResult?.error || 'Failed to leave the team. Please try again.');
+                return;
+              }
+
+              const switchResult = await switchToIndividualMode();
+              if (switchResult?.success) {
+                Alert.alert(
+                  'Team Left',
+                  'You have been disconnected from the team. You can rejoin later with your invite token.'
+                );
+              } else if (switchResult?.error) {
+                Alert.alert('Notice', 'Left the team, but could not restore your previous mode automatically.');
+              }
+            } catch (error) {
+              console.error('[SETTINGS] Error leaving team:', error);
+              Alert.alert('Error', 'Unexpected error occurred while leaving the team.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
   const handleResetUserData = () => {
+    const resetMessage = isTeamMember
+      ? 'This will clear your local settings and disconnect you from the team. Make sure you have your invite token if you plan to rejoin. Continue?'
+      : 'This will clear your name settings. You will be taken to the setup screen to configure them again. Continue?';
+
     Alert.alert(
       'Reset User Data',
-      'This will clear your name settings. You will be taken to the setup screen to configure them again. Continue?',
+      resetMessage,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Reset',
           style: 'destructive',
           onPress: async () => {
-            try {
-              await disconnectAllAccounts();
-            } catch (error) {
-              console.warn('[SETTINGS] Failed to disconnect accounts during reset:', error?.message || error);
+            if (isTeamMember) {
+              try {
+                const signOutResult = await signOutFromTeam();
+                if (!signOutResult?.success) {
+                  Alert.alert('Error', signOutResult?.error || 'Failed to disconnect from the team.');
+                  return;
+                }
+                await switchToIndividualMode();
+              } catch (error) {
+                console.warn('[SETTINGS] Failed to disconnect team during reset:', error?.message || error);
+              }
+            } else {
+              try {
+                await disconnectAllAccounts();
+              } catch (error) {
+                console.warn('[SETTINGS] Failed to disconnect accounts during reset:', error?.message || error);
+              }
             }
 
             try {
@@ -418,46 +504,73 @@ export default function SettingsScreen({ navigation }) {
                   </Text>
                 )}
               </View>
-              
-              {/* Switch to Individual Mode Button */}
-              <TouchableOpacity
-                style={styles.switchModeButton}
-                onPress={async () => {
-                  Alert.alert(
-                    'Switch to Individual Mode',
-                    'This will switch you back to your individual account. You can rejoin the team later using the invite code.',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      {
-                        text: 'Switch',
-                        onPress: async () => {
-                          try {
-                            const result = await switchToIndividualMode();
-                            if (result.success) {
-                              // Reload settings to ensure UI updates with restored name and plan
-                              // The SettingsContext should pick up the changes from AsyncStorage
-                              // Force a re-render by waiting a bit for state updates
-                              setTimeout(() => {
-                                Alert.alert(
-                                  'Switched to Individual Mode',
-                                  `You are now in ${result.plan.charAt(0).toUpperCase() + result.plan.slice(1)} mode.`,
-                                  [{ text: 'OK' }]
-                                );
-                              }, 100);
-                            } else {
-                              Alert.alert('Error', result.error || 'Failed to switch to individual mode.');
+
+              {teamInfo?.token && (
+                <View style={styles.tokenBox}>
+                  <View style={styles.tokenHeader}>
+                    <Text style={styles.tokenLabel}>Invite Token</Text>
+                    <TouchableOpacity
+                      style={styles.tokenCopyButton}
+                      onPress={() => {
+                        Clipboard.setString(teamInfo.token);
+                        Alert.alert('Copied', 'Invite token copied to clipboard.');
+                      }}
+                    >
+                      <Text style={styles.tokenCopyText}>Copy</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={styles.tokenValue} selectable>{teamInfo.token}</Text>
+                </View>
+              )}
+
+              <Text style={styles.teamWarningText}>
+                Remember to save your invite token. You’ll need it to rejoin this team later.
+              </Text>
+
+              {canSwitchBack && (
+                <TouchableOpacity
+                  style={styles.switchModeButton}
+                  onPress={async () => {
+                    Alert.alert(
+                      'Switch Back',
+                      'This will restore your previous mode on this device.',
+                      [
+                        { text: 'Cancel', style: 'cancel' },
+                        {
+                          text: 'Switch',
+                          onPress: async () => {
+                            try {
+                              const result = await switchToIndividualMode();
+                              if (result?.success) {
+                                setTimeout(() => {
+                                  Alert.alert(
+                                    'Switched Back',
+                                    `You are now in ${result.mode ? result.mode.charAt(0).toUpperCase() + result.mode.slice(1) : 'individual'} mode.`,
+                                    [{ text: 'OK' }]
+                                  );
+                                }, 100);
+                              } else if (result?.error) {
+                                Alert.alert('Error', result.error);
+                              }
+                            } catch (error) {
+                              console.error('[SETTINGS] Error switching modes:', error);
+                              Alert.alert('Error', 'An unexpected error occurred while switching modes.');
                             }
-                          } catch (error) {
-                            console.error('[SETTINGS] Error switching to individual mode:', error);
-                            Alert.alert('Error', 'Failed to switch to individual mode. Please try again.');
-                          }
-                        }
-                      }
-                    ]
-                  );
-                }}
+                          },
+                        },
+                      ],
+                    );
+                  }}
+                >
+                  <Text style={styles.switchModeButtonText}>Switch Back</Text>
+                </TouchableOpacity>
+              )}
+
+              <TouchableOpacity
+                style={styles.leaveTeamButton}
+                onPress={handleLeaveTeam}
               >
-                <Text style={styles.switchModeButtonText}>Switch to Individual Mode</Text>
+                <Text style={styles.leaveTeamButtonText}>Leave Team</Text>
               </TouchableOpacity>
               
             </>
@@ -877,888 +990,957 @@ export default function SettingsScreen({ navigation }) {
           )}
         </View>
 
-        {/* Local Settings Sections - Hidden for team members */}
         {userMode !== 'team_member' && (
           <>
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Display Settings</Text>
               <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>Show Labels</Text>
-                      <Text style={styles.settingDescription}>
-                        Display "BEFORE" and "AFTER" labels on all photos
-                      </Text>
-                    </View>
-                    <Switch
-                      value={showLabels}
-                      onValueChange={toggleLabels}
-                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                      thumbColor="white"
-                    />
-                  </View>
-
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>Business</Text>
-                      <Text style={styles.settingDescription}>
-                        Enable business mode features
-                      </Text>
-                    </View>
-                    <Switch
-                      value={isBusiness}
-                      onValueChange={toggleBusiness}
-                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                      thumbColor="white"
-                    />
-                  </View>
-                </View>
-
-                {/* Room Customization */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Folder Customization</Text>
-                  <Text style={styles.sectionDescription}>
-                    Customize the names and icons of folders in your app
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Show Labels</Text>
+                  <Text style={styles.settingDescription}>
+                    Display "BEFORE" and "AFTER" labels on all photos
                   </Text>
-
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>Custom Folders</Text>
-                      <Text style={styles.settingDescription}>
-                        {customRooms ? `${customRooms.length} custom folders` : 'Using default folders'}
-                      </Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.customizeButton}
-                      onPress={() => {
-
-                        setShowRoomEditor(true);
-                      }}
-                    >
-                      <Text style={styles.customizeButtonText}>Customize</Text>
-                    </TouchableOpacity>
-                  </View>
                 </View>
-
-                {/* Upload Structure */}
-                <View style={styles.section}>
-                  <Text style={styles.sectionTitle}>Upload Structure</Text>
-
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>Use folder structure</Text>
-                      <Text style={styles.settingDescription}>
-                        If off, all photos go into the project folder
-                      </Text>
-                    </View>
-                    <Switch
-                      value={useFolderStructure}
-                      onValueChange={toggleUseFolderStructure}
-                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                      thumbColor="white"
-                    />
-                  </View>
-
-                  {useFolderStructure && (
-                    <>
-                      <View style={styles.settingRow}>
-                        <View style={styles.settingInfo}>
-                          <Text style={styles.settingLabel}>Before folder</Text>
-                          <Text style={styles.settingDescription}>Uploads to "before" subfolder</Text>
-                        </View>
-                        <Switch
-                          value={enabledFolders.before}
-                          onValueChange={(v) => updateEnabledFolders({ before: v })}
-                          trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                          thumbColor="white"
-                        />
-                      </View>
-                      <View style={styles.settingRow}>
-                        <View style={styles.settingInfo}>
-                          <Text style={styles.settingLabel}>After folder</Text>
-                          <Text style={styles.settingDescription}>Uploads to "after" subfolder</Text>
-                        </View>
-                        <Switch
-                          value={enabledFolders.after}
-                          onValueChange={(v) => updateEnabledFolders({ after: v })}
-                          trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                          thumbColor="white"
-                        />
-                      </View>
-                      <View style={styles.settingRow}>
-                        <View style={styles.settingInfo}>
-                          <Text style={styles.settingLabel}>Combined folder</Text>
-                          <Text style={styles.settingDescription}>Uploads to "combined"/formats subfolders</Text>
-                        </View>
-                        <Switch
-                          value={enabledFolders.combined}
-                          onValueChange={(v) => updateEnabledFolders({ combined: v })}
-                          trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                          thumbColor="white"
-                        />
-                      </View>
-                    </>
-                  )}
-                </View>
-              </>
-            )}
-
-            {/* User Information */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>User Information</Text>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>User name</Text>
-                <TextInput
-                  style={styles.input}
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Enter your name"
-                  placeholderTextColor={COLORS.GRAY}
-                  onBlur={handleSaveUserInfo}
+                <Switch
+                  value={showLabels}
+                  onValueChange={toggleLabels}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
                 />
               </View>
 
-              <TouchableOpacity
-                style={styles.resetButton}
-                onPress={handleResetUserData}
-              >
-                <Text style={styles.resetButtonText}>Reset User Data</Text>
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-
-          <RoomEditor
-            visible={showRoomEditor}
-            onClose={() => setShowRoomEditor(false)}
-            onSave={(rooms) => {
-              saveCustomRooms(rooms);
-              // Force a small delay to ensure state updates propagate
-              setTimeout(() => {
-              }, 100);
-            }}
-            initialRooms={customRooms}
-          />
-
-          {/* Plan Selection Modal */}
-          <Modal
-            visible={showPlanModal}
-            transparent={true}
-            animationType="slide"
-            onRequestClose={() => setShowPlanModal(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Choose a Plan</Text>
-                  <TouchableOpacity 
-                    onPress={() => setShowPlanModal(false)}
-                    style={styles.modalCloseButton}
-                  >
-                    <Text style={styles.modalCloseText}>✕</Text>
-                  </TouchableOpacity>
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Business</Text>
+                  <Text style={styles.settingDescription}>
+                    Enable business mode features
+                  </Text>
                 </View>
-
-                <ScrollView style={styles.modalScrollView}>
-                  <View style={styles.planContainer}>
-                    <TouchableOpacity 
-                      style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]} 
-                      onPress={async () => {
-                        await updateUserPlan('starter');
-                        setShowPlanModal(false);
-                      }}
-                    >
-                      <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>Starter</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.planSubtext}>Free forever. Easily manage your first project and create stunning before/after photos ready for social sharing.</Text>
-                  </View>
-
-                  <View style={styles.planContainer}>
-                    <TouchableOpacity 
-                      style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]} 
-                      onPress={async () => {
-                        await updateUserPlan('pro');
-                        setShowPlanModal(false);
-                        if (!isAuthenticated) {
-                          navigation.navigate('GoogleSignUp', { plan: 'pro' });
-                        }
-                      }}
-                    >
-                      <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>Pro</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.planSubtext}>For professionals. Cloud sync + bulk upload.</Text>
-                  </View>
-                  
-                  <View style={styles.planContainer}>
-                    <TouchableOpacity 
-                      style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]} 
-                      onPress={async () => {
-                        await updateUserPlan('business');
-                        setShowPlanModal(false);
-                        if (!isAuthenticated) {
-                          navigation.navigate('GoogleSignUp', { plan: 'business' });
-                        }
-                      }}
-                    >
-                      <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>Business</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.planSubtext}>For small teams. Includes team management.</Text>
-                  </View>
-                  
-                  <View style={styles.planContainer}>
-                    <TouchableOpacity 
-                      style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]} 
-                      onPress={async () => {
-                        await updateUserPlan('enterprise');
-                        setShowPlanModal(false);
-                        if (!isAuthenticated) {
-                          navigation.navigate('GoogleSignUp', { plan: 'enterprise' });
-                        }
-                      }}
-                    >
-                      <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>Enterprise</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.planSubtext}>For growing organizations. Unlimited members, multi-location support.</Text>
-                  </View>
-                </ScrollView>
+                <Switch
+                  value={isBusiness}
+                  onValueChange={toggleBusiness}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
               </View>
             </View>
-          </Modal>
-        </SafeAreaView>
-      );
-    }
 
-    const styles = StyleSheet.create({
-      container: {
-        flex: 1,
-        backgroundColor: COLORS.BACKGROUND
-      },
-      header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 20,
-        paddingTop: 10,
-        backgroundColor: 'white',
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.BORDER
-      },
-      backButton: {
-        width: 60
-      },
-      backButtonText: {
-        color: COLORS.PRIMARY,
-        fontSize: 18
-      },
-      title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: COLORS.TEXT
-      },
-      content: {
-        flex: 1
-      },
-      section: {
-        backgroundColor: 'white',
-        marginTop: 20,
-        paddingVertical: 20,
-        paddingHorizontal: 20,
-        borderTopWidth: 1,
-        borderBottomWidth: 1,
-        borderColor: COLORS.BORDER
-      },
-      sectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: COLORS.TEXT,
-        marginBottom: 16
-      },
-      inputGroup: {
-        marginBottom: 16
-      },
-      label: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: COLORS.TEXT,
-        marginBottom: 8
-      },
-      input: {
-        backgroundColor: 'white',
-        borderWidth: 1,
-        borderColor: COLORS.BORDER,
-        padding: 12,
-        borderRadius: 8,
-        color: COLORS.TEXT
-      },
-      locationPicker: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        borderWidth: 1,
-        borderColor: COLORS.BORDER,
-        padding: 12,
-        borderRadius: 8
-      },
-      locationPickerText: {
-        color: COLORS.TEXT,
-        fontWeight: '600'
-      },
-      locationPickerArrow: {
-        color: COLORS.GRAY
-      },
-      locationDropdown: {
-        marginTop: 8,
-        borderWidth: 1,
-        borderColor: COLORS.BORDER,
-        borderRadius: 8,
-        overflow: 'hidden'
-      },
-      locationOption: {
-        padding: 12,
-        backgroundColor: 'white'
-      },
-      locationOptionSelected: {
-        backgroundColor: '#f7f7f7'
-      },
-      locationOptionText: {
-        color: COLORS.TEXT
-      },
-      locationOptionTextSelected: {
-        fontWeight: '700'
-      },
-      locationOptionCheck: {
-        position: 'absolute',
-        right: 12,
-        top: 12,
-        color: COLORS.PRIMARY
-      },
-      sectionDescription: {
-        color: COLORS.GRAY,
-        marginBottom: 12
-      },
-      settingRow: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        paddingVertical: 12
-      },
-      settingInfo: {
-        flex: 1,
-        paddingRight: 16
-      },
-      settingLabel: {
-        color: COLORS.TEXT,
-        fontWeight: '600'
-      },
-      settingDescription: {
-        color: COLORS.GRAY,
-        fontSize: 12
-      },
-      resetButton: {
-        backgroundColor: '#FFE6E6',
-        borderRadius: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        alignItems: 'center',
-        marginTop: 8
-      },
-      resetButtonText: {
-        color: '#CC0000',
-        fontSize: 16,
-        fontWeight: '600'
-      },
-      customizeButton: {
-        backgroundColor: COLORS.PRIMARY,
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8
-      },
-      customizeButtonText: {
-        color: COLORS.TEXT,
-        fontWeight: '600',
-        fontSize: 14
-      },
-      googleSignInButton: {
-        backgroundColor: '#4285F4',
-        borderRadius: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        alignItems: 'center',
-        marginBottom: 8
-      },
-      googleSignInButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '600'
-      },
-      buttonDisabled: {
-        backgroundColor: '#cccccc',
-        opacity: 0.6
-      },
-      buttonTextDisabled: {
-        color: '#666666'
-      },
-      currentPlanBox: {
-        backgroundColor: '#f0f0f0',
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 16,
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center'
-      },
-      currentPlanLabel: {
-        fontSize: 14,
-        color: COLORS.GRAY,
-        fontWeight: '600'
-      },
-      currentPlanValueContainer: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 8
-      },
-      currentPlanValue: {
-        fontSize: 16,
-        color: COLORS.TEXT,
-        fontWeight: 'bold'
-      },
-      changePlanText: {
-        fontSize: 14,
-        color: COLORS.PRIMARY,
-        fontWeight: '600'
-      },
-      modalOverlay: {
-        flex: 1,
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        justifyContent: 'flex-end'
-      },
-      modalContent: {
-        backgroundColor: 'white',
-        borderTopLeftRadius: 20,
-        borderTopRightRadius: 20,
-        maxHeight: '80%',
-        paddingBottom: 20
-      },
-      modalHeader: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 20,
-        borderBottomWidth: 1,
-        borderBottomColor: COLORS.BORDER
-      },
-      modalTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: COLORS.TEXT
-      },
-      modalCloseButton: {
-        width: 30,
-        height: 30,
-        justifyContent: 'center',
-        alignItems: 'center'
-      },
-      modalCloseText: {
-        fontSize: 24,
-        color: COLORS.GRAY
-      },
-      modalScrollView: {
-        paddingHorizontal: 20,
-        paddingTop: 20
-      },
-      backLink: {
-        marginBottom: 12,
-        alignSelf: 'flex-start'
-      },
-      backLinkText: {
-        fontSize: 16,
-        color: COLORS.PRIMARY,
-        fontWeight: '600'
-      },
-      planContainer: {
-        marginBottom: 20
-      },
-      planButton: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
-        padding: 20,
-        borderWidth: 2,
-        borderColor: '#ddd',
-        alignItems: 'center'
-      },
-      planButtonSelected: {
-        borderColor: COLORS.PRIMARY,
-        backgroundColor: '#f0f7ff'
-      },
-      planButtonText: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333'
-      },
-      planButtonTextSelected: {
-        color: COLORS.PRIMARY
-      },
-      planSubtext: {
-        fontSize: 14,
-        color: '#666',
-        textAlign: 'center',
-        marginTop: 8,
-        paddingHorizontal: 10
-      },
-      expoGoWarning: {
-        backgroundColor: '#fff3cd',
-        borderWidth: 1,
-        borderColor: '#ffc107',
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 16
-      },
-      expoGoWarningText: {
-        color: '#856404',
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 8
-      },
-      expoGoWarningSubtext: {
-        color: '#856404',
-        fontSize: 12,
-        fontFamily: 'monospace'
-      },
-      adminNote: {
-        color: COLORS.GRAY,
-        fontSize: 12,
-        textAlign: 'center',
-        marginTop: 8
-      },
-      adminInfoBox: {
-        backgroundColor: '#F0F8FF',
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 12
-      },
-      adminInfoHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: 12,
-      },
-      activeAccountContainer: {
-        flex: 1,
-        paddingRight: 8,
-        backgroundColor: '#E6F0FF',
-        borderRadius: 8,
-        padding: 14,
-      },
-      activeAccountLabel: {
-        color: '#3366CC',
-        fontSize: 12,
-        fontWeight: '600',
-        marginBottom: 6,
-        textTransform: 'uppercase',
-      },
-      activeAccountName: {
-        color: COLORS.TEXT,
-        fontSize: 16,
-        fontWeight: '700',
-      },
-      activeAccountEmail: {
-        color: COLORS.GRAY,
-        fontSize: 12,
-        marginTop: 4,
-      },
-      connectedAccountsList: {
-        marginTop: 16,
-        paddingTop: 12,
-        borderTopWidth: 1,
-        borderTopColor: '#D8E1F6',
-      },
-      connectedAccountsTitle: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: COLORS.TEXT,
-        marginBottom: 8,
-      },
-      connectedAccountRow: {
-        backgroundColor: '#FFFFFF',
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#E0E6F5',
-        padding: 12,
-        marginBottom: 8,
-      },
-      connectedAccountRowLast: {
-        marginBottom: 0,
-      },
-      connectedAccountHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: 10,
-      },
-      connectedAccountInfo: {
-        flex: 1,
-        paddingRight: 12,
-      },
-      connectedAccountName: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: COLORS.TEXT,
-        marginBottom: 2,
-      },
-      connectedAccountEmail: {
-        fontSize: 12,
-        color: COLORS.GRAY,
-      },
-      accountStatusBadge: {
-        borderRadius: 999,
-        paddingVertical: 4,
-        paddingHorizontal: 10,
-      },
-      accountStatusActive: {
-        backgroundColor: '#E8F5E9',
-      },
-      accountStatusInactive: {
-        backgroundColor: '#FFF4E5',
-      },
-      accountStatusText: {
-        fontSize: 12,
-        fontWeight: '600',
-      },
-      accountStatusTextActive: {
-        color: '#2E7D32',
-      },
-      accountStatusTextInactive: {
-        color: '#C77800',
-      },
-      connectedAccountActions: {
-        flexDirection: 'row',
-        gap: 8,
-      },
-      accountActionButton: {
-        flex: 1,
-        borderRadius: 8,
-        paddingVertical: 10,
-        alignItems: 'center',
-        backgroundColor: COLORS.PRIMARY,
-      },
-      accountActionButtonDisabled: {
-        opacity: 0.6,
-      },
-      accountActionButtonText: {
-        color: '#FFFFFF',
-        fontSize: 12,
-        fontWeight: '600',
-      },
-      accountRemoveButton: {
-        backgroundColor: '#FFE6E6',
-      },
-      accountRemoveButtonText: {
-        color: '#CC0000',
-      },
-      disconnectButton: {
-        backgroundColor: '#FFE6E6',
-        borderRadius: 8,
-        paddingVertical: 8,
-        paddingHorizontal: 14,
-      },
-      disconnectButtonText: {
-        color: '#CC0000',
-        fontSize: 14,
-        fontWeight: '600',
-      },
-      setupStatusBox: {
-        backgroundColor: '#E8F5E9',
-        borderRadius: 8,
-        padding: 12,
-        marginBottom: 12
-      },
-      setupStatusText: {
-        color: '#2E7D32',
-        fontSize: 14,
-        fontWeight: '600',
-        marginBottom: 8
-      },
-      setupDetailsRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        marginTop: 4
-      },
-      setupDetailLabel: {
-        color: COLORS.GRAY,
-        fontSize: 12
-      },
-      setupDetailValue: {
-        color: COLORS.TEXT,
-        fontSize: 12,
-        maxWidth: '60%'
-      },
-      signInButton: {
-        backgroundColor: '#34A853',
-        borderRadius: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        alignItems: 'center',
-        marginBottom: 12,
-      },
-      signInButtonText: {
-        color: 'white',
-        fontSize: 16,
-        fontWeight: '600',
-      },
-      loadingContainer: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        padding: 20,
-        backgroundColor: COLORS.BACKGROUND,
-      },
-      loadingText: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: COLORS.TEXT,
-        marginTop: 10,
-      },
-      loadingSubText: {
-        fontSize: 14,
-        color: COLORS.GRAY,
-        marginTop: 5,
-        textAlign: 'center',
-      },
-      infoText: {
-        fontSize: 16,
-        color: COLORS.GRAY,
-        textAlign: 'center',
-        marginBottom: 20,
-      },
-      setupIncompleteText: {
-        color: COLORS.GRAY,
-        fontSize: 12,
-        textAlign: 'center',
-        marginTop: 8,
-      },
-      featureButton: {
-        backgroundColor: COLORS.PRIMARY,
-        borderRadius: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        alignItems: 'center',
-        marginTop: 12,
-        marginBottom: 8
-      },
-      featureButtonText: {
-        color: COLORS.TEXT,
-        fontSize: 16,
-        fontWeight: '600'
-      },
-      setupTeamButton: {
-        backgroundColor: COLORS.PRIMARY,
-        borderRadius: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        alignItems: 'center',
-        marginTop: 16,
-        marginBottom: 8
-      },
-      setupTeamButtonText: {
-        color: COLORS.TEXT,
-        fontSize: 16,
-        fontWeight: '600'
-      },
-      connectedStatus: {
-        backgroundColor: '#d4edda',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 15,
-        alignItems: 'center',
-      },
-      connectedText: {
-        color: '#155724',
-        fontSize: 14,
-        fontWeight: '600',
-      },
-      teamNameContainer: {
-        marginBottom: 15,
-      },
-      teamNameLabel: {
-        fontSize: 14,
-        fontWeight: '600',
-        color: COLORS.TEXT,
-        marginBottom: 8,
-      },
-      teamNameDisplay: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        backgroundColor: 'white',
-        borderWidth: 1,
-        borderColor: COLORS.BORDER,
-        borderRadius: 8,
-        padding: 12,
-      },
-      teamNameText: {
-        fontSize: 16,
-        color: COLORS.TEXT,
-        flex: 1,
-      },
-      teamNameTextPlaceholder: {
-        color: COLORS.GRAY,
-        fontStyle: 'italic',
-      },
-      teamNameEditIcon: {
-        fontSize: 18,
-        marginLeft: 8,
-      },
-      teamNameEditContainer: {
-        backgroundColor: 'white',
-        borderWidth: 1,
-        borderColor: COLORS.BORDER,
-        borderRadius: 8,
-        padding: 12,
-      },
-      teamNameInput: {
-        fontSize: 16,
-        color: COLORS.TEXT,
-        borderWidth: 1,
-        borderColor: COLORS.BORDER,
-        borderRadius: 6,
-        padding: 10,
-        marginBottom: 8,
-      },
-      teamNameButtons: {
-        flexDirection: 'row',
-        justifyContent: 'flex-end',
-        gap: 8,
-      },
-      teamNameButton: {
-        backgroundColor: COLORS.PRIMARY,
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 6,
-      },
-      teamNameButtonCancel: {
-        backgroundColor: 'transparent',
-        borderWidth: 1,
-        borderColor: COLORS.BORDER,
-      },
-      teamNameButtonText: {
-        color: COLORS.TEXT,
-        fontSize: 14,
-        fontWeight: '600',
-      },
-      teamNameButtonTextCancel: {
-        color: COLORS.GRAY,
-      },
-      switchModeButton: {
-        backgroundColor: COLORS.PRIMARY,
-        borderRadius: 12,
-        paddingVertical: 16,
-        paddingHorizontal: 20,
-        alignItems: 'center',
-        marginTop: 12,
-        marginBottom: 8,
-      },
-      switchModeButtonText: {
-        color: COLORS.TEXT,
-        fontSize: 16,
-        fontWeight: '600',
-      },
-    });
+            {/* Room Customization */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Folder Customization</Text>
+              <Text style={styles.sectionDescription}>
+                Customize the names and icons of folders in your app
+              </Text>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Custom Folders</Text>
+                  <Text style={styles.settingDescription}>
+                    {customRooms ? `${customRooms.length} custom folders` : 'Using default folders'}
+                  </Text>
+                </View>
+                <TouchableOpacity
+                  style={styles.customizeButton}
+                  onPress={() => {
+                    setShowRoomEditor(true);
+                  }}
+                >
+                  <Text style={styles.customizeButtonText}>Customize</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Upload Structure */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Upload Structure</Text>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Use folder structure</Text>
+                  <Text style={styles.settingDescription}>
+                    If off, all photos go into the project folder
+                  </Text>
+                </View>
+                <Switch
+                  value={useFolderStructure}
+                  onValueChange={toggleUseFolderStructure}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
+              </View>
+
+              {useFolderStructure && (
+                <>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Text style={styles.settingLabel}>Before folder</Text>
+                      <Text style={styles.settingDescription}>Uploads to "before" subfolder</Text>
+                    </View>
+                    <Switch
+                      value={enabledFolders.before}
+                      onValueChange={(v) => updateEnabledFolders({ before: v })}
+                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                      thumbColor="white"
+                    />
+                  </View>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Text style={styles.settingLabel}>After folder</Text>
+                      <Text style={styles.settingDescription}>Uploads to "after" subfolder</Text>
+                    </View>
+                    <Switch
+                      value={enabledFolders.after}
+                      onValueChange={(v) => updateEnabledFolders({ after: v })}
+                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                      thumbColor="white"
+                    />
+                  </View>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Text style={styles.settingLabel}>Combined folder</Text>
+                      <Text style={styles.settingDescription}>Uploads to "combined"/formats subfolders</Text>
+                    </View>
+                    <Switch
+                      value={enabledFolders.combined}
+                      onValueChange={(v) => updateEnabledFolders({ combined: v })}
+                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                      thumbColor="white"
+                    />
+                  </View>
+                </>
+              )}
+            </View>
+          </>
+        )}
+
+        {/* Account & Data */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Account & Data</Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>User name</Text>
+            <TextInput
+              style={[styles.input, isTeamMember && styles.inputDisabled]}
+              value={name}
+              onChangeText={setName}
+              placeholder="Enter your name"
+              placeholderTextColor={COLORS.GRAY}
+              onBlur={handleSaveUserInfo}
+              editable={!isTeamMember}
+            />
+          </View>
+
+          <View style={styles.divider} />
+
+          <Text style={styles.sectionDescription}>
+            {isTeamMember
+              ? 'Reset will clear local data and disconnect this device from the team.'
+              : 'Reset clears your settings and connected accounts on this device.'}
+          </Text>
+          <TouchableOpacity
+            style={styles.resetButton}
+            onPress={handleResetUserData}
+          >
+            <Text style={styles.resetButtonText}>Reset User Data</Text>
+          </TouchableOpacity>
+        </View>
+
+        </ScrollView>
+
+        <RoomEditor
+          visible={showRoomEditor}
+          onClose={() => setShowRoomEditor(false)}
+          onSave={(rooms) => {
+            saveCustomRooms(rooms);
+            // Force a small delay to ensure state updates propagate
+            setTimeout(() => {
+            }, 100);
+          }}
+          initialRooms={customRooms}
+        />
+
+        {/* Plan Selection Modal */}
+        <Modal
+          visible={showPlanModal}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setShowPlanModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Choose a Plan</Text>
+                <TouchableOpacity 
+                  onPress={() => setShowPlanModal(false)}
+                  style={styles.modalCloseButton}
+                >
+                  <Text style={styles.modalCloseText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalScrollView}>
+                <View style={styles.planContainer}>
+                  <TouchableOpacity 
+                    style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]} 
+                    onPress={async () => {
+                      await updateUserPlan('starter');
+                      setShowPlanModal(false);
+                    }}
+                  >
+                    <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>Starter</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.planSubtext}>Free forever. Easily manage your first project and create stunning before/after photos ready for social sharing.</Text>
+                </View>
+
+                <View style={styles.planContainer}>
+                  <TouchableOpacity 
+                    style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]} 
+                    onPress={async () => {
+                      await updateUserPlan('pro');
+                      setShowPlanModal(false);
+                      if (!isAuthenticated) {
+                        navigation.navigate('GoogleSignUp', { plan: 'pro' });
+                      }
+                    }}
+                  >
+                    <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>Pro</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.planSubtext}>For professionals. Cloud sync + bulk upload.</Text>
+                </View>
+                
+                <View style={styles.planContainer}>
+                  <TouchableOpacity 
+                    style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]} 
+                    onPress={async () => {
+                      await updateUserPlan('business');
+                      setShowPlanModal(false);
+                      if (!isAuthenticated) {
+                        navigation.navigate('GoogleSignUp', { plan: 'business' });
+                      }
+                    }}
+                  >
+                    <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>Business</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.planSubtext}>For small teams. Includes team management.</Text>
+                </View>
+                
+                <View style={styles.planContainer}>
+                  <TouchableOpacity 
+                    style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]} 
+                    onPress={async () => {
+                      await updateUserPlan('enterprise');
+                      setShowPlanModal(false);
+                      if (!isAuthenticated) {
+                        navigation.navigate('GoogleSignUp', { plan: 'enterprise' });
+                      }
+                    }}
+                  >
+                    <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>Enterprise</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.planSubtext}>For growing organizations. Unlimited members, multi-location support.</Text>
+                </View>
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      </SafeAreaView>
+    );
+  }
+
+  const styles = StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: COLORS.BACKGROUND
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 20,
+      paddingTop: 10,
+      backgroundColor: 'white',
+      borderBottomWidth: 1,
+      borderBottomColor: COLORS.BORDER
+    },
+    backButton: {
+      width: 60
+    },
+    backButtonText: {
+      color: COLORS.PRIMARY,
+      fontSize: 18
+    },
+    title: {
+      fontSize: 24,
+      fontWeight: 'bold',
+      color: COLORS.TEXT
+    },
+    content: {
+      flex: 1
+    },
+    section: {
+      backgroundColor: 'white',
+      marginTop: 20,
+      paddingVertical: 20,
+      paddingHorizontal: 20,
+      borderTopWidth: 1,
+      borderBottomWidth: 1,
+      borderColor: COLORS.BORDER
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: COLORS.TEXT,
+      marginBottom: 16
+    },
+    inputGroup: {
+      marginBottom: 16
+    },
+    label: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: COLORS.TEXT,
+      marginBottom: 8
+    },
+    input: {
+      backgroundColor: 'white',
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      padding: 12,
+      borderRadius: 8,
+      color: COLORS.TEXT
+    },
+    inputDisabled: {
+      opacity: 0.7,
+    },
+    divider: {
+      height: 1,
+      backgroundColor: COLORS.BORDER,
+      marginVertical: 16,
+    },
+    locationPicker: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      padding: 12,
+      borderRadius: 8
+    },
+    locationPickerText: {
+      color: COLORS.TEXT,
+      fontWeight: '600'
+    },
+    locationPickerArrow: {
+      color: COLORS.GRAY
+    },
+    locationDropdown: {
+      marginTop: 8,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      borderRadius: 8,
+      overflow: 'hidden'
+    },
+    locationOption: {
+      padding: 12,
+      backgroundColor: 'white'
+    },
+    locationOptionSelected: {
+      backgroundColor: '#f7f7f7'
+    },
+    locationOptionText: {
+      color: COLORS.TEXT
+    },
+    locationOptionTextSelected: {
+      fontWeight: '700'
+    },
+    locationOptionCheck: {
+      position: 'absolute',
+      right: 12,
+      top: 12,
+      color: COLORS.PRIMARY
+    },
+    sectionDescription: {
+      color: COLORS.GRAY,
+      marginBottom: 12
+    },
+    settingRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingVertical: 12
+    },
+    settingInfo: {
+      flex: 1,
+      paddingRight: 16
+    },
+    settingLabel: {
+      color: COLORS.TEXT,
+      fontWeight: '600'
+    },
+    settingDescription: {
+      color: COLORS.GRAY,
+      fontSize: 12
+    },
+    resetButton: {
+      backgroundColor: '#FFE6E6',
+      borderRadius: 12,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginTop: 8
+    },
+    resetButtonText: {
+      color: '#CC0000',
+      fontSize: 16,
+      fontWeight: '600'
+    },
+    customizeButton: {
+      backgroundColor: COLORS.PRIMARY,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8
+    },
+    customizeButtonText: {
+      color: COLORS.TEXT,
+      fontWeight: '600',
+      fontSize: 14
+    },
+    googleSignInButton: {
+      backgroundColor: '#4285F4',
+      borderRadius: 12,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginBottom: 8
+    },
+    googleSignInButtonText: {
+      color: 'white',
+      fontSize: 16,
+      fontWeight: '600'
+    },
+    buttonDisabled: {
+      backgroundColor: '#cccccc',
+      opacity: 0.6
+    },
+    buttonTextDisabled: {
+      color: '#666666'
+    },
+    currentPlanBox: {
+      backgroundColor: '#f0f0f0',
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 16,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    },
+    currentPlanLabel: {
+      fontSize: 14,
+      color: COLORS.GRAY,
+      fontWeight: '600'
+    },
+    currentPlanValueContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8
+    },
+    currentPlanValue: {
+      fontSize: 16,
+      color: COLORS.TEXT,
+      fontWeight: 'bold'
+    },
+    changePlanText: {
+      fontSize: 14,
+      color: COLORS.PRIMARY,
+      fontWeight: '600'
+    },
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'flex-end'
+    },
+    modalContent: {
+      backgroundColor: 'white',
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      maxHeight: '80%',
+      paddingBottom: 20
+    },
+    modalHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: 20,
+      borderBottomWidth: 1,
+      borderBottomColor: COLORS.BORDER
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: COLORS.TEXT
+    },
+    modalCloseButton: {
+      width: 30,
+      height: 30,
+      justifyContent: 'center',
+      alignItems: 'center'
+    },
+    modalCloseText: {
+      fontSize: 24,
+      color: COLORS.GRAY
+    },
+    modalScrollView: {
+      paddingHorizontal: 20,
+      paddingTop: 20
+    },
+    backLink: {
+      marginBottom: 12,
+      alignSelf: 'flex-start'
+    },
+    backLinkText: {
+      fontSize: 16,
+      color: COLORS.PRIMARY,
+      fontWeight: '600'
+    },
+    planContainer: {
+      marginBottom: 20
+    },
+    planButton: {
+      backgroundColor: '#fff',
+      borderRadius: 12,
+      padding: 20,
+      borderWidth: 2,
+      borderColor: '#ddd',
+      alignItems: 'center'
+    },
+    planButtonSelected: {
+      borderColor: COLORS.PRIMARY,
+      backgroundColor: '#f0f7ff'
+    },
+    planButtonText: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: '#333'
+    },
+    planButtonTextSelected: {
+      color: COLORS.PRIMARY
+    },
+    planSubtext: {
+      fontSize: 14,
+      color: '#666',
+      textAlign: 'center',
+      marginTop: 8,
+      paddingHorizontal: 10
+    },
+    expoGoWarning: {
+      backgroundColor: '#fff3cd',
+      borderWidth: 1,
+      borderColor: '#ffc107',
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 16
+    },
+    expoGoWarningText: {
+      color: '#856404',
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 8
+    },
+    expoGoWarningSubtext: {
+      color: '#856404',
+      fontSize: 12,
+      fontFamily: 'monospace'
+    },
+    adminNote: {
+      color: COLORS.GRAY,
+      fontSize: 12,
+      textAlign: 'center',
+      marginTop: 8
+    },
+    adminInfoBox: {
+      backgroundColor: '#F0F8FF',
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 12
+    },
+    adminInfoHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 12,
+    },
+    activeAccountContainer: {
+      flex: 1,
+      paddingRight: 8,
+      backgroundColor: '#E6F0FF',
+      borderRadius: 8,
+      padding: 14,
+    },
+    activeAccountLabel: {
+      color: '#3366CC',
+      fontSize: 12,
+      fontWeight: '600',
+      marginBottom: 6,
+      textTransform: 'uppercase',
+    },
+    activeAccountName: {
+      color: COLORS.TEXT,
+      fontSize: 16,
+      fontWeight: '700',
+    },
+    activeAccountEmail: {
+      color: COLORS.GRAY,
+      fontSize: 12,
+      marginTop: 4,
+    },
+    tokenBox: {
+      marginTop: 12,
+      marginBottom: 12,
+      padding: 12,
+      borderRadius: 8,
+      backgroundColor: '#F8F9FF',
+      borderWidth: 1,
+      borderColor: '#E0E6F5',
+    },
+    tokenHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 6,
+    },
+    tokenLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: COLORS.GRAY,
+      textTransform: 'uppercase',
+    },
+    tokenCopyButton: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      backgroundColor: '#E0E7FF',
+    },
+    tokenCopyText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#3843D0',
+    },
+    tokenValue: {
+      fontSize: 13,
+      color: COLORS.TEXT,
+      fontFamily: 'monospace',
+    },
+    teamWarningText: {
+      color: COLORS.GRAY,
+      fontSize: 12,
+      marginBottom: 12,
+    },
+    leaveTeamButton: {
+      backgroundColor: '#FFE6E6',
+      borderRadius: 8,
+      paddingVertical: 12,
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    leaveTeamButtonText: {
+      color: '#CC0000',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    connectedAccountsList: {
+      marginTop: 16,
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: '#D8E1F6',
+    },
+    connectedAccountsTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: COLORS.TEXT,
+      marginBottom: 8,
+    },
+    connectedAccountRow: {
+      backgroundColor: '#FFFFFF',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#E0E6F5',
+      padding: 12,
+      marginBottom: 8,
+    },
+    connectedAccountRowLast: {
+      marginBottom: 0,
+    },
+    connectedAccountHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    connectedAccountInfo: {
+      flex: 1,
+      paddingRight: 12,
+    },
+    connectedAccountName: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: COLORS.TEXT,
+      marginBottom: 2,
+    },
+    connectedAccountEmail: {
+      fontSize: 12,
+      color: COLORS.GRAY,
+    },
+    accountStatusBadge: {
+      borderRadius: 999,
+      paddingVertical: 4,
+      paddingHorizontal: 10,
+    },
+    accountStatusActive: {
+      backgroundColor: '#E8F5E9',
+    },
+    accountStatusInactive: {
+      backgroundColor: '#FFF4E5',
+    },
+    accountStatusText: {
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    accountStatusTextActive: {
+      color: '#2E7D32',
+    },
+    accountStatusTextInactive: {
+      color: '#C77800',
+    },
+    connectedAccountActions: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    accountActionButton: {
+      flex: 1,
+      borderRadius: 8,
+      paddingVertical: 10,
+      alignItems: 'center',
+      backgroundColor: COLORS.PRIMARY,
+    },
+    accountActionButtonDisabled: {
+      opacity: 0.6,
+    },
+    accountActionButtonText: {
+      color: '#FFFFFF',
+      fontSize: 12,
+      fontWeight: '600',
+    },
+    accountRemoveButton: {
+      backgroundColor: '#FFE6E6',
+    },
+    accountRemoveButtonText: {
+      color: '#CC0000',
+    },
+    disconnectButton: {
+      backgroundColor: '#FFE6E6',
+      borderRadius: 8,
+      paddingVertical: 8,
+      paddingHorizontal: 14,
+    },
+    disconnectButtonText: {
+      color: '#CC0000',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    setupStatusBox: {
+      backgroundColor: '#E8F5E9',
+      borderRadius: 8,
+      padding: 12,
+      marginBottom: 12
+    },
+    setupStatusText: {
+      color: '#2E7D32',
+      fontSize: 14,
+      fontWeight: '600',
+      marginBottom: 8
+    },
+    setupDetailsRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginTop: 4
+    },
+    setupDetailLabel: {
+      color: COLORS.GRAY,
+      fontSize: 12
+    },
+    setupDetailValue: {
+      color: COLORS.TEXT,
+      fontSize: 12,
+      maxWidth: '60%'
+    },
+    signInButton: {
+      backgroundColor: '#34A853',
+      borderRadius: 12,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    signInButtonText: {
+      color: 'white',
+      fontSize: 16,
+      fontWeight: '600',
+    },
+    loadingContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+      backgroundColor: COLORS.BACKGROUND,
+    },
+    loadingText: {
+      fontSize: 18,
+      fontWeight: 'bold',
+      color: COLORS.TEXT,
+      marginTop: 10,
+    },
+    loadingSubText: {
+      fontSize: 14,
+      color: COLORS.GRAY,
+      marginTop: 5,
+      textAlign: 'center',
+    },
+    infoText: {
+      fontSize: 16,
+      color: COLORS.GRAY,
+      textAlign: 'center',
+      marginBottom: 20,
+    },
+    setupIncompleteText: {
+      color: COLORS.GRAY,
+      fontSize: 12,
+      textAlign: 'center',
+      marginTop: 8,
+    },
+    featureButton: {
+      backgroundColor: COLORS.PRIMARY,
+      borderRadius: 12,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginTop: 12,
+      marginBottom: 8
+    },
+    featureButtonText: {
+      color: COLORS.TEXT,
+      fontSize: 16,
+      fontWeight: '600'
+    },
+    setupTeamButton: {
+      backgroundColor: COLORS.PRIMARY,
+      borderRadius: 12,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginTop: 16,
+      marginBottom: 8
+    },
+    setupTeamButtonText: {
+      color: COLORS.TEXT,
+      fontSize: 16,
+      fontWeight: '600'
+    },
+    connectedStatus: {
+      backgroundColor: '#d4edda',
+      padding: 12,
+      borderRadius: 8,
+      marginBottom: 15,
+      alignItems: 'center',
+    },
+    connectedText: {
+      color: '#155724',
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    teamNameContainer: {
+      marginBottom: 15,
+    },
+    teamNameLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: COLORS.TEXT,
+      marginBottom: 8,
+    },
+    teamNameDisplay: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: 'white',
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      borderRadius: 8,
+      padding: 12,
+    },
+    teamNameText: {
+      fontSize: 16,
+      color: COLORS.TEXT,
+      flex: 1,
+    },
+    teamNameTextPlaceholder: {
+      color: COLORS.GRAY,
+      fontStyle: 'italic',
+    },
+    teamNameEditIcon: {
+      fontSize: 18,
+      marginLeft: 8,
+    },
+    teamNameEditContainer: {
+      backgroundColor: 'white',
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      borderRadius: 8,
+      padding: 12,
+    },
+    teamNameInput: {
+      fontSize: 16,
+      color: COLORS.TEXT,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      borderRadius: 6,
+      padding: 10,
+      marginBottom: 8,
+    },
+    teamNameButtons: {
+      flexDirection: 'row',
+      justifyContent: 'flex-end',
+      gap: 8,
+    },
+    teamNameButton: {
+      backgroundColor: COLORS.PRIMARY,
+      paddingVertical: 8,
+      paddingHorizontal: 16,
+      borderRadius: 6,
+    },
+    teamNameButtonCancel: {
+      backgroundColor: 'transparent',
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+    },
+    teamNameButtonText: {
+      color: COLORS.TEXT,
+      fontSize: 14,
+      fontWeight: '600',
+    },
+    teamNameButtonTextCancel: {
+      color: COLORS.GRAY,
+    },
+    switchModeButton: {
+      backgroundColor: COLORS.PRIMARY,
+      borderRadius: 12,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginTop: 12,
+      marginBottom: 8,
+    },
+    switchModeButtonText: {
+      color: COLORS.TEXT,
+      fontSize: 16,
+      fontWeight: '600',
+    },
+  });
