@@ -24,6 +24,9 @@ export const SettingsProvider = ({ children }) => {
   
   const [showLabels, setShowLabels] = useState(true);
   const [showWatermark, setShowWatermark] = useState(true);
+  const [labelBackgroundColor, setLabelBackgroundColor] = useState('#FFD700'); // Default yellow
+  const [labelTextColor, setLabelTextColor] = useState('#000000'); // Default black
+  const [labelFontFamily, setLabelFontFamily] = useState('System'); // Default system font
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('tampa'); // Default to Tampa
   const [isBusiness, setIsBusiness] = useState(false);
@@ -46,6 +49,9 @@ export const SettingsProvider = ({ children }) => {
         const settings = JSON.parse(stored);
         setShowLabels(settings.showLabels ?? true);
         setShowWatermark(settings.showWatermark ?? true);
+        setLabelBackgroundColor(settings.labelBackgroundColor ?? '#FFD700');
+        setLabelTextColor(settings.labelTextColor ?? '#000000');
+        setLabelFontFamily(settings.labelFontFamily ?? 'System');
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? 'tampa');
         setIsBusiness(settings.isBusiness ?? false);
@@ -71,6 +77,9 @@ export const SettingsProvider = ({ children }) => {
       const settings = {
         showLabels,
         showWatermark,
+        labelBackgroundColor,
+        labelTextColor,
+        labelFontFamily,
         userName,
         location,
         isBusiness,
@@ -95,6 +104,21 @@ export const SettingsProvider = ({ children }) => {
     const newValue = !showWatermark;
     setShowWatermark(newValue);
     await saveSettings({ showWatermark: newValue });
+  };
+
+  const updateLabelBackgroundColor = async (color) => {
+    setLabelBackgroundColor(color);
+    await saveSettings({ labelBackgroundColor: color });
+  };
+
+  const updateLabelTextColor = async (color) => {
+    setLabelTextColor(color);
+    await saveSettings({ labelTextColor: color });
+  };
+
+  const updateLabelFontFamily = async (font) => {
+    setLabelFontFamily(font);
+    await saveSettings({ labelFontFamily: font });
   };
 
   const updateUserInfo = async (name) => {
@@ -168,6 +192,9 @@ export const SettingsProvider = ({ children }) => {
       setLocation('tampa');
       setShowLabels(true);
       setShowWatermark(true);
+      setLabelBackgroundColor('#FFD700');
+      setLabelTextColor('#000000');
+      setLabelFontFamily('System');
       setIsBusiness(false);
       setUseFolderStructure(true);
       setEnabledFolders({ before: true, after: true, combined: true });
@@ -183,6 +210,12 @@ export const SettingsProvider = ({ children }) => {
     toggleLabels,
     showWatermark,
     toggleWatermark,
+    labelBackgroundColor,
+    labelTextColor,
+    labelFontFamily,
+    updateLabelBackgroundColor,
+    updateLabelTextColor,
+    updateLabelFontFamily,
     userName,
     location,
     updateUserInfo,

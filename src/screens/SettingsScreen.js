@@ -31,6 +31,12 @@ export default function SettingsScreen({ navigation }) {
     toggleLabels,
     showWatermark,
     toggleWatermark,
+    labelBackgroundColor,
+    labelTextColor,
+    labelFontFamily,
+    updateLabelBackgroundColor,
+    updateLabelTextColor,
+    updateLabelFontFamily,
     userName,
     location,
     updateUserInfo,
@@ -1042,6 +1048,96 @@ export default function SettingsScreen({ navigation }) {
               </View>
             </View>
 
+            {/* Label Customization */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Label Customization</Text>
+              <Text style={styles.sectionDescription}>
+                Customize the appearance of BEFORE and AFTER labels
+              </Text>
+
+              {/* Background Color */}
+              <View style={styles.colorPickerRow}>
+                <Text style={styles.settingLabel}>Background Color</Text>
+                <View style={styles.colorOptions}>
+                  {['#FFD700', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DFE6E9', '#000000'].map((color) => (
+                    <TouchableOpacity
+                      key={color}
+                      style={[
+                        styles.colorOption,
+                        { backgroundColor: color },
+                        labelBackgroundColor === color && styles.colorOptionSelected
+                      ]}
+                      onPress={() => updateLabelBackgroundColor(color)}
+                    />
+                  ))}
+                </View>
+              </View>
+
+              {/* Text Color */}
+              <View style={styles.colorPickerRow}>
+                <Text style={styles.settingLabel}>Text Color</Text>
+                <View style={styles.colorOptions}>
+                  {['#000000', '#FFFFFF', '#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DFE6E9'].map((color) => (
+                    <TouchableOpacity
+                      key={color}
+                      style={[
+                        styles.colorOption,
+                        { backgroundColor: color },
+                        labelTextColor === color && styles.colorOptionSelected
+                      ]}
+                      onPress={() => updateLabelTextColor(color)}
+                    />
+                  ))}
+                </View>
+              </View>
+
+              {/* Font Family */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>Font Style</Text>
+                  <Text style={styles.settingDescription}>
+                    Current: {labelFontFamily}
+                  </Text>
+                </View>
+                <View style={styles.fontOptions}>
+                  {['System', 'Serif', 'Monospace'].map((font) => (
+                    <TouchableOpacity
+                      key={font}
+                      style={[
+                        styles.fontOption,
+                        labelFontFamily === font && styles.fontOptionSelected
+                      ]}
+                      onPress={() => updateLabelFontFamily(font)}
+                    >
+                      <Text style={[
+                        styles.fontOptionText,
+                        labelFontFamily === font && styles.fontOptionTextSelected
+                      ]}>
+                        {font}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Preview */}
+              <View style={styles.labelPreviewContainer}>
+                <Text style={styles.settingLabel}>Preview</Text>
+                <View style={styles.labelPreview}>
+                  <View style={[styles.previewLabel, { backgroundColor: labelBackgroundColor }]}>
+                    <Text style={[
+                      styles.previewLabelText,
+                      { color: labelTextColor },
+                      labelFontFamily === 'Serif' && { fontFamily: 'serif' },
+                      labelFontFamily === 'Monospace' && { fontFamily: 'monospace' }
+                    ]}>
+                      BEFORE
+                    </Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+
             {/* Room Customization */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Folder Customization</Text>
@@ -1959,5 +2055,68 @@ export default function SettingsScreen({ navigation }) {
       color: COLORS.TEXT,
       fontSize: 16,
       fontWeight: '600',
+    },
+    colorPickerRow: {
+      marginVertical: 12,
+    },
+    colorOptions: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+      marginTop: 8,
+    },
+    colorOption: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      borderWidth: 2,
+      borderColor: 'transparent',
+    },
+    colorOptionSelected: {
+      borderColor: COLORS.PRIMARY,
+      borderWidth: 3,
+    },
+    fontOptions: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    fontOption: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+      backgroundColor: 'white',
+    },
+    fontOptionSelected: {
+      backgroundColor: COLORS.PRIMARY,
+      borderColor: COLORS.PRIMARY,
+    },
+    fontOptionText: {
+      fontSize: 12,
+      color: COLORS.TEXT,
+      fontWeight: '600',
+    },
+    fontOptionTextSelected: {
+      color: COLORS.TEXT,
+    },
+    labelPreviewContainer: {
+      marginTop: 16,
+    },
+    labelPreview: {
+      backgroundColor: '#f0f0f0',
+      padding: 20,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginTop: 8,
+    },
+    previewLabel: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 6,
+    },
+    previewLabelText: {
+      fontSize: 14,
+      fontWeight: 'bold',
     },
   });
