@@ -14,9 +14,9 @@ const withImageCompositor = (config) => {
       const projectRoot = config.modRequest.projectRoot;
       const platformProjectRoot = config.modRequest.platformProjectRoot;
 
-      // Source files in the root ios/ directory
-      const swiftSource = path.join(projectRoot, 'ios', 'ImageCompositor.swift');
-      const objcSource = path.join(projectRoot, 'ios', 'ImageCompositor.m');
+      // Source files in the modules/image-compositor directory
+      const swiftSource = path.join(projectRoot, 'modules', 'image-compositor', 'ImageCompositor.swift');
+      const objcSource = path.join(projectRoot, 'modules', 'image-compositor', 'ImageCompositor.m');
 
       // Destination in the iOS project directory
       const appName = config.modRequest.projectName || 'proofpixnative';
