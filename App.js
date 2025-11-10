@@ -26,6 +26,7 @@ import InviteScreen from './src/screens/InviteScreen';
 import JoinTeamScreen from './src/screens/JoinTeamScreen';
 import GoogleSignUpScreen from './src/screens/GoogleSignUpScreen';
 import AuthLoadingScreen from './src/screens/AuthLoadingScreen';
+import VisionCameraTest from './src/screens/VisionCameraTest';
 
 const Stack = createNativeStackNavigator();
 
@@ -122,6 +123,15 @@ function AppNavigator() {
         component={GoogleSignUpScreen}
         options={{
           animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen
+        name="VisionCameraTest"
+        component={VisionCameraTest}
+        options={{
+          presentation: 'fullScreenModal',
+          animation: 'slide_from_bottom',
+          contentStyle: { backgroundColor: '#000' }
         }}
       />
     </Stack.Navigator>

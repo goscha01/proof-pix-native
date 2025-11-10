@@ -72,9 +72,10 @@ export default {
     },
     plugins: [
       [
-        "expo-camera",
+        "react-native-vision-camera",
         {
-          cameraPermission: "Allow ProofPix to access your camera to take before and after photos."
+          cameraPermissionText: "ProofPix needs access to your camera to take before and after photos.",
+          enableMicrophonePermission: false
         }
       ],
       [
@@ -101,7 +102,8 @@ export default {
         }
       ],
       "expo-font",
-      "./plugins/withUseModularHeaders.js"
+      "./plugins/withUseModularHeaders.js",
+      "./plugins/withImageCompositor.js"
     ],
     extra: {
       eas: {

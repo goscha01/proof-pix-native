@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useContext, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,11 +12,10 @@ import {
   Platform,
   PanResponder,
   Animated,
-  PixelRatio,
   StatusBar
 } from 'react-native';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { captureRef } from 'react-native-view-shot';
+import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
+import { compositeImages } from '../utils/imageCompositor';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as NavigationBar from 'expo-navigation-bar';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -51,7 +50,6 @@ export default function CameraScreen({ route, navigation }) {
   const [room, setRoom] = useState(initialRoom);
   const [facing, setFacing] = useState('back');
   const [enableTorch, setEnableTorch] = useState(false);
-  const [permission, requestPermission] = useCameraPermissions();
   const [aspectRatio, setAspectRatio] = useState('4:3'); // '4:3' or '2:3'
   const [selectedBeforePhoto, setSelectedBeforePhoto] = useState(beforePhoto);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -80,6 +78,7 @@ export default function CameraScreen({ route, navigation }) {
   const lastTap = useRef(null);
   const longPressTimer = useRef(null);
   const cameraRef = useRef(null);
+  const [pictureSize, setPictureSize] = useState('Photo'); // Use iOS preset for full resolution
   const carouselScrollRef = useRef(null);
   const fullScreenScrollRef = useRef(null);
   const galleryScrollRef = useRef(null);
@@ -97,16 +96,81 @@ export default function CameraScreen({ route, navigation }) {
   const isGalleryAnimatingRef = useRef(false);
   const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom, activeProjectId } = usePhotos();
   const { showLabels, shouldShowWatermark, getRooms } = useSettings();
-  
+
+  // Vision Camera setup - default to ultra-wide (0.5x)
+  const [cameraType, setCameraType] = useState('ultra-wide-angle-camera'); // 'ultra-wide-angle-camera' or 'wide-angle-camera'
+  const device = useCameraDevice(facing, {
+    physicalDevices: [cameraType]
+  });
+  const { hasPermission, requestPermission } = useCameraPermission();
+  const [zoom, setZoom] = useState(1.0);
+
+  // Calculate target aspect ratio for format selection
+  const targetAspectRatio = useMemo(() => {
+    const screenWidth = dimensions.width;
+    const screenHeight = dimensions.height;
+    const isLandscape = screenWidth > screenHeight;
+    const ratio = isLandscape
+      ? screenWidth / screenHeight
+      : screenHeight / screenWidth;
+    return ratio;
+  }, [dimensions]);
+
+  // Select best camera format
+  const format = useMemo(() => {
+    if (!device?.formats) return undefined;
+
+    // Find formats close to target aspect ratio
+    const matchingFormats = device.formats.filter(f => {
+      const formatRatio = Math.max(f.photoWidth, f.photoHeight) / Math.min(f.photoWidth, f.photoHeight);
+      const diff = Math.abs(formatRatio - targetAspectRatio);
+      return diff < 0.5;
+    });
+
+    let selected;
+    if (matchingFormats.length > 0) {
+      // Sort by total pixels (highest first)
+      const sorted = matchingFormats.sort((a, b) => {
+        const aPixels = a.photoWidth * a.photoHeight;
+        const bPixels = b.photoWidth * b.photoHeight;
+        return bPixels - aPixels;
+      });
+      selected = sorted[0];
+    } else {
+      // Find closest ratio
+      const withDiff = device.formats.map(f => {
+        const formatRatio = Math.max(f.photoWidth, f.photoHeight) / Math.min(f.photoWidth, f.photoHeight);
+        return {
+          format: f,
+          diff: Math.abs(formatRatio - targetAspectRatio),
+          ratio: formatRatio
+        };
+      });
+
+      withDiff.sort((a, b) => {
+        if (Math.abs(a.diff - b.diff) < 0.01) {
+          const aPixels = a.format.photoWidth * a.format.photoHeight;
+          const bPixels = b.format.photoWidth * b.format.photoHeight;
+          return bPixels - aPixels;
+        }
+        return a.diff - b.diff;
+      });
+
+      selected = withDiff[0].format;
+    }
+
+    if (selected) {
+      const ratio = Math.max(selected.photoWidth, selected.photoHeight) / Math.min(selected.photoWidth, selected.photoHeight);
+      console.log(`✅ Camera format: ${selected.photoWidth}x${selected.photoHeight} (${(selected.photoWidth * selected.photoHeight / 1000000).toFixed(1)}MP, ratio: ${ratio.toFixed(2)}:1)`);
+    }
+
+    return selected;
+  }, [device, targetAspectRatio]);
+
   // Get rooms from settings (custom or default)
   const rooms = getRooms();
   const labelViewRef = useRef(null);
   // Hidden vertical side-by-side base renderer
-  const sideBaseRef = useRef(null);
-  const [sideBasePair, setSideBasePair] = useState(null); // { beforeUri, afterUri }
-  const [sideBaseDims, setSideBaseDims] = useState(null); // { width, height, leftW, rightW }
-  const [sideLoadedA, setSideLoadedA] = useState(false);
-  const [sideLoadedB, setSideLoadedB] = useState(false);
   const [isTakingPicture, setIsTakingPicture] = useState(false);
   const [showFullScreenPhoto, setShowFullScreenPhoto] = useState(null);
   const [layout, setLayout] = useState(null);
@@ -765,6 +829,9 @@ export default function CameraScreen({ route, navigation }) {
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       const newOrientation = window.width > window.height ? 'landscape' : 'portrait';
+      console.log('📐 Screen dimensions changed:');
+      console.log(`  - New dimensions: ${window.width}x${window.height}`);
+      console.log(`  - New orientation: ${newOrientation}`);
       // Update dimensions immediately for instant response
       setDimensions({ width: window.width, height: window.height });
       setDeviceOrientation(newOrientation);
@@ -814,10 +881,21 @@ export default function CameraScreen({ route, navigation }) {
     };
   }, []);
 
+  // Track when cameraViewMode state changes
+  useEffect(() => {
+    console.log(`🎬 Camera view mode changed to: ${cameraViewMode}`);
+  }, [cameraViewMode]);
+
+  // Track when aspectRatio state changes
+  useEffect(() => {
+    console.log(`📐 Aspect ratio state changed to: ${aspectRatio}`);
+  }, [aspectRatio]);
+
   // Update camera view mode when device orientation changes - Android only
   useEffect(() => {
     // Only auto-sync on Android; iOS uses manual toggle only
     if (Platform.OS === 'android') {
+      console.log(`🔄 Auto-updating camera view mode (Android): ${deviceOrientation}`);
       setCameraViewMode(deviceOrientation);
     }
   }, [deviceOrientation]);
@@ -825,17 +903,26 @@ export default function CameraScreen({ route, navigation }) {
   // Handle screen focus/blur to re-check permissions and settings
   useFocusEffect(
     useCallback(() => {
-      if (permission && !permission.granted) {
+      console.log('📱 CameraScreen focused - Current state:');
+      console.log(`  - Screen dimensions: ${dimensions.width}x${dimensions.height}`);
+      console.log(`  - Device orientation: ${deviceOrientation}`);
+      console.log(`  - Camera view mode: ${cameraViewMode}`);
+      console.log(`  - Aspect ratio: ${aspectRatio}`);
+      console.log(`  - Picture size: ${pictureSize}`);
+      console.log(`  - Mode: ${mode}`);
+      console.log(`  - Camera type: ${cameraType}`);
+
+      if (!hasPermission) {
         requestPermission();
       }
-    }, [permission, requestPermission])
+    }, [hasPermission, requestPermission, dimensions, deviceOrientation, cameraViewMode, aspectRatio, pictureSize, mode, cameraType])
   );
 
   useEffect(() => {
-    if (permission && !permission.granted) {
+    if (!hasPermission) {
       requestPermission();
     }
-  }, [permission]);
+  }, [hasPermission]);
 
   // Force orientation check on mount to ensure correct initial state
   // Show room indicator when room changes (but not on initial mount)
@@ -905,30 +992,56 @@ export default function CameraScreen({ route, navigation }) {
     }
   }, [mode, room]);
 
+  // Calculate and set aspect ratio for before mode (iOS portrait)
+  useEffect(() => {
+    if (mode === 'before' && Platform.OS === 'ios' && cameraViewMode === 'portrait') {
+      const screenWidth = dimensions.width;
+      const screenHeight = dimensions.height;
+      const ratio = deviceOrientation === 'landscape'
+        ? screenWidth / screenHeight
+        : screenHeight / screenWidth;
+      const calculatedRatio = `${ratio.toFixed(2)}:1`;
+      console.log(`📐 Calculating aspect ratio for before mode: ${calculatedRatio} (${screenHeight} / ${screenWidth})`);
+      setAspectRatio(calculatedRatio);
+    } else if (mode === 'before' && Platform.OS === 'ios' && cameraViewMode === 'landscape') {
+      console.log(`📐 Setting aspect ratio for before mode (iOS landscape): 4:3`);
+      setAspectRatio('4:3');
+    } else if (mode === 'before' && Platform.OS === 'android') {
+      const androidRatio = cameraViewMode === 'landscape' ? '4:3' : '9:16';
+      console.log(`📐 Setting aspect ratio for before mode (Android): ${androidRatio}`);
+      setAspectRatio(androidRatio);
+    }
+  }, [mode, cameraViewMode, dimensions, deviceOrientation]);
+
   // Set aspect ratio to match before photo in after mode
   useEffect(() => {
     if (mode === 'after') {
       const activeBeforePhoto = getActiveBeforePhoto();
       if (activeBeforePhoto) {
         if (activeBeforePhoto.aspectRatio) {
-        setAspectRatio(activeBeforePhoto.aspectRatio);
+          console.log(`📐 Setting aspect ratio to match before photo: ${activeBeforePhoto.aspectRatio}`);
+          setAspectRatio(activeBeforePhoto.aspectRatio);
+        }
       }
-    }
     }
   }, [selectedBeforePhoto, mode, beforePhoto]);
 
   // In after mode, camera view mode should match the before photo's camera view mode
   useEffect(() => {
     if (mode === 'after') {
+      console.log('🔄 After mode - Syncing camera view mode:');
       // Android: always use device orientation (auto-sync)
       // iOS: match before photo's camera view mode
       if (Platform.OS === 'android') {
+        console.log(`  - Android: setting to device orientation: ${deviceOrientation}`);
         setCameraViewMode(deviceOrientation);
       } else {
         const activeBeforePhoto = getActiveBeforePhoto();
         if (activeBeforePhoto && activeBeforePhoto.cameraViewMode) {
+          console.log(`  - iOS: matching before photo's camera view mode: ${activeBeforePhoto.cameraViewMode}`);
           setCameraViewMode(activeBeforePhoto.cameraViewMode);
         } else {
+          console.log(`  - iOS: no before photo camera view mode, using device orientation: ${deviceOrientation}`);
           // Fallback to device orientation if no cameraViewMode saved
           setCameraViewMode(deviceOrientation);
         }
@@ -965,14 +1078,16 @@ export default function CameraScreen({ route, navigation }) {
 
   useEffect(() => {
     const getPermissions = async () => {
-      if (!permission || permission.granted) return;
+      if (hasPermission) return;
       requestPermission();
     };
     getPermissions();
-  }, [permission, requestPermission]);
+  }, [hasPermission, requestPermission]);
+
+  // Using pictureSize="Photo" + skipProcessing=true for maximum resolution without preview scaling
 
   const takePicture = async () => {
-    if (!cameraRef.current || isCapturing) return;
+    if (!cameraRef.current || isCapturing || !device) return;
 
     // Check orientation mismatch for after mode
     if (isOrientationMismatch()) {
@@ -987,17 +1102,32 @@ export default function CameraScreen({ route, navigation }) {
 
     try {
       setIsCapturing(true);
-      const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.9,
-        skipProcessing: false
+
+      console.log('📸 ========== TAKING PHOTO WITH VISION CAMERA ==========');
+      console.log(`  - Camera type: ${cameraType}`);
+      console.log(`  - Zoom: ${zoom}`);
+
+      const photo = await cameraRef.current.takePhoto({
+        qualityPrioritization: 'quality',
+        flash: enableTorch ? 'on' : 'off',
+        enableShutterSound: true
       });
 
+      console.log('📸 Photo taken!');
+      console.log(`  - Camera used: ${cameraType}`);
+      console.log(`  - Path: ${photo.path}`);
+      console.log(`  - Dimensions: ${photo.width}x${photo.height}`);
+      console.log(`  - Size: ${(photo.width * photo.height / 1000000).toFixed(1)}MP`);
+
+      const photoUri = `file://${photo.path}`;
+
       if (mode === 'before') {
-        await handleBeforePhoto(photo.uri);
+        await handleBeforePhoto(photoUri);
       } else if (mode === 'after') {
-        await handleAfterPhoto(photo.uri);
+        await handleAfterPhoto(photoUri);
       }
     } catch (error) {
+      console.error('Error taking photo:', error);
       Alert.alert('Error', 'Failed to take picture');
     } finally {
       setIsCapturing(false);
@@ -1068,6 +1198,13 @@ export default function CameraScreen({ route, navigation }) {
 
       // Capture device orientation (actual phone orientation)
       const currentOrientation = deviceOrientation;
+
+      console.log('📸 ========== BEFORE PHOTO CAPTURE ==========');
+      console.log(`  Platform: ${Platform.OS}`);
+      console.log(`  Device orientation: ${deviceOrientation}`);
+      console.log(`  Camera view mode: ${cameraViewMode}`);
+      console.log(`  Screen dimensions: ${dimensions.width}x${dimensions.height}`);
+
       // Calculate aspect ratio based on camera mode and platform
       let aspectRatio;
       if (Platform.OS === 'android') {
@@ -1087,8 +1224,12 @@ export default function CameraScreen({ route, navigation }) {
             : screenHeight / screenWidth; // portrait orientation: taller / wider
           // Format as string with 2 decimal places, e.g., "2.16:1" or "2.17:1"
           aspectRatio = `${ratio.toFixed(2)}:1`;
+          console.log(`  Calculated ratio: ${ratio.toFixed(2)}:1 (${screenHeight} / ${screenWidth})`);
         }
       }
+
+      console.log(`  Final aspect ratio: ${aspectRatio}`);
+      console.log('============================================');
 
       // Add to photos with device orientation AND camera view mode
       const newPhoto = {
@@ -1195,8 +1336,11 @@ export default function CameraScreen({ route, navigation }) {
         })();
       }
 
-      // Create combined photo in background (non-blocking)
+      // Create combined photo in background using ImageManipulator (non-blocking)
       (async () => {
+        console.log('📸 ========== CREATING COMBINED PHOTO ==========');
+        console.log(`  - Before photo: ${activeBeforePhoto.uri}`);
+        console.log(`  - After photo: ${savedUri}`);
         try {
           // Measure original sizes
           const getSize = (u) => new Promise((resolve) => {
@@ -1204,16 +1348,18 @@ export default function CameraScreen({ route, navigation }) {
           });
           const aSize = await getSize(activeBeforePhoto.uri);
           const bSize = await getSize(savedUri);
-          // Choose a relative total width: match device width in pixels for good fidelity
-          const logicalW = Dimensions.get('window').width;
-          const pixelScale = PixelRatio.get() || 2;
-          const totalW = Math.min(2160, Math.max(720, Math.round(logicalW * pixelScale))); // relative to device, capped
-
-          // Decide layout: landscape or letterbox -> STACK, else SIDE-BY-SIDE
           const beforeOrientation = activeBeforePhoto.orientation || 'portrait';
           const cameraVM = activeBeforePhoto.cameraViewMode || 'portrait';
           const isLandscapePair = beforeOrientation === 'landscape' || cameraVM === 'landscape';
-          const isLetterbox = (beforeOrientation === 'portrait' && cameraVM === 'landscape');
+          const isLetterbox = beforeOrientation === 'portrait' && cameraVM === 'landscape';
+
+          const sourceMaxWidth = Math.max(aSize.w, bSize.w);
+          const combinedWidthCandidate = aSize.w + bSize.w;
+          const targetWidthBase = Math.max(sourceMaxWidth, 2048);
+          const totalW = Math.min(
+            isLandscapePair ? targetWidthBase : Math.max(targetWidthBase, combinedWidthCandidate),
+            8192
+          );
 
           let dimsLocal;
           if (isLandscapePair) {
@@ -1235,41 +1381,33 @@ export default function CameraScreen({ route, navigation }) {
             dimsLocal = { width: totalW, height: totalH, leftW, rightW };
           }
 
-          setSideBaseDims(dimsLocal);
-          setSideBasePair({ beforeUri: activeBeforePhoto.uri, afterUri: savedUri, isLandscapePair });
+          // Use native image compositor instead of view-shot
+          console.log(`🎨 Compositing images using native module...`);
+          console.log(`  - Layout type: ${isLandscapePair ? 'STACK' : 'SIDE-BY-SIDE'}`);
+          console.log(`  - Dimensions: ${dimsLocal.width}x${dimsLocal.height}`);
+          console.log(`  - Before URI: ${activeBeforePhoto.uri}`);
+          console.log(`  - After URI: ${savedUri}`);
 
-          // Allow mount (short)
-          await new Promise((r) => setTimeout(r, 60));
-          // Prefetch images to improve load reliability
           try {
-            await Promise.all([
-              Image.prefetch(activeBeforePhoto.uri),
-              Image.prefetch(savedUri)
-            ]);
-          } catch (pfErr) {
-          }
-          // Brief wait for images to load; don't block long
-          const start = Date.now();
-          const maxWaitMs = 300; // keep UI snappy
-          while (!(sideLoadedA && sideLoadedB) && (Date.now() - start) < maxWaitMs) {
-            await new Promise((r) => setTimeout(r, 20));
-          }
-          // Capture without altering proportions
-          if (sideBaseRef.current) {
-            const capUri = await captureRef(sideBaseRef, {
-              format: 'jpg',
-              quality: 0.95,
-              width: dimsLocal.width,
-              height: dimsLocal.height
-            });
+            const capUri = await compositeImages(
+              activeBeforePhoto.uri,
+              savedUri,
+              isLandscapePair ? 'STACK' : 'SIDE',
+              dimsLocal
+            );
+            console.log(`✅ Native composition successful! URI: ${capUri}`);
+
             const safeName = (activeBeforePhoto.name || 'Photo').replace(/\s+/g, '_');
             const baseType = isLandscapePair ? 'STACK' : 'SIDE';
             const projectIdSuffix = activeProjectId ? `_P${activeProjectId}` : '';
+            console.log(`💾 Saving combined photo (${baseType})...`);
             const firstSaved = await savePhotoToDevice(
               capUri,
               `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_${baseType}_${Date.now()}${projectIdSuffix}.jpg`,
               activeProjectId || null
             );
+            console.log(`✅ Combined photo saved to gallery: ${firstSaved}`);
+
             // In LETTERBOX, also save the SIDE-BY-SIDE variant in addition to STACK
             if (isLetterbox) {
               try {
@@ -1281,44 +1419,34 @@ export default function CameraScreen({ route, navigation }) {
                 const leftWLB = Math.round(totalW * (r1wLB / denomLB));
                 const rightWLB = totalW - leftWLB;
                 const sideDimsLB = { width: totalW, height: totalHLB, leftW: leftWLB, rightW: rightWLB };
-                // Reset load flags and mount the side-by-side renderer
-                setSideLoadedA(false);
-                setSideLoadedB(false);
-                setSideBaseDims(sideDimsLB);
-                setSideBasePair({ beforeUri: activeBeforePhoto.uri, afterUri: savedUri, isLandscapePair: false });
-                await new Promise((r) => setTimeout(r, 60));
-                // Brief wait for images to load
-                const startLB = Date.now();
-                const maxWaitMsLB = 300;
-                while (!(sideLoadedA && sideLoadedB) && (Date.now() - startLB) < maxWaitMsLB) {
-                  await new Promise((r) => setTimeout(r, 20));
-                }
-                if (sideBaseRef.current) {
-                  const capUriLB = await captureRef(sideBaseRef, {
-                    format: 'jpg',
-                    quality: 0.95,
-                    width: sideDimsLB.width,
-                    height: sideDimsLB.height
-                  });
-                  const projectIdSuffix = activeProjectId ? `_P${activeProjectId}` : '';
-                  const secondSaved = await savePhotoToDevice(
-                    capUriLB,
-                    `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}${projectIdSuffix}.jpg`,
-                    activeProjectId || null
-                  );
-                } else {
-                }
+
+                console.log(`🎨 Compositing letterbox SIDE variant using native module...`);
+                const capUriLB = await compositeImages(
+                  activeBeforePhoto.uri,
+                  savedUri,
+                  'SIDE',
+                  sideDimsLB
+                );
+                console.log(`✅ Letterbox SIDE composition successful! URI: ${capUriLB}`);
+
+                console.log(`💾 Saving letterbox SIDE variant...`);
+                const secondSaved = await savePhotoToDevice(
+                  capUriLB,
+                  `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}${projectIdSuffix}.jpg`,
+                  activeProjectId || null
+                );
+                console.log(`✅ Letterbox SIDE variant saved: ${secondSaved}`);
               } catch (eLB) {
+                console.error('❌ Error saving letterbox SIDE variant:', eLB);
               }
             }
-          } else {
+          } catch (captureError) {
+            console.error('❌ Error capturing combined photo:', captureError);
+            console.error('  - Error message:', captureError.message);
+            console.error('  - Error stack:', captureError.stack);
           }
-        } catch (e) {
-        } finally {
-          setSideBasePair(null);
-          setSideBaseDims(null);
-          setSideLoadedA(false);
-          setSideLoadedB(false);
+        } catch (error) {
+          console.error('❌ Error creating combined photo:', error);
         }
       })();
 
@@ -1447,13 +1575,18 @@ export default function CameraScreen({ route, navigation }) {
               
               {/* Camera in landscape aspect ratio */}
               <View style={styles.letterboxCamera}>
-                {layout && (
-                  <CameraView
+                {layout && device && (
+                  <Camera
                     ref={cameraRef}
                     style={styles.camera}
-                    facing={facing}
-                    zoom={0}
-                    enableTorch={enableTorch}
+                    device={device}
+                    format={format}
+                    isActive={true}
+                    photo={true}
+                    zoom={zoom}
+                    enableZoomGesture={false}
+                    torch={enableTorch ? 'on' : 'off'}
+                    resizeMode="cover"
                   />
                 )}
 
@@ -1474,13 +1607,18 @@ export default function CameraScreen({ route, navigation }) {
             </View>
           ) : (
             <View style={Platform.OS === 'android' ? styles.androidCameraWrapper : {flex: 1}}>
-              {layout && (
-                <CameraView
+              {layout && device && (
+                <Camera
                   ref={cameraRef}
                   style={styles.camera}
-                  facing={facing}
-                  zoom={0}
-                  enableTorch={enableTorch}
+                  device={device}
+                  format={format}
+                  isActive={true}
+                  photo={true}
+                  zoom={zoom}
+                  enableZoomGesture={false}
+                  torch={enableTorch ? 'on' : 'off'}
+                  resizeMode="cover"
                 />
               )}
               
@@ -1540,6 +1678,45 @@ export default function CameraScreen({ route, navigation }) {
         >
           <Text style={styles.closeButtonText}>✕</Text>
         </TouchableOpacity>
+
+        {/* Camera zoom controls - fixed to screen */}
+        <View style={styles.zoomControls}>
+          <Text style={styles.zoomText}>
+            {cameraType === 'ultra-wide-angle-camera' ? '0.5x' : cameraType === 'wide-angle-camera' && zoom < 2 ? '1x' : '2x'}
+          </Text>
+          <View style={styles.zoomButtons}>
+            <TouchableOpacity
+              style={[styles.zoomButton, cameraType === 'ultra-wide-angle-camera' && styles.zoomButtonActive]}
+              onPress={() => {
+                console.log('📷 Switching to ultra-wide camera');
+                setCameraType('ultra-wide-angle-camera');
+                setZoom(1.0);
+              }}
+            >
+              <Text style={styles.zoomButtonText}>0.5x</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.zoomButton, cameraType === 'wide-angle-camera' && zoom < 2 && styles.zoomButtonActive]}
+              onPress={() => {
+                console.log('📷 Switching to wide camera');
+                setCameraType('wide-angle-camera');
+                setZoom(1.0);
+              }}
+            >
+              <Text style={styles.zoomButtonText}>1x</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.zoomButton, cameraType === 'wide-angle-camera' && zoom >= 2 && styles.zoomButtonActive]}
+              onPress={() => {
+                console.log('📷 Setting 2x zoom on wide camera');
+                setCameraType('wide-angle-camera');
+                setZoom(2.0);
+              }}
+            >
+              <Text style={styles.zoomButtonText}>2x</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
 
         <View style={styles.bottomControls}>
           {/* Main control row */}
@@ -2115,12 +2292,12 @@ export default function CameraScreen({ route, navigation }) {
     };
   }, []);
 
-  if (!permission) {
+  if (hasPermission === null) {
     // Camera permissions are still loading.
     return <View />;
   }
 
-  if (!permission.granted) {
+  if (!hasPermission) {
     // Camera permissions are not granted yet.
     return (
       <View style={styles.container}>
@@ -2128,6 +2305,14 @@ export default function CameraScreen({ route, navigation }) {
         <TouchableOpacity style={styles.permissionButton} onPress={requestPermission}>
           <Text style={styles.permissionButtonText}>Grant Permission</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!device) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.message}>Camera device not available</Text>
       </View>
     );
   }
@@ -2150,81 +2335,6 @@ export default function CameraScreen({ route, navigation }) {
       >
         {renderOverlayMode()}
         {renderLabelView()}
-
-        {/* Hidden vertical side-by-side renderer (no transform, no padding) */}
-        {sideBasePair && sideBaseDims && (
-          <View
-            ref={sideBaseRef}
-            style={{ position: 'absolute', top: -10000, left: 0, width: sideBaseDims.width, height: sideBaseDims.height, backgroundColor: 'transparent' }}
-            collapsable={false}
-          >
-            {sideBasePair.isLandscapePair ? (
-              // STACKED
-              <View style={{ width: '100%', height: '100%', flexDirection: 'column' }}>
-                <View style={{ width: '100%', height: sideBaseDims.topH }}>
-                  <Image
-                    source={{ uri: sideBasePair.beforeUri }}
-                    style={{ width: '100%', height: '100%' }}
-                    resizeMode="cover"
-                    onLoad={() => setSideLoadedA(true)}
-                  />
-                  {/* BEFORE label - only if photo doesn't already have labels */}
-                  {false && showLabels && !sideBasePair.beforeUri.includes('_LABELED') && (
-                    <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
-                      <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
-                    </View>
-                  )}
-                </View>
-                <View style={{ width: '100%', height: sideBaseDims.bottomH }}>
-                  <Image
-                    source={{ uri: sideBasePair.afterUri }}
-                    style={{ width: '100%', height: '100%' }}
-                    resizeMode="cover"
-                    onLoad={() => setSideLoadedB(true)}
-                  />
-                  {/* AFTER label - only if photo doesn't already have labels */}
-                  {false && showLabels && !sideBasePair.afterUri.includes('_LABELED') && (
-                    <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
-                      <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            ) : (
-              // SIDE-BY-SIDE
-              <View style={{ flexDirection: 'row', width: '100%', height: '100%' }}>
-                <View style={{ width: sideBaseDims.leftW, height: '100%' }}>
-                  <Image
-                    source={{ uri: sideBasePair.beforeUri }}
-                    style={{ width: '100%', height: '100%' }}
-                    resizeMode="cover"
-                    onLoad={() => setSideLoadedA(true)}
-                  />
-                  {/* BEFORE label - only if photo doesn't already have labels */}
-                  {false && showLabels && !sideBasePair.beforeUri.includes('_LABELED') && (
-                    <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
-                      <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>BEFORE</Text>
-                    </View>
-                  )}
-                </View>
-                <View style={{ width: sideBaseDims.rightW, height: '100%' }}>
-                  <Image
-                    source={{ uri: sideBasePair.afterUri }}
-                    style={{ width: '100%', height: '100%' }}
-                    resizeMode="cover"
-                    onLoad={() => setSideLoadedB(true)}
-                  />
-                  {/* AFTER label - only if photo doesn't already have labels */}
-                  {false && showLabels && !sideBasePair.afterUri.includes('_LABELED') && (
-                    <View style={{ position: 'absolute', top: 10, left: 10, backgroundColor: '#F2C31B', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 6 }}>
-                      <Text style={{ color: '#303030', fontSize: 14, fontWeight: 'bold' }}>AFTER</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            )}
-          </View>
-        )}
       </Animated.View>
     </View>
   );
@@ -3053,6 +3163,11 @@ const styles = StyleSheet.create({
     position: 'relative',
     overflow: 'hidden'
   },
+  camera: {
+    flex: 1,
+    width: '100%',
+    height: '100%',
+  },
   // Hidden view for adding labels to photos
   hiddenLabelView: {
     position: 'absolute',
@@ -3068,5 +3183,43 @@ const styles = StyleSheet.create({
     aspectRatio: 9/16,
     overflow: 'hidden',
     alignSelf: 'center',
+  },
+  zoomControls: {
+    position: 'absolute',
+    top: 120,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    zIndex: 100,
+  },
+  zoomText: {
+    color: '#fff',
+    fontSize: 14,
+    marginBottom: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 15,
+    fontWeight: '600',
+  },
+  zoomButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  zoomButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.3)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  zoomButtonActive: {
+    backgroundColor: COLORS.PRIMARY,
+  },
+  zoomButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

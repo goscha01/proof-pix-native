@@ -12,7 +12,10 @@
       "Bash(git checkout:*)",
       "Bash(git merge:*)",
       "Bash(git stash:*)",
-      "Bash(node test-deployment.js:*)"
+      "Bash(node test-deployment.js:*)",
+      "Bash(npx expo start:*)",
+      "Bash(node -c:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []
