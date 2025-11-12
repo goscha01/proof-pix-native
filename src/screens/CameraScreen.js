@@ -1343,9 +1343,70 @@ export default function CameraScreen({ route, navigation }) {
         await deletePhoto(existingCombinedPhoto.id);
       }
 
-      // Save original photo to device immediately (no label delay)
+      // Crop after photo if in letterbox mode to match before photo
+      let processedUri = uri;
+      const beforeCameraViewMode = activeBeforePhoto.cameraViewMode || 'portrait';
+
+      if (beforeCameraViewMode === 'landscape') {
+        // Letterbox mode: crop to 4:3 to match before photo
+        console.log('📸 Cropping after photo to 4:3 (letterbox mode)');
+
+        try {
+          // Get original image dimensions
+          const imageInfo = await new Promise((resolve, reject) => {
+            Image.getSize(uri, (width, height) => resolve({ width, height }), reject);
+          });
+
+          console.log(`  Original after photo: ${imageInfo.width}x${imageInfo.height}`);
+
+          // Calculate 4:3 crop (1.333:1 ratio)
+          const targetRatio = 4 / 3;
+          const photoRatio = imageInfo.width / imageInfo.height;
+
+          let cropWidth, cropHeight, cropX, cropY;
+
+          if (photoRatio > targetRatio) {
+            // Photo is wider than 4:3 - crop sides
+            cropHeight = imageInfo.height;
+            cropWidth = cropHeight * targetRatio;
+            cropX = (imageInfo.width - cropWidth) / 2;
+            cropY = 0;
+          } else {
+            // Photo is taller than 4:3 - crop top/bottom
+            cropWidth = imageInfo.width;
+            cropHeight = cropWidth / targetRatio;
+            cropX = 0;
+            cropY = (imageInfo.height - cropHeight) / 2;
+          }
+
+          console.log(`  Cropping to 4:3: ${Math.round(cropWidth)}x${Math.round(cropHeight)} at (${Math.round(cropX)}, ${Math.round(cropY)})`);
+
+          const croppedImage = await ImageManipulator.manipulateAsync(
+            uri,
+            [
+              {
+                crop: {
+                  originX: cropX,
+                  originY: cropY,
+                  width: cropWidth,
+                  height: cropHeight
+                }
+              }
+            ],
+            { compress: 0.95, format: ImageManipulator.SaveFormat.JPEG }
+          );
+
+          processedUri = croppedImage.uri;
+          console.log(`  ✅ After photo cropped to 4:3: ${processedUri}`);
+        } catch (cropError) {
+          console.error('  ❌ Error cropping after photo:', cropError);
+          // Fall back to original uri if cropping fails
+        }
+      }
+
+      // Save processed photo to device
       const savedUri = await savePhotoToDevice(
-        uri,
+        processedUri,
         `${activeBeforePhoto.room}_${activeBeforePhoto.name}_AFTER_${Date.now()}.jpg`,
         activeProjectId || null
       );
