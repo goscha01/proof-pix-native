@@ -1675,10 +1675,12 @@ export default function CameraScreen({ route, navigation }) {
             const showLetterbox = cameraViewMode === 'landscape';
             return showLetterbox;
           })() ? (
-            <View style={[
-              styles.letterboxContainer,
-              deviceOrientation === 'landscape' ? styles.letterboxContainerLandscape : null
-            ]}>
+            <View
+              key={`letterbox-${deviceOrientation}`}
+              style={[
+                styles.letterboxContainer,
+                deviceOrientation === 'landscape' ? styles.letterboxContainerLandscape : null
+              ]}>
               {/* First bar - top for portrait, left for landscape */}
               <View style={deviceOrientation === 'landscape' ? styles.letterboxBarHorizontal : styles.letterboxBar} />
               
