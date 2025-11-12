@@ -1622,7 +1622,10 @@ export default function CameraScreen({ route, navigation }) {
               <View style={deviceOrientation === 'landscape' ? styles.letterboxBarHorizontal : styles.letterboxBar} />
               
               {/* Camera in landscape aspect ratio */}
-              <View style={styles.letterboxCamera}>
+              <View style={[
+                styles.letterboxCamera,
+                deviceOrientation === 'landscape' ? styles.letterboxCameraLandscape : null
+              ]}>
                 {layout && device && (
                   <Camera
                     ref={cameraRef}
@@ -3207,9 +3210,14 @@ const styles = StyleSheet.create({
   },
   letterboxCamera: {
     width: '100%',
-    aspectRatio: 4 / 3, // Landscape 4:3 for both platforms
+    aspectRatio: 4 / 3, // Portrait device: full width, black bars top/bottom
     position: 'relative',
     overflow: 'hidden'
+  },
+  letterboxCameraLandscape: {
+    width: undefined,
+    height: '100%',
+    aspectRatio: 4 / 3, // Landscape device: full height, black bars left/right
   },
   camera: {
     flex: 1,
