@@ -1193,9 +1193,6 @@ export default function CameraScreen({ route, navigation }) {
       const photoNumber = roomPhotos.length + 1;
       const photoName = `${room.charAt(0).toUpperCase() + room.slice(1)} ${photoNumber}`;
 
-      // Save original photo to device immediately (no label delay)
-      const savedUri = await savePhotoToDevice(uri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`, activeProjectId || null);
-
       // Capture device orientation (actual phone orientation)
       const currentOrientation = deviceOrientation;
 
@@ -1205,28 +1202,79 @@ export default function CameraScreen({ route, navigation }) {
       console.log(`  Camera view mode: ${cameraViewMode}`);
       console.log(`  Screen dimensions: ${dimensions.width}x${dimensions.height}`);
 
-      // Calculate aspect ratio based on camera mode and platform
+      // Calculate aspect ratio and crop if needed
       let aspectRatio;
-      if (Platform.OS === 'android') {
-        // Android: use cameraViewMode toggle - landscape mode uses 4:3 letterbox, portrait uses 9:16
-        aspectRatio = cameraViewMode === 'landscape' ? '4:3' : '9:16';
-      } else {
-        // iOS:
-        if (cameraViewMode === 'landscape') {
-          // Letterbox mode enabled: use 4:3 (matches letterboxCamera style)
-          aspectRatio = '4:3';
-        } else {
-          // No letterbox: calculate from actual screen dimensions
-          const screenWidth = dimensions.width;
-          const screenHeight = dimensions.height;
-          const ratio = deviceOrientation === 'landscape'
-            ? screenWidth / screenHeight  // landscape orientation: wider / narrower
-            : screenHeight / screenWidth; // portrait orientation: taller / wider
-          // Format as string with 2 decimal places, e.g., "2.16:1" or "2.17:1"
-          aspectRatio = `${ratio.toFixed(2)}:1`;
-          console.log(`  Calculated ratio: ${ratio.toFixed(2)}:1 (${screenHeight} / ${screenWidth})`);
+      let processedUri = uri;
+
+      if (cameraViewMode === 'landscape') {
+        // Letterbox mode: crop to 4:3 to match camera view
+        aspectRatio = '4:3';
+
+        try {
+          // Get original image dimensions
+          const imageInfo = await new Promise((resolve, reject) => {
+            Image.getSize(uri, (width, height) => resolve({ width, height }), reject);
+          });
+
+          console.log(`  Original photo: ${imageInfo.width}x${imageInfo.height}`);
+
+          // Calculate 4:3 crop (1.333:1 ratio)
+          const targetRatio = 4 / 3;
+          const photoRatio = imageInfo.width / imageInfo.height;
+
+          let cropWidth, cropHeight, cropX, cropY;
+
+          if (photoRatio > targetRatio) {
+            // Photo is wider than 4:3 - crop sides
+            cropHeight = imageInfo.height;
+            cropWidth = cropHeight * targetRatio;
+            cropX = (imageInfo.width - cropWidth) / 2;
+            cropY = 0;
+          } else {
+            // Photo is taller than 4:3 - crop top/bottom
+            cropWidth = imageInfo.width;
+            cropHeight = cropWidth / targetRatio;
+            cropX = 0;
+            cropY = (imageInfo.height - cropHeight) / 2;
+          }
+
+          console.log(`  Cropping to 4:3: ${Math.round(cropWidth)}x${Math.round(cropHeight)} at (${Math.round(cropX)}, ${Math.round(cropY)})`);
+
+          const croppedImage = await ImageManipulator.manipulateAsync(
+            uri,
+            [
+              {
+                crop: {
+                  originX: cropX,
+                  originY: cropY,
+                  width: cropWidth,
+                  height: cropHeight
+                }
+              }
+            ],
+            { compress: 0.95, format: ImageManipulator.SaveFormat.JPEG }
+          );
+
+          processedUri = croppedImage.uri;
+          console.log(`  ✅ Cropped to 4:3: ${processedUri}`);
+        } catch (cropError) {
+          console.error('  ❌ Error cropping photo:', cropError);
+          // Fall back to original uri if cropping fails
         }
+      } else {
+        // Portrait mode: calculate from actual screen dimensions
+        const screenWidth = dimensions.width;
+        const screenHeight = dimensions.height;
+        const ratio = deviceOrientation === 'landscape'
+          ? screenWidth / screenHeight  // landscape orientation: wider / narrower
+          : screenHeight / screenWidth; // portrait orientation: taller / wider
+        // Format as string with 2 decimal places, e.g., "2.16:1" or "2.17:1"
+        aspectRatio = `${ratio.toFixed(2)}:1`;
+        console.log(`  Calculated ratio: ${ratio.toFixed(2)}:1 (${screenHeight} / ${screenWidth})`);
       }
+
+      // Save processed photo to device
+      const savedUri = await savePhotoToDevice(processedUri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`, activeProjectId || null);
 
       console.log(`  Final aspect ratio: ${aspectRatio}`);
       console.log('============================================');
