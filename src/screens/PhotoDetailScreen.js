@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
-import { COLORS, PHOTO_MODES } from '../constants/rooms';
+import { COLORS, PHOTO_MODES, LABEL_POSITIONS } from '../constants/rooms';
 import * as FileSystem from 'expo-file-system/legacy';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
@@ -24,7 +24,7 @@ const { width, height } = Dimensions.get('window');
 export default function PhotoDetailScreen({ route, navigation }) {
   const { photo } = route.params;
   const { deletePhoto } = usePhotos();
-  const { showLabels, shouldShowWatermark } = useSettings();
+  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition } = useSettings();
   const [sharing, setSharing] = useState(false);
   const [containerLayout, setContainerLayout] = useState(null);
   const [imageSize, setImageSize] = useState(null);
@@ -159,18 +159,52 @@ export default function PhotoDetailScreen({ route, navigation }) {
   };
 
   const renderPhoto = () => {
+    // Get the appropriate label position based on photo mode
+    const currentLabelPosition = photo.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
+    const positionConfig = LABEL_POSITIONS[currentLabelPosition] || LABEL_POSITIONS['left-top'];
+
     // Calculate label position based on actual image display area
     const getLabelStyle = () => {
       const bounds = getImageDisplayBounds();
       if (!bounds) {
-        return { top: 10, left: 10 };
+        // Fallback to default position coordinates if bounds not available
+        const { name, horizontalAlign, verticalAlign, ...coordinates } = positionConfig;
+        return coordinates;
       }
 
-      // Position label 10px from the top-left of the actual image display area (matching combined photos)
-      return {
-        top: bounds.offsetY + 10,
-        left: bounds.offsetX + 10
-      };
+      // Apply position offset based on image display bounds
+      const style = {};
+
+      // Handle vertical positioning
+      if (positionConfig.top !== undefined) {
+        if (typeof positionConfig.top === 'string' && positionConfig.top.includes('%')) {
+          style.top = bounds.offsetY + (bounds.height * parseFloat(positionConfig.top) / 100);
+        } else {
+          style.top = bounds.offsetY + positionConfig.top;
+        }
+      }
+      if (positionConfig.bottom !== undefined) {
+        style.bottom = bounds.offsetY + positionConfig.bottom;
+      }
+
+      // Handle horizontal positioning
+      if (positionConfig.left !== undefined) {
+        if (typeof positionConfig.left === 'string' && positionConfig.left.includes('%')) {
+          style.left = bounds.offsetX + (bounds.width * parseFloat(positionConfig.left) / 100);
+        } else {
+          style.left = bounds.offsetX + positionConfig.left;
+        }
+      }
+      if (positionConfig.right !== undefined) {
+        style.right = bounds.offsetX + positionConfig.right;
+      }
+
+      // Handle transform
+      if (positionConfig.transform) {
+        style.transform = positionConfig.transform;
+      }
+
+      return style;
     };
 
     // Calculate watermark position based on actual image display area
@@ -213,6 +247,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
         {showLabels && photo.mode && (
           <PhotoLabel
             label={photo.mode.toUpperCase()}
+            position={currentLabelPosition}
             style={getLabelStyle()}
           />
         )}
@@ -280,14 +315,40 @@ export default function PhotoDetailScreen({ route, navigation }) {
             const screenWidth = width;
             const scaleFactor = referenceWidth / screenWidth;
 
+            // Get position for the capture view
+            const currentLabelPosition = photo.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
+            const capturePositionConfig = LABEL_POSITIONS[currentLabelPosition] || LABEL_POSITIONS['left-top'];
+
+            // Scale position coordinates for capture
+            const capturePositionStyle = {};
+            if (capturePositionConfig.top !== undefined) {
+              capturePositionStyle.top = typeof capturePositionConfig.top === 'string'
+                ? capturePositionConfig.top
+                : capturePositionConfig.top * scaleFactor;
+            }
+            if (capturePositionConfig.bottom !== undefined) {
+              capturePositionStyle.bottom = capturePositionConfig.bottom * scaleFactor;
+            }
+            if (capturePositionConfig.left !== undefined) {
+              capturePositionStyle.left = typeof capturePositionConfig.left === 'string'
+                ? capturePositionConfig.left
+                : capturePositionConfig.left * scaleFactor;
+            }
+            if (capturePositionConfig.right !== undefined) {
+              capturePositionStyle.right = capturePositionConfig.right * scaleFactor;
+            }
+            if (capturePositionConfig.transform) {
+              capturePositionStyle.transform = capturePositionConfig.transform;
+            }
+
             return (
               <>
                 {showLabels && (
                   <PhotoLabel
                     label={photo.mode.toUpperCase()}
+                    position={currentLabelPosition}
                     style={{
-                      top: 10 * scaleFactor,
-                      left: 10 * scaleFactor,
+                      ...capturePositionStyle,
                       paddingHorizontal: 12 * scaleFactor,
                       paddingVertical: 6 * scaleFactor,
                       borderRadius: 6 * scaleFactor

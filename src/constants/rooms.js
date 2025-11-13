@@ -75,3 +75,76 @@ export const COLORS = {
   BORDER: '#E1E1E1',
   GRAY: '#B3B3B3'
 };
+
+export const LABEL_POSITIONS = {
+  'left-top': {
+    top: 10,
+    left: 10,
+    horizontalAlign: 'flex-start',
+    verticalAlign: 'flex-start',
+    name: 'Left Top'
+  },
+  'left-middle': {
+    top: '50%',
+    left: 10,
+    transform: [{ translateY: -50 }],
+    horizontalAlign: 'flex-start',
+    verticalAlign: 'center',
+    name: 'Left Middle'
+  },
+  'left-bottom': {
+    bottom: 10,
+    left: 10,
+    horizontalAlign: 'flex-start',
+    verticalAlign: 'flex-end',
+    name: 'Left Bottom'
+  },
+  'center-top': {
+    top: 10,
+    left: '50%',
+    transform: [{ translateX: -50 }],
+    horizontalAlign: 'center',
+    verticalAlign: 'flex-start',
+    name: 'Center Top'
+  },
+  'center-middle': {
+    top: '50%',
+    left: '50%',
+    transform: [{ translateX: -50 }, { translateY: -50 }],
+    horizontalAlign: 'center',
+    verticalAlign: 'center',
+    name: 'Center Middle'
+  },
+  'center-bottom': {
+    bottom: 10,
+    left: '50%',
+    transform: [{ translateX: -50 }],
+    horizontalAlign: 'center',
+    verticalAlign: 'flex-end',
+    name: 'Center Bottom'
+  },
+  'right-top': {
+    top: 10,
+    right: 10,
+    horizontalAlign: 'flex-end',
+    verticalAlign: 'flex-start',
+    name: 'Right Top'
+  },
+  'right-middle': {
+    top: '50%',
+    right: 10,
+    transform: [{ translateY: -50 }],
+    horizontalAlign: 'flex-end',
+    verticalAlign: 'center',
+    name: 'Right Middle'
+  },
+  'right-bottom': {
+    bottom: 10,
+    right: 10,
+    horizontalAlign: 'flex-end',
+    verticalAlign: 'flex-end',
+    name: 'Right Bottom'
+  }
+};
+
+export const DEFAULT_LABEL_POSITION = 'left-top';

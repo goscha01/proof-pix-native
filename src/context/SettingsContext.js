@@ -1,6 +1,6 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { ROOMS } from '../constants/rooms';
+import { ROOMS, DEFAULT_LABEL_POSITION } from '../constants/rooms';
 
 const SETTINGS_KEY = 'app-settings';
 const CUSTOM_ROOMS_KEY = 'custom-rooms';
@@ -91,6 +91,9 @@ export const SettingsProvider = ({ children }) => {
   const [labelSize, setLabelSize] = useState(DEFAULT_LABEL_SIZE);
   const [labelCornerStyle, setLabelCornerStyle] = useState(DEFAULT_LABEL_CORNER_STYLE);
   const [labelFontFamily, setLabelFontFamily] = useState('system'); // Default system font
+  const [beforeLabelPosition, setBeforeLabelPosition] = useState(DEFAULT_LABEL_POSITION);
+  const [afterLabelPosition, setAfterLabelPosition] = useState(DEFAULT_LABEL_POSITION);
+  const [combinedLabelPosition, setCombinedLabelPosition] = useState(DEFAULT_LABEL_POSITION);
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('tampa'); // Default to Tampa
   const [isBusiness, setIsBusiness] = useState(false);
@@ -133,6 +136,9 @@ export const SettingsProvider = ({ children }) => {
         setLabelSize(settings.labelSize ?? DEFAULT_LABEL_SIZE);
         setLabelCornerStyle(settings.labelCornerStyle ?? DEFAULT_LABEL_CORNER_STYLE);
         setLabelFontFamily(normalizeFontKey(settings.labelFontFamily));
+        setBeforeLabelPosition(settings.beforeLabelPosition ?? DEFAULT_LABEL_POSITION);
+        setAfterLabelPosition(settings.afterLabelPosition ?? DEFAULT_LABEL_POSITION);
+        setCombinedLabelPosition(settings.combinedLabelPosition ?? DEFAULT_LABEL_POSITION);
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? 'tampa');
         setIsBusiness(settings.isBusiness ?? false);
@@ -168,6 +174,9 @@ export const SettingsProvider = ({ children }) => {
         labelFontFamily,
         labelSize,
         labelCornerStyle,
+        beforeLabelPosition,
+        afterLabelPosition,
+        combinedLabelPosition,
         userName,
         location,
         isBusiness,
@@ -291,6 +300,21 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ labelFontFamily: normalized });
   };
 
+  const updateBeforeLabelPosition = async (position) => {
+    setBeforeLabelPosition(position);
+    await saveSettings({ beforeLabelPosition: position });
+  };
+
+  const updateAfterLabelPosition = async (position) => {
+    setAfterLabelPosition(position);
+    await saveSettings({ afterLabelPosition: position });
+  };
+
+  const updateCombinedLabelPosition = async (position) => {
+    setCombinedLabelPosition(position);
+    await saveSettings({ combinedLabelPosition: position });
+  };
+
   const updateUserInfo = async (name) => {
     setUserName(name);
     await saveSettings({ userName: name });
@@ -372,6 +396,9 @@ export const SettingsProvider = ({ children }) => {
       setLabelSize(DEFAULT_LABEL_SIZE);
       setLabelCornerStyle(DEFAULT_LABEL_CORNER_STYLE);
       setLabelFontFamily('system');
+      setBeforeLabelPosition(DEFAULT_LABEL_POSITION);
+      setAfterLabelPosition(DEFAULT_LABEL_POSITION);
+      setCombinedLabelPosition(DEFAULT_LABEL_POSITION);
       setIsBusiness(false);
       setUseFolderStructure(true);
       setEnabledFolders({ before: true, after: true, combined: true });
@@ -404,11 +431,17 @@ export const SettingsProvider = ({ children }) => {
     labelFontFamily,
     labelSize,
     labelCornerStyle,
+    beforeLabelPosition,
+    afterLabelPosition,
+    combinedLabelPosition,
     updateLabelBackgroundColor,
     updateLabelTextColor,
     updateLabelFontFamily,
     updateLabelSize,
     updateLabelCornerStyle,
+    updateBeforeLabelPosition,
+    updateAfterLabelPosition,
+    updateCombinedLabelPosition,
     userName,
     location,
     updateUserInfo,

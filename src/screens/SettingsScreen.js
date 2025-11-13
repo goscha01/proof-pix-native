@@ -15,12 +15,14 @@ import {
   Platform,
   Pressable,
   TouchableWithoutFeedback,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
 import { useAdmin } from '../context/AdminContext';
-import { COLORS } from '../constants/rooms';
+import { COLORS, LABEL_POSITIONS } from '../constants/rooms';
 import RoomEditor from '../components/RoomEditor';
+import PhotoLabel from '../components/PhotoLabel';
 import googleDriveService from '../services/googleDriveService';
 import InviteManager from '../components/InviteManager';
 import { useNavigation } from '@react-navigation/native';
@@ -217,11 +219,17 @@ export default function SettingsScreen({ navigation }) {
     labelFontFamily,
     labelSize,
     labelCornerStyle,
+    beforeLabelPosition,
+    afterLabelPosition,
+    combinedLabelPosition,
     updateLabelSize,
     updateLabelCornerStyle,
     updateLabelBackgroundColor,
     updateLabelTextColor,
     updateLabelFontFamily,
+    updateBeforeLabelPosition,
+    updateAfterLabelPosition,
+    updateCombinedLabelPosition,
     userName,
     location,
     updateUserInfo,
@@ -1651,6 +1659,158 @@ export default function SettingsScreen({ navigation }) {
                       </TouchableOpacity>
                     );
                   })}
+                </View>
+              </View>
+
+              {/* Label Position */}
+              <View style={styles.settingRowStacked}>
+                <Text style={styles.settingLabel}>Label Position</Text>
+                <Text style={styles.settingDescription}>
+                  Tap a label to select its position. Left side = Before, Right side = After
+                </Text>
+
+                {/* Grid-Based Position Selector */}
+                <View style={styles.positionGridContainer}>
+                  {/* Grid for BEFORE (left side) */}
+                  <View style={styles.gridHalf}>
+                    <View style={styles.gridRow}>
+                      {['left-top', 'center-top', 'right-top'].map((key) => (
+                        <TouchableOpacity
+                          key={`before-${key}`}
+                          style={[
+                            styles.gridCell,
+                            beforeLabelPosition === key && styles.gridCellSelected
+                          ]}
+                          onPress={() => {
+                            updateBeforeLabelPosition(key);
+                            updateCombinedLabelPosition(key);
+                          }}
+                          activeOpacity={0.7}
+                        />
+                      ))}
+                    </View>
+                    <View style={styles.gridRow}>
+                      {['left-middle', 'center-middle', 'right-middle'].map((key) => (
+                        <TouchableOpacity
+                          key={`before-${key}`}
+                          style={[
+                            styles.gridCell,
+                            beforeLabelPosition === key && styles.gridCellSelected
+                          ]}
+                          onPress={() => {
+                            updateBeforeLabelPosition(key);
+                            updateCombinedLabelPosition(key);
+                          }}
+                          activeOpacity={0.7}
+                        />
+                      ))}
+                    </View>
+                    <View style={styles.gridRow}>
+                      {['left-bottom', 'center-bottom', 'right-bottom'].map((key) => (
+                        <TouchableOpacity
+                          key={`before-${key}`}
+                          style={[
+                            styles.gridCell,
+                            beforeLabelPosition === key && styles.gridCellSelected
+                          ]}
+                          onPress={() => {
+                            updateBeforeLabelPosition(key);
+                            updateCombinedLabelPosition(key);
+                          }}
+                          activeOpacity={0.7}
+                        />
+                      ))}
+                    </View>
+                  </View>
+
+                  {/* Grid for AFTER (right side) */}
+                  <View style={styles.gridHalf}>
+                    <View style={styles.gridRow}>
+                      {['left-top', 'center-top', 'right-top'].map((key) => (
+                        <TouchableOpacity
+                          key={`after-${key}`}
+                          style={[
+                            styles.gridCell,
+                            afterLabelPosition === key && styles.gridCellSelected
+                          ]}
+                          onPress={() => {
+                            updateAfterLabelPosition(key);
+                            updateCombinedLabelPosition(key);
+                          }}
+                          activeOpacity={0.7}
+                        />
+                      ))}
+                    </View>
+                    <View style={styles.gridRow}>
+                      {['left-middle', 'center-middle', 'right-middle'].map((key) => (
+                        <TouchableOpacity
+                          key={`after-${key}`}
+                          style={[
+                            styles.gridCell,
+                            afterLabelPosition === key && styles.gridCellSelected
+                          ]}
+                          onPress={() => {
+                            updateAfterLabelPosition(key);
+                            updateCombinedLabelPosition(key);
+                          }}
+                          activeOpacity={0.7}
+                        />
+                      ))}
+                    </View>
+                    <View style={styles.gridRow}>
+                      {['left-bottom', 'center-bottom', 'right-bottom'].map((key) => (
+                        <TouchableOpacity
+                          key={`after-${key}`}
+                          style={[
+                            styles.gridCell,
+                            afterLabelPosition === key && styles.gridCellSelected
+                          ]}
+                          onPress={() => {
+                            updateAfterLabelPosition(key);
+                            updateCombinedLabelPosition(key);
+                          }}
+                          activeOpacity={0.7}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                </View>
+
+                {/* Dummy Photo Preview */}
+                <View style={styles.positionPreviewContainer}>
+                  <View style={styles.positionPreviewBox}>
+                    {/* Left half - BEFORE */}
+                    <View style={styles.previewHalfBefore}>
+                      <View
+                        style={[
+                          styles.previewLabel,
+                          LABEL_POSITIONS[beforeLabelPosition]
+                        ]}
+                      >
+                        <PhotoLabel
+                          label="BEFORE"
+                          position="left-top"
+                          style={{ position: 'relative', top: 0, left: 0 }}
+                        />
+                      </View>
+                    </View>
+
+                    {/* Right half - AFTER */}
+                    <View style={styles.previewHalfAfter}>
+                      <View
+                        style={[
+                          styles.previewLabel,
+                          LABEL_POSITIONS[afterLabelPosition]
+                        ]}
+                      >
+                        <PhotoLabel
+                          label="AFTER"
+                          position="left-top"
+                          style={{ position: 'relative', top: 0, left: 0 }}
+                        />
+                      </View>
+                    </View>
+                  </View>
                 </View>
               </View>
             </View>
@@ -3402,5 +3562,58 @@ const sliderStyles = StyleSheet.create({
       borderRadius: 10,
       fontSize: 12,
       fontWeight: '600',
+    },
+    // Grid selector styles
+    positionGridContainer: {
+      flexDirection: 'row',
+      gap: 8,
+      marginVertical: 16,
+    },
+    gridHalf: {
+      flex: 1,
+      gap: 4,
+    },
+    gridRow: {
+      flexDirection: 'row',
+      gap: 4,
+    },
+    gridCell: {
+      flex: 1,
+      aspectRatio: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: '#E5E5E5',
+      borderRadius: 4,
+      borderWidth: 2,
+      borderColor: '#CCC',
+    },
+    gridCellSelected: {
+      backgroundColor: COLORS.PRIMARY,
+      borderColor: COLORS.PRIMARY,
+    },
+    // Dummy photo preview styles
+    positionPreviewContainer: {
+      marginVertical: 8,
+      width: '100%',
+    },
+    positionPreviewBox: {
+      width: '100%',
+      aspectRatio: 1,
+      backgroundColor: '#F5F5F5',
+      flexDirection: 'row',
+      overflow: 'hidden',
+    },
+    previewHalfBefore: {
+      flex: 1,
+      backgroundColor: '#D0D0D0',
+      position: 'relative',
+    },
+    previewHalfAfter: {
+      flex: 1,
+      backgroundColor: '#A0A0A0',
+      position: 'relative',
+    },
+    previewLabel: {
+      position: 'absolute',
     },
   });

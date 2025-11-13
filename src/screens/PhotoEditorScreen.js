@@ -16,7 +16,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
-import { COLORS, TEMPLATE_TYPES, TEMPLATE_CONFIGS } from '../constants/rooms';
+import { COLORS, TEMPLATE_TYPES, TEMPLATE_CONFIGS, LABEL_POSITIONS } from '../constants/rooms';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
 
@@ -41,7 +41,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const combinedRef = useRef(null);
   const templateScrollRef = useRef(null);
   const { getUnpairedBeforePhotos } = usePhotos();
-  const { showLabels, shouldShowWatermark } = useSettings();
+  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, combinedLabelPosition } = useSettings();
   
   // Debug: Log showLabels value
   const templateTypeRef = useRef(templateType);
@@ -412,20 +412,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
           {/* Show labels overlay on original images if showLabels is true */}
           {showLabels && (
             <>
-              {/* Position labels based on template layout */}
-              {templateType === 'original-stack' ? (
-                // Stacked layout: BEFORE on top, AFTER on bottom
-                <>
-                  <PhotoLabel label="BEFORE" />
-                  <PhotoLabel label="AFTER" style={{ top: 'auto', bottom: 10 }} />
-                </>
-              ) : (
-                // Side-by-side layout: BEFORE on left, AFTER on right
-                <>
-                  <PhotoLabel label="BEFORE" />
-                  <PhotoLabel label="AFTER" style={{ left: 'auto', right: 10 }} />
-                </>
-              )}
+              <PhotoLabel label="BEFORE" position={beforeLabelPosition} />
+              <PhotoLabel label="AFTER" position={afterLabelPosition} />
             </>
           )}
           {/* Show watermark if enabled */}
@@ -458,7 +446,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
           />
           {/* Show BEFORE label only if showLabels is true */}
           {showLabels && (
-            <PhotoLabel label="BEFORE" />
+            <PhotoLabel label="BEFORE" position={combinedLabelPosition} />
           )}
         </View>
 
@@ -474,7 +462,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
           />
           {/* Show AFTER label only if showLabels is true */}
           {showLabels && (
-            <PhotoLabel label="AFTER" />
+            <PhotoLabel label="AFTER" position={combinedLabelPosition} />
           )}
         </View>
         {/* Show watermark if enabled */}

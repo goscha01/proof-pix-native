@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSettings } from '../context/SettingsContext';
+import { LABEL_POSITIONS } from '../constants/rooms';
 
 const FONT_FAMILY_MAP = {
   system: null,
@@ -43,9 +44,13 @@ const LABEL_SIZE_MAP = {
 
 /**
  * Centralized photo label component for consistent styling across all screens
- * Supports custom background color, text color, and font family from settings
+ * Supports custom background color, text color, font family, and position from settings
+ * @param {string} label - The text to display (e.g., "BEFORE", "AFTER")
+ * @param {string} position - Position key from LABEL_POSITIONS (e.g., "left-top", "center-middle")
+ * @param {object} style - Additional custom styles to override
+ * @param {object} textStyle - Additional custom text styles
  */
-export default function PhotoLabel({ label, style = {}, textStyle = {} }) {
+export default function PhotoLabel({ label, position = 'left-top', style = {}, textStyle = {} }) {
   const {
     labelBackgroundColor,
     labelTextColor,
@@ -65,16 +70,21 @@ export default function PhotoLabel({ label, style = {}, textStyle = {} }) {
   const sizeStyle = LABEL_SIZE_MAP[sizeKey];
   const cornerRadius = labelCornerStyle === 'square' ? 0 : sizeStyle.borderRadius;
 
+  // Get position styles from LABEL_POSITIONS constant
+  const positionStyle = LABEL_POSITIONS[position] || LABEL_POSITIONS['left-top'];
+  const { name, horizontalAlign, verticalAlign, ...positionCoordinates } = positionStyle;
+
   return (
     <View
       style={[
         styles.label,
+        positionCoordinates,
         {
           backgroundColor: labelBackgroundColor,
           paddingHorizontal: sizeStyle.paddingHorizontal,
           paddingVertical: sizeStyle.paddingVertical,
           borderRadius: cornerRadius,
-            minWidth: sizeStyle.minWidth,
+          minWidth: sizeStyle.minWidth,
         },
         style,
       ]}
@@ -96,8 +106,6 @@ export default function PhotoLabel({ label, style = {}, textStyle = {} }) {
 const styles = StyleSheet.create({
   label: {
     position: 'absolute',
-    top: 10,
-    left: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },

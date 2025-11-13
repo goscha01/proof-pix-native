@@ -22,7 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
-import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS } from '../constants/rooms';
+import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS, LABEL_POSITIONS } from '../constants/rooms';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
 import * as FileSystem from 'expo-file-system';
@@ -95,7 +95,7 @@ export default function CameraScreen({ route, navigation }) {
   const enlargedGalleryPhotoRef = useRef(enlargedGalleryPhoto);
   const isGalleryAnimatingRef = useRef(false);
   const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom, activeProjectId } = usePhotos();
-  const { showLabels, shouldShowWatermark, getRooms } = useSettings();
+  const { showLabels, shouldShowWatermark, getRooms, beforeLabelPosition, afterLabelPosition } = useSettings();
 
   // Vision Camera setup - default to ultra-wide (0.5x)
   const [cameraType, setCameraType] = useState('ultra-wide-angle-camera'); // 'ultra-wide-angle-camera' or 'wide-angle-camera'
@@ -2361,13 +2361,40 @@ export default function CameraScreen({ route, navigation }) {
           const referenceWidth = 1920;
           const screenWidth = Dimensions.get('window').width;
           const scaleFactor = referenceWidth / screenWidth;
+
+          // Determine which position to use based on the label
+          const currentLabelPosition = tempPhotoLabel === 'BEFORE' ? beforeLabelPosition : afterLabelPosition;
+          const positionConfig = LABEL_POSITIONS[currentLabelPosition] || LABEL_POSITIONS['left-top'];
+
+          // Scale position coordinates for capture
+          const capturePositionStyle = {};
+          if (positionConfig.top !== undefined) {
+            capturePositionStyle.top = typeof positionConfig.top === 'string'
+              ? positionConfig.top
+              : positionConfig.top * scaleFactor;
+          }
+          if (positionConfig.bottom !== undefined) {
+            capturePositionStyle.bottom = positionConfig.bottom * scaleFactor;
+          }
+          if (positionConfig.left !== undefined) {
+            capturePositionStyle.left = typeof positionConfig.left === 'string'
+              ? positionConfig.left
+              : positionConfig.left * scaleFactor;
+          }
+          if (positionConfig.right !== undefined) {
+            capturePositionStyle.right = positionConfig.right * scaleFactor;
+          }
+          if (positionConfig.transform) {
+            capturePositionStyle.transform = positionConfig.transform;
+          }
+
           return (
             <>
               <PhotoLabel
                 label={tempPhotoLabel}
+                position={currentLabelPosition}
                 style={{
-                  top: 10 * scaleFactor,
-                  left: 10 * scaleFactor,
+                  ...capturePositionStyle,
                   paddingHorizontal: 12 * scaleFactor,
                   paddingVertical: 6 * scaleFactor,
                   borderRadius: 6 * scaleFactor
