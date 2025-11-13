@@ -22,7 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
 import { savePhotoToDevice } from '../services/storage';
-import { COLORS, PHOTO_MODES, TEMPLATE_TYPES, ROOMS, LABEL_POSITIONS } from '../constants/rooms';
+import { COLORS, PHOTO_MODES, getLabelPositions } from '../constants/rooms';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
 import * as FileSystem from 'expo-file-system';
@@ -95,7 +95,7 @@ export default function CameraScreen({ route, navigation }) {
   const enlargedGalleryPhotoRef = useRef(enlargedGalleryPhoto);
   const isGalleryAnimatingRef = useRef(false);
   const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom, activeProjectId } = usePhotos();
-  const { showLabels, shouldShowWatermark, getRooms, beforeLabelPosition, afterLabelPosition } = useSettings();
+  const { showLabels, shouldShowWatermark, getRooms, beforeLabelPosition, afterLabelPosition, labelMarginVertical, labelMarginHorizontal } = useSettings();
 
   // Vision Camera setup - default to ultra-wide (0.5x)
   const [cameraType, setCameraType] = useState('ultra-wide-angle-camera'); // 'ultra-wide-angle-camera' or 'wide-angle-camera'
@@ -2364,7 +2364,8 @@ export default function CameraScreen({ route, navigation }) {
 
           // Determine which position to use based on the label
           const currentLabelPosition = tempPhotoLabel === 'BEFORE' ? beforeLabelPosition : afterLabelPosition;
-          const positionConfig = LABEL_POSITIONS[currentLabelPosition] || LABEL_POSITIONS['left-top'];
+          const positions = getLabelPositions(labelMarginVertical, labelMarginHorizontal);
+          const positionConfig = positions[currentLabelPosition] || positions['left-top'];
 
           // Scale position coordinates for capture
           const capturePositionStyle = {};

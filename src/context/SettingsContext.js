@@ -94,6 +94,8 @@ export const SettingsProvider = ({ children }) => {
   const [beforeLabelPosition, setBeforeLabelPosition] = useState(DEFAULT_LABEL_POSITION);
   const [afterLabelPosition, setAfterLabelPosition] = useState(DEFAULT_LABEL_POSITION);
   const [combinedLabelPosition, setCombinedLabelPosition] = useState(DEFAULT_LABEL_POSITION);
+  const [labelMarginVertical, setLabelMarginVertical] = useState(10); // Top/bottom margin
+  const [labelMarginHorizontal, setLabelMarginHorizontal] = useState(10); // Left/right margin
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('tampa'); // Default to Tampa
   const [isBusiness, setIsBusiness] = useState(false);
@@ -139,6 +141,8 @@ export const SettingsProvider = ({ children }) => {
         setBeforeLabelPosition(settings.beforeLabelPosition ?? DEFAULT_LABEL_POSITION);
         setAfterLabelPosition(settings.afterLabelPosition ?? DEFAULT_LABEL_POSITION);
         setCombinedLabelPosition(settings.combinedLabelPosition ?? DEFAULT_LABEL_POSITION);
+        setLabelMarginVertical(settings.labelMarginVertical ?? 10);
+        setLabelMarginHorizontal(settings.labelMarginHorizontal ?? 10);
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? 'tampa');
         setIsBusiness(settings.isBusiness ?? false);
@@ -177,6 +181,8 @@ export const SettingsProvider = ({ children }) => {
         beforeLabelPosition,
         afterLabelPosition,
         combinedLabelPosition,
+        labelMarginVertical,
+        labelMarginHorizontal,
         userName,
         location,
         isBusiness,
@@ -315,6 +321,16 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ combinedLabelPosition: position });
   };
 
+  const updateLabelMarginVertical = async (margin) => {
+    setLabelMarginVertical(margin);
+    await saveSettings({ labelMarginVertical: margin });
+  };
+
+  const updateLabelMarginHorizontal = async (margin) => {
+    setLabelMarginHorizontal(margin);
+    await saveSettings({ labelMarginHorizontal: margin });
+  };
+
   const updateUserInfo = async (name) => {
     setUserName(name);
     await saveSettings({ userName: name });
@@ -399,6 +415,8 @@ export const SettingsProvider = ({ children }) => {
       setBeforeLabelPosition(DEFAULT_LABEL_POSITION);
       setAfterLabelPosition(DEFAULT_LABEL_POSITION);
       setCombinedLabelPosition(DEFAULT_LABEL_POSITION);
+      setLabelMarginVertical(10);
+      setLabelMarginHorizontal(10);
       setIsBusiness(false);
       setUseFolderStructure(true);
       setEnabledFolders({ before: true, after: true, combined: true });
@@ -434,6 +452,8 @@ export const SettingsProvider = ({ children }) => {
     beforeLabelPosition,
     afterLabelPosition,
     combinedLabelPosition,
+    labelMarginVertical,
+    labelMarginHorizontal,
     updateLabelBackgroundColor,
     updateLabelTextColor,
     updateLabelFontFamily,
@@ -442,6 +462,8 @@ export const SettingsProvider = ({ children }) => {
     updateBeforeLabelPosition,
     updateAfterLabelPosition,
     updateCombinedLabelPosition,
+    updateLabelMarginVertical,
+    updateLabelMarginHorizontal,
     userName,
     location,
     updateUserInfo,

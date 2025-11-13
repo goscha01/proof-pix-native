@@ -15,7 +15,8 @@
       "Bash(node test-deployment.js:*)",
       "Bash(npx expo start:*)",
       "Bash(node -c:*)",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(npm install:*)"
     ],
     "deny": [],
     "ask": []

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useSettings } from '../context/SettingsContext';
-import { LABEL_POSITIONS } from '../constants/rooms';
+import { LABEL_POSITIONS, getLabelPositions } from '../constants/rooms';
 
 const FONT_FAMILY_MAP = {
   system: null,
@@ -57,6 +57,8 @@ export default function PhotoLabel({ label, position = 'left-top', style = {}, t
     labelFontFamily,
     labelSize,
     labelCornerStyle,
+    labelMarginVertical,
+    labelMarginHorizontal,
   } = useSettings();
   const canonicalKey = labelFontFamily || 'system';
   const normalizedKey = canonicalKey.toLowerCase();
@@ -70,8 +72,9 @@ export default function PhotoLabel({ label, position = 'left-top', style = {}, t
   const sizeStyle = LABEL_SIZE_MAP[sizeKey];
   const cornerRadius = labelCornerStyle === 'square' ? 0 : sizeStyle.borderRadius;
 
-  // Get position styles from LABEL_POSITIONS constant
-  const positionStyle = LABEL_POSITIONS[position] || LABEL_POSITIONS['left-top'];
+  // Get position styles with custom margins
+  const positions = getLabelPositions(labelMarginVertical, labelMarginHorizontal);
+  const positionStyle = positions[position] || positions['left-top'];
   const { name, horizontalAlign, verticalAlign, ...positionCoordinates } = positionStyle;
 
   return (

@@ -14,7 +14,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
-import { COLORS, PHOTO_MODES, LABEL_POSITIONS } from '../constants/rooms';
+import { COLORS, PHOTO_MODES, getLabelPositions } from '../constants/rooms';
 import * as FileSystem from 'expo-file-system/legacy';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
@@ -24,7 +24,7 @@ const { width, height } = Dimensions.get('window');
 export default function PhotoDetailScreen({ route, navigation }) {
   const { photo } = route.params;
   const { deletePhoto } = usePhotos();
-  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition } = useSettings();
+  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, labelMarginVertical, labelMarginHorizontal } = useSettings();
   const [sharing, setSharing] = useState(false);
   const [containerLayout, setContainerLayout] = useState(null);
   const [imageSize, setImageSize] = useState(null);
@@ -161,7 +161,8 @@ export default function PhotoDetailScreen({ route, navigation }) {
   const renderPhoto = () => {
     // Get the appropriate label position based on photo mode
     const currentLabelPosition = photo.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
-    const positionConfig = LABEL_POSITIONS[currentLabelPosition] || LABEL_POSITIONS['left-top'];
+    const positions = getLabelPositions(labelMarginVertical, labelMarginHorizontal);
+    const positionConfig = positions[currentLabelPosition] || positions['left-top'];
 
     // Calculate label position based on actual image display area
     const getLabelStyle = () => {
@@ -317,7 +318,8 @@ export default function PhotoDetailScreen({ route, navigation }) {
 
             // Get position for the capture view
             const currentLabelPosition = photo.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
-            const capturePositionConfig = LABEL_POSITIONS[currentLabelPosition] || LABEL_POSITIONS['left-top'];
+            const capturePositions = getLabelPositions(labelMarginVertical, labelMarginHorizontal);
+            const capturePositionConfig = capturePositions[currentLabelPosition] || capturePositions['left-top'];
 
             // Scale position coordinates for capture
             const capturePositionStyle = {};

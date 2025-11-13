@@ -17,10 +17,11 @@ import {
   TouchableWithoutFeedback,
   Dimensions,
 } from 'react-native';
+import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
 import { useAdmin } from '../context/AdminContext';
-import { COLORS, LABEL_POSITIONS } from '../constants/rooms';
+import { COLORS, getLabelPositions } from '../constants/rooms';
 import RoomEditor from '../components/RoomEditor';
 import PhotoLabel from '../components/PhotoLabel';
 import googleDriveService from '../services/googleDriveService';
@@ -222,6 +223,8 @@ export default function SettingsScreen({ navigation }) {
     beforeLabelPosition,
     afterLabelPosition,
     combinedLabelPosition,
+    labelMarginVertical,
+    labelMarginHorizontal,
     updateLabelSize,
     updateLabelCornerStyle,
     updateLabelBackgroundColor,
@@ -230,6 +233,8 @@ export default function SettingsScreen({ navigation }) {
     updateBeforeLabelPosition,
     updateAfterLabelPosition,
     updateCombinedLabelPosition,
+    updateLabelMarginVertical,
+    updateLabelMarginHorizontal,
     userName,
     location,
     updateUserInfo,
@@ -1517,302 +1522,50 @@ export default function SettingsScreen({ navigation }) {
                 Customize the appearance of BEFORE and AFTER labels
               </Text>
 
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Background Color</Text>
-                  <Text style={styles.settingDescription}>
-                    {labelBackgroundColor?.toUpperCase()}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.customSelectorButton}
-                  onPress={() => openColorModal('background')}
-                >
-                  <View
-                    style={[
-                      styles.colorPreviewSwatch,
-                      { backgroundColor: labelBackgroundColor },
-                    ]}
-                  />
-                  <Text style={styles.customSelectorButtonText}>Pick color</Text>
-                </TouchableOpacity>
-              </View>
+              {/* Dummy Photo Preview */}
+              <View style={styles.labelPreviewSection}>
+                <View style={styles.positionPreviewBox}>
+                  {/* Left half - BEFORE */}
+                  <View style={styles.previewHalfBefore}>
+                    <View
+                      style={[
+                        styles.previewLabel,
+                        getLabelPositions(labelMarginVertical, labelMarginHorizontal)[beforeLabelPosition]
+                      ]}
+                    >
+                      <PhotoLabel
+                        label="BEFORE"
+                        position="left-top"
+                        style={{ position: 'relative', top: 0, left: 0 }}
+                      />
+                    </View>
+                  </View>
 
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Text Color</Text>
-                  <Text style={styles.settingDescription}>
-                    {labelTextColor?.toUpperCase()}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.customSelectorButton}
-                  onPress={() => openColorModal('text')}
-                >
-                  <View
-                    style={[
-                      styles.colorPreviewSwatch,
-                      { backgroundColor: labelTextColor },
-                    ]}
-                  />
-                  <Text style={styles.customSelectorButtonText}>Pick color</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Font Style</Text>
-                  <Text style={styles.settingDescription}>
-                    {currentFontOption?.label}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={styles.fontSelectorButton}
-                  onPress={() => setFontModalVisible(true)}
-                >
-                  <Text style={styles.fontSelectorButtonText}>Choose font</Text>
-                </TouchableOpacity>
-              </View>
-
-              <View style={styles.settingRowStacked}>
-                <View style={styles.cornerControlsRow}>
-                  <Text style={styles.settingLabel}>Corner Style</Text>
-                  <View style={styles.cornerOptions}>
-                    {LABEL_CORNER_OPTIONS.map((option) => {
-                      const isSelected = labelCornerStyle === option.key;
-                      return (
-                        <TouchableOpacity
-                          key={option.key}
-                          style={[
-                            styles.cornerOption,
-                            isSelected && styles.cornerOptionSelected,
-                          ]}
-                          onPress={() => updateLabelCornerStyle(option.key)}
-                          activeOpacity={0.8}
-                        >
-                          <Text
-                            style={[
-                              styles.cornerOptionText,
-                              isSelected && styles.cornerOptionTextSelected,
-                            ]}
-                          >
-                            {option.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                  {/* Right half - AFTER */}
+                  <View style={styles.previewHalfAfter}>
+                    <View
+                      style={[
+                        styles.previewLabel,
+                        getLabelPositions(labelMarginVertical, labelMarginHorizontal)[afterLabelPosition]
+                      ]}
+                    >
+                      <PhotoLabel
+                        label="AFTER"
+                        position="left-top"
+                        style={{ position: 'relative', top: 0, left: 0 }}
+                      />
+                    </View>
                   </View>
                 </View>
               </View>
 
-              <Text style={styles.settingLabel}>Label Size</Text>
-              <View style={styles.labelPreviewContainer}>
-                <View style={styles.labelPreview}>
-                  {LABEL_SIZE_OPTIONS.map((option) => {
-                    const sizeStyle =
-                      LABEL_SIZE_STYLE_MAP[option.key] || LABEL_SIZE_STYLE_MAP.medium;
-                    const cornerRadius =
-                      labelCornerStyle === 'square' ? 0 : sizeStyle.borderRadius;
-                    const isSelected = labelSize === option.key;
-                    const swatchBackground = isSelected ? labelBackgroundColor : '#E0E0E0';
-                    const swatchTextColor = isSelected ? labelTextColor : '#666666';
-                    return (
-                      <TouchableOpacity
-                        key={option.key}
-                        style={styles.previewLabelOption}
-                        onPress={() => updateLabelSize(option.key)}
-                        activeOpacity={0.85}
-                      >
-                        <View
-                          style={[
-                            styles.previewLabel,
-                            {
-                              backgroundColor: swatchBackground,
-                              paddingHorizontal: sizeStyle.paddingHorizontal,
-                              paddingVertical: sizeStyle.paddingVertical,
-                              borderRadius: cornerRadius,
-                              borderWidth: 1,
-                              borderColor: isSelected ? 'transparent' : '#D0D0D0',
-                              minWidth: sizeStyle.minWidth,
-                              maxWidth: sizeStyle.minWidth,
-                            },
-                          ]}
-                        >
-                          <Text
-                            style={[
-                              styles.previewLabelText,
-                              {
-                                color: swatchTextColor,
-                                fontSize: sizeStyle.fontSize,
-                              },
-                              currentFontOption?.fontFamily && {
-                                fontFamily: currentFontOption.fontFamily,
-                              },
-                            ]}
-                            numberOfLines={1}
-                            adjustsFontSizeToFit
-                            minimumFontScale={0.85}
-                          >
-                            BEFORE
-                          </Text>
-                        </View>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-              </View>
-
-              {/* Label Position */}
-              <View style={styles.settingRowStacked}>
-                <Text style={styles.settingLabel}>Label Position</Text>
-                <Text style={styles.settingDescription}>
-                  Tap a label to select its position. Left side = Before, Right side = After
-                </Text>
-
-                {/* Grid-Based Position Selector */}
-                <View style={styles.positionGridContainer}>
-                  {/* Grid for BEFORE (left side) */}
-                  <View style={styles.gridHalf}>
-                    <View style={styles.gridRow}>
-                      {['left-top', 'center-top', 'right-top'].map((key) => (
-                        <TouchableOpacity
-                          key={`before-${key}`}
-                          style={[
-                            styles.gridCell,
-                            beforeLabelPosition === key && styles.gridCellSelected
-                          ]}
-                          onPress={() => {
-                            updateBeforeLabelPosition(key);
-                            updateCombinedLabelPosition(key);
-                          }}
-                          activeOpacity={0.7}
-                        />
-                      ))}
-                    </View>
-                    <View style={styles.gridRow}>
-                      {['left-middle', 'center-middle', 'right-middle'].map((key) => (
-                        <TouchableOpacity
-                          key={`before-${key}`}
-                          style={[
-                            styles.gridCell,
-                            beforeLabelPosition === key && styles.gridCellSelected
-                          ]}
-                          onPress={() => {
-                            updateBeforeLabelPosition(key);
-                            updateCombinedLabelPosition(key);
-                          }}
-                          activeOpacity={0.7}
-                        />
-                      ))}
-                    </View>
-                    <View style={styles.gridRow}>
-                      {['left-bottom', 'center-bottom', 'right-bottom'].map((key) => (
-                        <TouchableOpacity
-                          key={`before-${key}`}
-                          style={[
-                            styles.gridCell,
-                            beforeLabelPosition === key && styles.gridCellSelected
-                          ]}
-                          onPress={() => {
-                            updateBeforeLabelPosition(key);
-                            updateCombinedLabelPosition(key);
-                          }}
-                          activeOpacity={0.7}
-                        />
-                      ))}
-                    </View>
-                  </View>
-
-                  {/* Grid for AFTER (right side) */}
-                  <View style={styles.gridHalf}>
-                    <View style={styles.gridRow}>
-                      {['left-top', 'center-top', 'right-top'].map((key) => (
-                        <TouchableOpacity
-                          key={`after-${key}`}
-                          style={[
-                            styles.gridCell,
-                            afterLabelPosition === key && styles.gridCellSelected
-                          ]}
-                          onPress={() => {
-                            updateAfterLabelPosition(key);
-                            updateCombinedLabelPosition(key);
-                          }}
-                          activeOpacity={0.7}
-                        />
-                      ))}
-                    </View>
-                    <View style={styles.gridRow}>
-                      {['left-middle', 'center-middle', 'right-middle'].map((key) => (
-                        <TouchableOpacity
-                          key={`after-${key}`}
-                          style={[
-                            styles.gridCell,
-                            afterLabelPosition === key && styles.gridCellSelected
-                          ]}
-                          onPress={() => {
-                            updateAfterLabelPosition(key);
-                            updateCombinedLabelPosition(key);
-                          }}
-                          activeOpacity={0.7}
-                        />
-                      ))}
-                    </View>
-                    <View style={styles.gridRow}>
-                      {['left-bottom', 'center-bottom', 'right-bottom'].map((key) => (
-                        <TouchableOpacity
-                          key={`after-${key}`}
-                          style={[
-                            styles.gridCell,
-                            afterLabelPosition === key && styles.gridCellSelected
-                          ]}
-                          onPress={() => {
-                            updateAfterLabelPosition(key);
-                            updateCombinedLabelPosition(key);
-                          }}
-                          activeOpacity={0.7}
-                        />
-                      ))}
-                    </View>
-                  </View>
-                </View>
-
-                {/* Dummy Photo Preview */}
-                <View style={styles.positionPreviewContainer}>
-                  <View style={styles.positionPreviewBox}>
-                    {/* Left half - BEFORE */}
-                    <View style={styles.previewHalfBefore}>
-                      <View
-                        style={[
-                          styles.previewLabel,
-                          LABEL_POSITIONS[beforeLabelPosition]
-                        ]}
-                      >
-                        <PhotoLabel
-                          label="BEFORE"
-                          position="left-top"
-                          style={{ position: 'relative', top: 0, left: 0 }}
-                        />
-                      </View>
-                    </View>
-
-                    {/* Right half - AFTER */}
-                    <View style={styles.previewHalfAfter}>
-                      <View
-                        style={[
-                          styles.previewLabel,
-                          LABEL_POSITIONS[afterLabelPosition]
-                        ]}
-                      >
-                        <PhotoLabel
-                          label="AFTER"
-                          position="left-top"
-                          style={{ position: 'relative', top: 0, left: 0 }}
-                        />
-                      </View>
-                    </View>
-                  </View>
-                </View>
-              </View>
+              {/* Customize Button */}
+              <TouchableOpacity
+                style={styles.customizeButton}
+                onPress={() => navigation.navigate('LabelCustomization')}
+              >
+                <Text style={styles.customizeButtonText}>Customize</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Room Customization */}
@@ -3226,25 +2979,25 @@ const sliderStyles = StyleSheet.create({
       alignItems: 'center',
     },
     cornerOption: {
-      paddingHorizontal: 12,
-      paddingVertical: 6,
-      borderRadius: 999,
+      paddingHorizontal: 16,
+      paddingVertical: 10,
       borderWidth: 1,
       borderColor: COLORS.BORDER,
-      backgroundColor: 'white',
+      backgroundColor: '#F5F5F5',
+      minWidth: 100,
+      alignItems: 'center',
     },
     cornerOptionSelected: {
       borderColor: COLORS.PRIMARY,
       backgroundColor: COLORS.PRIMARY,
     },
     cornerOptionText: {
-      fontSize: 12,
+      fontSize: 14,
       color: COLORS.GRAY,
       fontWeight: '600',
-      textTransform: 'uppercase',
     },
     cornerOptionTextSelected: {
-      color: COLORS.TEXT,
+      color: '#000000',
     },
     bottomModal: {
       justifyContent: 'flex-end',
@@ -3615,5 +3368,31 @@ const sliderStyles = StyleSheet.create({
     },
     previewLabel: {
       position: 'absolute',
+    },
+    // Label customization preview section
+    labelPreviewSection: {
+      marginVertical: 16,
+    },
+    customizeButton: {
+      backgroundColor: COLORS.PRIMARY,
+      paddingVertical: 14,
+      borderRadius: 8,
+      alignItems: 'center',
+      marginTop: 16,
+    },
+    customizeButtonText: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: '#000000',
+    },
+    // Margin slider styles
+    marginSliderContainer: {
+      marginTop: 16,
+      marginBottom: 8,
+    },
+    marginSliderLabel: {
+      fontSize: 14,
+      color: COLORS.TEXT,
+      marginBottom: 8,
     },
   });

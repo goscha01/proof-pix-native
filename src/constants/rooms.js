@@ -87,7 +87,7 @@ export const LABEL_POSITIONS = {
   'left-middle': {
     top: '50%',
     left: 10,
-    transform: [{ translateY: -50 }],
+    transform: [{ translateY: '-50%' }],
     horizontalAlign: 'flex-start',
     verticalAlign: 'center',
     name: 'Left Middle'
@@ -102,7 +102,7 @@ export const LABEL_POSITIONS = {
   'center-top': {
     top: 10,
     left: '50%',
-    transform: [{ translateX: -50 }],
+    transform: [{ translateX: '-50%' }],
     horizontalAlign: 'center',
     verticalAlign: 'flex-start',
     name: 'Center Top'
@@ -110,7 +110,7 @@ export const LABEL_POSITIONS = {
   'center-middle': {
     top: '50%',
     left: '50%',
-    transform: [{ translateX: -50 }, { translateY: -50 }],
+    transform: [{ translateX: '-50%' }, { translateY: '-50%' }],
     horizontalAlign: 'center',
     verticalAlign: 'center',
     name: 'Center Middle'
@@ -118,7 +118,7 @@ export const LABEL_POSITIONS = {
   'center-bottom': {
     bottom: 10,
     left: '50%',
-    transform: [{ translateX: -50 }],
+    transform: [{ translateX: '-50%' }],
     horizontalAlign: 'center',
     verticalAlign: 'flex-end',
     name: 'Center Bottom'
@@ -133,7 +133,7 @@ export const LABEL_POSITIONS = {
   'right-middle': {
     top: '50%',
     right: 10,
-    transform: [{ translateY: -50 }],
+    transform: [{ translateY: '-50%' }],
     horizontalAlign: 'flex-end',
     verticalAlign: 'center',
     name: 'Right Middle'
@@ -148,3 +148,77 @@ export const LABEL_POSITIONS = {
 };
 
 export const DEFAULT_LABEL_POSITION = 'left-top';
+
+// Function to get label positions with custom margins
+export const getLabelPositions = (marginVertical = 10, marginHorizontal = 10) => {
+  return {
+    'left-top': {
+      top: marginVertical,
+      left: marginHorizontal,
+      horizontalAlign: 'flex-start',
+      verticalAlign: 'flex-start',
+      name: 'Left Top'
+    },
+    'left-middle': {
+      top: '50%',
+      left: marginHorizontal,
+      transform: [{ translateY: '-50%' }],
+      horizontalAlign: 'flex-start',
+      verticalAlign: 'center',
+      name: 'Left Middle'
+    },
+    'left-bottom': {
+      bottom: marginVertical,
+      left: marginHorizontal,
+      horizontalAlign: 'flex-start',
+      verticalAlign: 'flex-end',
+      name: 'Left Bottom'
+    },
+    'center-top': {
+      top: marginVertical,
+      left: '50%',
+      transform: [{ translateX: '-50%' }],
+      horizontalAlign: 'center',
+      verticalAlign: 'flex-start',
+      name: 'Center Top'
+    },
+    'center-middle': {
+      top: '50%',
+      left: '50%',
+      transform: [{ translateX: '-50%' }, { translateY: '-50%' }],
+      horizontalAlign: 'center',
+      verticalAlign: 'center',
+      name: 'Center Middle'
+    },
+    'center-bottom': {
+      bottom: marginVertical,
+      left: '50%',
+      transform: [{ translateX: '-50%' }],
+      horizontalAlign: 'center',
+      verticalAlign: 'flex-end',
+      name: 'Center Bottom'
+    },
+    'right-top': {
+      top: marginVertical,
+      right: marginHorizontal,
+      horizontalAlign: 'flex-end',
+      verticalAlign: 'flex-start',
+      name: 'Right Top'
+    },
+    'right-middle': {
+      top: '50%',
+      right: marginHorizontal,
+      transform: [{ translateY: '-50%' }],
+      horizontalAlign: 'flex-end',
+      verticalAlign: 'center',
+      name: 'Right Middle'
+    },
+    'right-bottom': {
+      bottom: marginVertical,
+      right: marginHorizontal,
+      horizontalAlign: 'flex-end',
+      verticalAlign: 'flex-end',
+      name: 'Right Bottom'
+    }
+  };
+};

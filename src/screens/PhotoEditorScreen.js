@@ -41,7 +41,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const combinedRef = useRef(null);
   const templateScrollRef = useRef(null);
   const { getUnpairedBeforePhotos } = usePhotos();
-  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, combinedLabelPosition } = useSettings();
+  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, combinedLabelPosition, labelMarginVertical, labelMarginHorizontal } = useSettings();
   
   // Debug: Log showLabels value
   const templateTypeRef = useRef(templateType);

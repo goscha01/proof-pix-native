@@ -21,6 +21,7 @@ import PhotoEditorScreen from './src/screens/PhotoEditorScreen';
 import AllPhotosScreen from './src/screens/AllPhotosScreen';
 import PhotoDetailScreen from './src/screens/PhotoDetailScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import LabelCustomizationScreen from './src/screens/LabelCustomizationScreen';
 import FirstLoadScreen from './src/screens/FirstLoadScreen';
 import InviteScreen from './src/screens/InviteScreen';
 import JoinTeamScreen from './src/screens/JoinTeamScreen';
@@ -95,9 +96,16 @@ function AppNavigator() {
           animation: 'fade'
         }}
       />
-      <Stack.Screen 
-        name="Settings" 
+      <Stack.Screen
+        name="Settings"
         component={SettingsScreen}
+        options={{
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen
+        name="LabelCustomization"
+        component={LabelCustomizationScreen}
         options={{
           animation: 'slide_from_right'
         }}
