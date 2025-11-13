@@ -44,7 +44,7 @@ const PHOTO_SPACING = 16; // 8px between each of the 2 gaps
 const AVAILABLE_WIDTH = width - SET_NAME_WIDTH - CONTAINER_PADDING - PHOTO_SPACING;
 const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
-export default function AllPhotosScreen({ navigation, route }) {
+export default function GalleryScreen({ navigation, route }) {
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
   const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels, userPlan } = useSettings();
   const { userMode, teamInfo, isAuthenticated, folderId, proxySessionId, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
@@ -1150,7 +1150,7 @@ export default function AllPhotosScreen({ navigation, route }) {
     );
   };
 
-  // Open Manage Projects modal only when this screen is focused
+  // Open Share Project modal only when this screen is focused
   useFocusEffect(
     React.useCallback(() => {
       if (route?.params?.openManage) {
@@ -1180,7 +1180,7 @@ export default function AllPhotosScreen({ navigation, route }) {
         >
           <Text style={styles.backButtonText}>‹ Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>All Photos</Text>
+        <Text style={styles.title}>Gallery</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -1220,13 +1220,13 @@ export default function AllPhotosScreen({ navigation, route }) {
         </ScrollView>
       )}
 
-      {/* Manage Projects button at bottom - only show if photos exist and project is selected */}
+      {/* Share Project button at bottom - only show if photos exist and project is selected */}
       {photos.length > 0 && activeProjectId && (
         <TouchableOpacity
-          style={[styles.deleteAllButtonBottom, { backgroundColor: '#22A45D' }]}
+          style={[styles.deleteAllButtonBottom, { backgroundColor: '#F2C31B' }]}
           onPress={() => setManageVisible(true)}
         >
-          <Text style={styles.deleteAllButtonBottomText}>🗂️ Manage Projects</Text>
+          <Text style={[styles.deleteAllButtonBottomText, { color: '#000' }]}>📤 Share Project</Text>
         </TouchableOpacity>
       )}
 
@@ -1384,7 +1384,7 @@ export default function AllPhotosScreen({ navigation, route }) {
 
       {/* Upgrade overlay is rendered inside the Upload Options modal for correct stacking */}
 
-      {/* Confirm Save Modal removed - Save button was removed from Manage Projects modal */}
+      {/* Confirm Save Modal removed - Save button was removed from Share Project modal */}
 
       {/* Upgrade Modal */}
       <Modal
@@ -1590,7 +1590,7 @@ export default function AllPhotosScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* Manage Projects Modal */}
+      {/* Share Project Modal */}
       <Modal
         visible={manageVisible}
         transparent={true}
@@ -1599,13 +1599,13 @@ export default function AllPhotosScreen({ navigation, route }) {
       >
         <View style={styles.optionsModalOverlay}>
           <View style={styles.optionsModalContent}>
-            <Text style={styles.optionsTitle}>Manage Projects</Text>
+            <Text style={styles.optionsTitle}>Share Project</Text>
 
             <View>
               <View style={{ marginTop: 4 }} />
 
               <View style={styles.actionsList}>
-                {/* Upload (primary) */}
+                {/* Upload All (primary) */}
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}
                   onPress={() => {
@@ -1613,10 +1613,10 @@ export default function AllPhotosScreen({ navigation, route }) {
                     handleUploadPhotos();
                   }}
                 >
-                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>📤 Upload</Text>
+                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>📤 Upload All</Text>
                 </TouchableOpacity>
 
-                {/* Share to (light blue) */}
+                {/* Share All (light blue) */}
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.actionWide, styles.actionInfo]}
                   onPress={() => {
@@ -1624,7 +1624,7 @@ export default function AllPhotosScreen({ navigation, route }) {
                     handleShareProject();
                   }}
                 >
-                  <Text style={[styles.actionBtnText, styles.actionInfoText]}>🔗 Share</Text>
+                  <Text style={[styles.actionBtnText, styles.actionInfoText]}>🔗 Share All</Text>
                 </TouchableOpacity>
 
                 {/* Delete All (red) */}
@@ -1640,7 +1640,18 @@ export default function AllPhotosScreen({ navigation, route }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Switch moved to confirmation dialog */}
+              {/* Select Photos - separated with gap */}
+              <View style={[styles.actionsList, { marginTop: 16 }]}>
+                <TouchableOpacity
+                  style={[styles.actionBtn, styles.actionWide, { backgroundColor: '#22A45D' }]}
+                  onPress={() => {
+                    setManageVisible(false);
+                    // TODO: Add select photos functionality
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, { color: 'white' }]}>☑️ Select Photos</Text>
+                </TouchableOpacity>
+              </View>
 
               <View style={styles.optionsActionsRowCenter}>
                 <TouchableOpacity style={[styles.actionBtn, styles.actionWide, styles.actionCancel]} onPress={() => setManageVisible(false)}>

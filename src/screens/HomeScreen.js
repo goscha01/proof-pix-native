@@ -1083,7 +1083,7 @@ export default function HomeScreen({ navigation }) {
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('VisionCameraTest')}>
                 <Text style={styles.iconText}>📷</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('AllPhotos', { openManage: true })}>
+            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Gallery', { openManage: true })}>
                 <Text style={styles.iconText}>🗂️</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Settings')}>
@@ -1100,8 +1100,8 @@ export default function HomeScreen({ navigation }) {
         <UploadIndicatorLine 
           uploadStatus={uploadStatus}
           onPress={() => {
-            // Navigate to AllPhotosScreen to show upload details
-            navigation.navigate('AllPhotos', { showUploadDetails: true });
+            // Navigate to GalleryScreen to show upload details
+            navigation.navigate('Gallery', { showUploadDetails: true });
           }}
         />
       </View>
@@ -1114,20 +1114,12 @@ export default function HomeScreen({ navigation }) {
         </ScrollView>
       </View>
 
-      {/* All Photos button at bottom */}
+      {/* Manage Projects button - always visible */}
       <TouchableOpacity
-        style={styles.allPhotosButtonBottom}
-        onPress={() => navigation.navigate('AllPhotos')}
-      >
-        <Text style={styles.allPhotosButtonText}>📷 All Photos</Text>
-      </TouchableOpacity>
-
-      {/* Open Project button under All Photos - always visible */}
-      <TouchableOpacity
-        style={[styles.allPhotosButtonBottom, { backgroundColor: '#22A45D' }]}
+        style={[styles.allPhotosButtonBottom, { backgroundColor: '#F2C31B' }]}
         onPress={() => setOpenProjectVisible(true)}
       >
-        <Text style={[styles.allPhotosButtonText, { color: 'white' }]}>📂 Open Project</Text>
+        <Text style={[styles.allPhotosButtonText, { color: '#000' }]}>📂 Manage Projects</Text>
       </TouchableOpacity>
 
       {/* Full-screen photo view - single photo */}
@@ -1204,7 +1196,7 @@ export default function HomeScreen({ navigation }) {
         </View>
       )}
 
-      {/* Open Project Modal */}
+      {/* Manage Projects Modal */}
       <Modal
         visible={openProjectVisible}
         transparent={true}
@@ -1213,7 +1205,7 @@ export default function HomeScreen({ navigation }) {
       >
         <View style={styles.optionsModalOverlay}>
           <View style={styles.optionsModalContent}>
-            <Text style={styles.optionsTitle}>Open Project</Text>
+            <Text style={styles.optionsTitle}>Manage Projects</Text>
 
             <ScrollView style={styles.projectList} showsVerticalScrollIndicator={true}>
               {projects.length === 0 ? (
@@ -1259,26 +1251,7 @@ export default function HomeScreen({ navigation }) {
             {isMultiSelectMode ? (
               <>
                 <TouchableOpacity
-                  style={[
-                    styles.actionBtn, 
-                    { 
-                      backgroundColor: selectedProjects.size > 0 ? '#FFE6E6' : '#F2F2F2',
-                      marginTop: 20 
-                    }
-                  ]}
-                  onPress={handleDeleteSelectedProjects}
-                  disabled={selectedProjects.size === 0}
-                >
-                  <Text style={[
-                    styles.actionBtnText, 
-                    { color: selectedProjects.size > 0 ? '#CC0000' : '#999' }
-                  ]}>
-                    🗑️ Delete Selected ({selectedProjects.size})
-                  </Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionPrimary, { marginTop: 8 }]}
+                  style={[styles.actionBtn, { backgroundColor: '#22A45D', marginTop: 20 }]}
                   onPress={() => {
                     setOpenProjectVisible(false);
                     setTimeout(() => openNewProjectModal(false), 50);
@@ -1286,7 +1259,48 @@ export default function HomeScreen({ navigation }) {
                 >
                   <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ New Project</Text>
                 </TouchableOpacity>
-                
+
+                <TouchableOpacity
+                  style={[
+                    styles.actionBtn,
+                    {
+                      backgroundColor: selectedProjects.size > 0 ? '#FFE6E6' : '#F2F2F2',
+                      marginTop: 8
+                    }
+                  ]}
+                  onPress={handleDeleteSelectedProjects}
+                  disabled={selectedProjects.size === 0}
+                >
+                  <Text style={[
+                    styles.actionBtnText,
+                    { color: selectedProjects.size > 0 ? '#CC0000' : '#999' }
+                  ]}>
+                    🗑️ Delete Selected ({selectedProjects.size})
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#F2C31B', marginTop: 16 }]}
+                  onPress={() => {
+                    setOpenProjectVisible(false);
+                    exitMultiSelectMode();
+                    navigation.navigate('Gallery');
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, { color: '#000' }]}>🖼️ Gallery</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#F2C31B', marginTop: 8 }]}
+                  onPress={() => {
+                    setOpenProjectVisible(false);
+                    exitMultiSelectMode();
+                    navigation.navigate('Gallery', { openManage: true });
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, { color: '#000' }]}>📤 Share Project</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: '#F2F2F2', marginTop: 8 }]}
                   onPress={exitMultiSelectMode}
@@ -1297,11 +1311,21 @@ export default function HomeScreen({ navigation }) {
             ) : (
               <>
                 <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#22A45D', marginTop: 20 }]}
+                  onPress={() => {
+                    setOpenProjectVisible(false);
+                    setTimeout(() => openNewProjectModal(false), 50);
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ New Project</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
                   style={[
-                    styles.actionBtn, 
-                    { 
+                    styles.actionBtn,
+                    {
                       backgroundColor: '#F2F2F2',
-                      marginTop: 20 
+                      marginTop: 8
                     }
                   ]}
                   onPress={handleDisabledDeleteClick}
@@ -1310,17 +1334,27 @@ export default function HomeScreen({ navigation }) {
                     🗑️ Delete Selected (0)
                   </Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionPrimary, { marginTop: 8 }]}
+                  style={[styles.actionBtn, { backgroundColor: '#F2C31B', marginTop: 16 }]}
                   onPress={() => {
                     setOpenProjectVisible(false);
-                    setTimeout(() => openNewProjectModal(false), 50);
+                    navigation.navigate('Gallery');
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ New Project</Text>
+                  <Text style={[styles.actionBtnText, { color: '#000' }]}>🖼️ Gallery</Text>
                 </TouchableOpacity>
-                
+
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#F2C31B', marginTop: 8 }]}
+                  onPress={() => {
+                    setOpenProjectVisible(false);
+                    navigation.navigate('Gallery', { openManage: true });
+                  }}
+                >
+                  <Text style={[styles.actionBtnText, { color: '#000' }]}>📤 Share Project</Text>
+                </TouchableOpacity>
+
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: '#F2F2F2', marginTop: 8 }]}
                   onPress={() => setOpenProjectVisible(false)}

@@ -1575,22 +1575,24 @@ export default function SettingsScreen({ navigation }) {
                 Customize the names and icons of folders in your app
               </Text>
 
-              <View style={styles.settingRow}>
+              <View style={styles.settingRowStacked}>
                 <View style={styles.settingInfo}>
                   <Text style={styles.settingLabel}>Custom Folders</Text>
                   <Text style={styles.settingDescription}>
                     {customRooms ? `${customRooms.length} custom folders` : 'Using default folders'}
                   </Text>
                 </View>
-                <TouchableOpacity
-                  style={styles.customizeButton}
-                  onPress={() => {
-                    setShowRoomEditor(true);
-                  }}
-                >
-                  <Text style={styles.customizeButtonText}>Customize</Text>
-                </TouchableOpacity>
               </View>
+
+              {/* Customize Button */}
+              <TouchableOpacity
+                style={styles.customizeButton}
+                onPress={() => {
+                  setShowRoomEditor(true);
+                }}
+              >
+                <Text style={styles.customizeButtonText}>Customize</Text>
+              </TouchableOpacity>
             </View>
 
             {/* Upload Structure */}
@@ -2321,17 +2323,6 @@ const sliderStyles = StyleSheet.create({
       color: '#CC0000',
       fontSize: 16,
       fontWeight: '600'
-    },
-    customizeButton: {
-      backgroundColor: COLORS.PRIMARY,
-      paddingHorizontal: 16,
-      paddingVertical: 8,
-      borderRadius: 8
-    },
-    customizeButtonText: {
-      color: COLORS.TEXT,
-      fontWeight: '600',
-      fontSize: 14
     },
     googleSignInButton: {
       backgroundColor: '#4285F4',

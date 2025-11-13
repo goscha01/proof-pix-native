@@ -18,7 +18,7 @@ import { Oswald_600SemiBold } from '@expo-google-fonts/oswald';
 import HomeScreen from './src/screens/HomeScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import PhotoEditorScreen from './src/screens/PhotoEditorScreen';
-import AllPhotosScreen from './src/screens/AllPhotosScreen';
+import GalleryScreen from './src/screens/GalleryScreen';
 import PhotoDetailScreen from './src/screens/PhotoDetailScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LabelCustomizationScreen from './src/screens/LabelCustomizationScreen';
@@ -79,9 +79,9 @@ function AppNavigator() {
           animation: 'slide_from_bottom'
         }}
       />
-      <Stack.Screen 
-        name="AllPhotos" 
-        component={AllPhotosScreen}
+      <Stack.Screen
+        name="Gallery"
+        component={GalleryScreen}
         options={{
           presentation: 'fullScreenModal',
           animation: 'slide_from_bottom',
