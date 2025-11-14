@@ -1,0 +1,97 @@
+{
+  "common": {
+    "close": "닫기",
+    "cancel": "취소",
+    "save": "저장",
+    "delete": "삭제",
+    "confirm": "확인",
+    "loading": "로딩 중...",
+    "error": "오류"
+  },
+  "firstLoad": {
+    "title": "ProofPix에 오신 것을 환영합니다",
+    "subtitle": "전문적인 사진 문서화를 쉽게",
+    "selectLanguage": "언어 선택",
+    "getStarted": "시작하기"
+  },
+  "home": {
+    "title": "홈",
+    "manageProjects": "프로젝트 관리",
+    "newProject": "새 프로젝트",
+    "deleteSelected": "선택 항목 삭제",
+    "gallery": "갤러리",
+    "shareProject": "프로젝트 공유",
+    "openCamera": "카메라 열기",
+    "cancelSelection": "선택 취소",
+    "selectProject": "사진을 찍으려면 프로젝트를 선택하세요",
+    "deletePhotoSet": "사진 세트 삭제",
+    "deletePhotoSetConfirm": "{{name}}을(를) 삭제하시겠습니까?",
+    "protectedFolder": "보호된 폴더",
+    "protectedFolderMessage": "기본 폴더는 삭제할 수 없습니다.",
+    "deleteFolder": "폴더 삭제",
+    "deleteFolderConfirm": "{{name}}을(를) 삭제하시겠습니까?",
+    "addFolder": "폴더 추가",
+    "duplicateFolder": "폴더 복제"
+  },
+  "projects": {
+    "title": "프로젝트",
+    "newProjectTitle": "새 프로젝트",
+    "projectName": "프로젝트 이름",
+    "enterProjectName": "프로젝트 이름 입력",
+    "noProjects": "저장된 프로젝트를 찾을 수 없습니다",
+    "current": "(현재)",
+    "selectToDelete": "삭제할 프로젝트 선택",
+    "selectToDeleteHint": "삭제할 프로젝트를 길게 눌러 선택하세요.",
+    "deleteProjects": "프로젝트 삭제",
+    "deleteProjectsConfirm": "{{count}}개의 프로젝트를 삭제하시겠습니까? ({{names}})",
+    "createError": "프로젝트 생성 실패",
+    "create": "만들기"
+  },
+  "gallery": {
+    "title": "갤러리",
+    "shareProject": "프로젝트 공유",
+    "selectPhotos": "사진 선택",
+    "uploadAll": "모두 업로드",
+    "shareAll": "모두 공유",
+    "deleteAll": "모두 삭제",
+    "noPhotos": "이 프로젝트에 사진이 없습니다",
+    "noPhotosTitle": "사진 없음",
+    "noPhotosInProject": "이 프로젝트에 공유할 사진이 없습니다.",
+    "noPhotosToUpload": "업로드할 사진이 없습니다.",
+    "noPhotosSelected": "선택된 사진 없음",
+    "selectAtLeastOne": "공유할 사진 유형을 하나 이상 선택하세요.",
+    "selectAtLeastOneUpload": "업로드할 사진 유형을 하나 이상 선택하세요.",
+    "noProjectSelected": "프로젝트가 선택되지 않았습니다",
+    "noPhotosYet": "아직 사진이 없습니다",
+    "selectProjectToView": "프로젝트를 선택하여 사진 보기",
+    "takePhotosToStart": "시작하려면 이전/이후 사진을 찍으세요",
+    "share": "공유"
+  },
+  "camera": {
+    "before": "이전",
+    "after": "이후",
+    "combined": "결합",
+    "takePhoto": "사진 촬영",
+    "flip": "카메라 전환"
+  },
+  "settings": {
+    "title": "설정",
+    "labelCustomization": "라벨 사용자 지정",
+    "customize": "사용자 지정",
+    "language": "언어",
+    "changeLanguage": "언어 변경"
+  },
+  "labels": {
+    "position": "위치",
+    "margins": "여백",
+    "verticalMargin": "수직 여백",
+    "horizontalMargin": "수평 여백",
+    "backgroundColor": "배경색",
+    "textColor": "텍스트 색상",
+    "fontSize": "글꼴 크기",
+    "fontFamily": "글꼴",
+    "cornerStyle": "모서리 스타일",
+    "rounded": "둥근",
+    "straight": "직선"
+  }
+}

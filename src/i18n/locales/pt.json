@@ -1,0 +1,97 @@
+{
+  "common": {
+    "close": "Fechar",
+    "cancel": "Cancelar",
+    "save": "Salvar",
+    "delete": "Excluir",
+    "confirm": "Confirmar",
+    "loading": "Carregando...",
+    "error": "Erro"
+  },
+  "firstLoad": {
+    "title": "Bem-vindo ao ProofPix",
+    "subtitle": "Documentação fotográfica profissional facilitada",
+    "selectLanguage": "Selecionar Idioma",
+    "getStarted": "Começar"
+  },
+  "home": {
+    "title": "Início",
+    "manageProjects": "Gerenciar Projetos",
+    "newProject": "Novo Projeto",
+    "deleteSelected": "Excluir Selecionados",
+    "gallery": "Galeria",
+    "shareProject": "Compartilhar Projeto",
+    "openCamera": "Abrir Câmera",
+    "cancelSelection": "Cancelar Seleção",
+    "selectProject": "Selecione um projeto para tirar fotos",
+    "deletePhotoSet": "Excluir Conjunto de Fotos",
+    "deletePhotoSetConfirm": "Tem certeza de que deseja excluir {{name}}?",
+    "protectedFolder": "Pasta Protegida",
+    "protectedFolderMessage": "Pastas padrão não podem ser excluídas.",
+    "deleteFolder": "Excluir Pasta",
+    "deleteFolderConfirm": "Tem certeza de que deseja excluir {{name}}?",
+    "addFolder": "Adicionar Pasta",
+    "duplicateFolder": "Duplicar Pasta"
+  },
+  "projects": {
+    "title": "Projetos",
+    "newProjectTitle": "Novo Projeto",
+    "projectName": "Nome do Projeto",
+    "enterProjectName": "Digite o nome do projeto",
+    "noProjects": "Nenhum projeto salvo encontrado",
+    "current": "(atual)",
+    "selectToDelete": "Selecione projetos para excluir",
+    "selectToDeleteHint": "Pressione e segure um projeto para selecioná-lo para exclusão.",
+    "deleteProjects": "Excluir Projetos",
+    "deleteProjectsConfirm": "Tem certeza de que deseja excluir {{count}} projeto(s)? ({{names}})",
+    "createError": "Falha ao criar projeto",
+    "create": "Criar"
+  },
+  "gallery": {
+    "title": "Galeria",
+    "shareProject": "Compartilhar Projeto",
+    "selectPhotos": "Selecionar Fotos",
+    "uploadAll": "Enviar Tudo",
+    "shareAll": "Compartilhar Tudo",
+    "deleteAll": "Excluir Tudo",
+    "noPhotos": "Não há fotos neste projeto",
+    "noPhotosTitle": "Sem Fotos",
+    "noPhotosInProject": "Não há fotos neste projeto para compartilhar.",
+    "noPhotosToUpload": "Não há fotos para enviar.",
+    "noPhotosSelected": "Nenhuma Foto Selecionada",
+    "selectAtLeastOne": "Selecione pelo menos um tipo de foto para compartilhar.",
+    "selectAtLeastOneUpload": "Selecione pelo menos um tipo de foto para enviar.",
+    "noProjectSelected": "Nenhum projeto selecionado",
+    "noPhotosYet": "Ainda sem fotos",
+    "selectProjectToView": "Selecione um projeto para ver as fotos",
+    "takePhotosToStart": "Tire algumas fotos antes/depois para começar",
+    "share": "Compartilhar"
+  },
+  "camera": {
+    "before": "ANTES",
+    "after": "DEPOIS",
+    "combined": "COMBINADO",
+    "takePhoto": "Tirar Foto",
+    "flip": "Virar Câmera"
+  },
+  "settings": {
+    "title": "Configurações",
+    "labelCustomization": "Personalização de Rótulos",
+    "customize": "Personalizar",
+    "language": "Idioma",
+    "changeLanguage": "Alterar Idioma"
+  },
+  "labels": {
+    "position": "Posição",
+    "margins": "Margens",
+    "verticalMargin": "Margem Vertical",
+    "horizontalMargin": "Margem Horizontal",
+    "backgroundColor": "Cor de Fundo",
+    "textColor": "Cor do Texto",
+    "fontSize": "Tamanho da Fonte",
+    "fontFamily": "Família da Fonte",
+    "cornerStyle": "Estilo do Canto",
+    "rounded": "Arredondado",
+    "straight": "Reto"
+  }
+}

@@ -1,0 +1,97 @@
+{
+  "common": {
+    "close": "إغلاق",
+    "cancel": "إلغاء",
+    "save": "حفظ",
+    "delete": "حذف",
+    "confirm": "تأكيد",
+    "loading": "جاري التحميل...",
+    "error": "خطأ"
+  },
+  "firstLoad": {
+    "title": "مرحبًا بك في ProofPix",
+    "subtitle": "توثيق الصور الاحترافي أصبح سهلاً",
+    "selectLanguage": "اختر اللغة",
+    "getStarted": "ابدأ"
+  },
+  "home": {
+    "title": "الرئيسية",
+    "manageProjects": "إدارة المشاريع",
+    "newProject": "مشروع جديد",
+    "deleteSelected": "حذف المحدد",
+    "gallery": "المعرض",
+    "shareProject": "مشاركة المشروع",
+    "openCamera": "فتح الكاميرا",
+    "cancelSelection": "إلغاء التحديد",
+    "selectProject": "حدد مشروعًا لالتقاط الصور",
+    "deletePhotoSet": "حذف مجموعة الصور",
+    "deletePhotoSetConfirm": "هل أنت متأكد من حذف {{name}}؟",
+    "protectedFolder": "مجلد محمي",
+    "protectedFolderMessage": "لا يمكن حذف المجلدات الافتراضية.",
+    "deleteFolder": "حذف المجلد",
+    "deleteFolderConfirm": "هل أنت متأكد من حذف {{name}}؟",
+    "addFolder": "إضافة مجلد",
+    "duplicateFolder": "تكرار المجلد"
+  },
+  "projects": {
+    "title": "المشاريع",
+    "newProjectTitle": "مشروع جديد",
+    "projectName": "اسم المشروع",
+    "enterProjectName": "أدخل اسم المشروع",
+    "noProjects": "لم يتم العثور على مشاريع محفوظة",
+    "current": "(الحالي)",
+    "selectToDelete": "حدد المشاريع المراد حذفها",
+    "selectToDeleteHint": "اضغط مطولاً على المشروع لتحديده للحذف.",
+    "deleteProjects": "حذف المشاريع",
+    "deleteProjectsConfirm": "هل أنت متأكد من حذف {{count}} مشروع/مشاريع؟ ({{names}})",
+    "createError": "فشل إنشاء المشروع",
+    "create": "إنشاء"
+  },
+  "gallery": {
+    "title": "المعرض",
+    "shareProject": "مشاركة المشروع",
+    "selectPhotos": "تحديد الصور",
+    "uploadAll": "تحميل الكل",
+    "shareAll": "مشاركة الكل",
+    "deleteAll": "حذف الكل",
+    "noPhotos": "لا توجد صور في هذا المشروع",
+    "noPhotosTitle": "لا توجد صور",
+    "noPhotosInProject": "لا توجد صور في هذا المشروع للمشاركة.",
+    "noPhotosToUpload": "لا توجد صور للتحميل.",
+    "noPhotosSelected": "لم يتم تحديد صور",
+    "selectAtLeastOne": "يرجى تحديد نوع صورة واحد على الأقل للمشاركة.",
+    "selectAtLeastOneUpload": "يرجى تحديد نوع صورة واحد على الأقل للتحميل.",
+    "noProjectSelected": "لم يتم تحديد مشروع",
+    "noPhotosYet": "لا توجد صور بعد",
+    "selectProjectToView": "حدد مشروعًا لعرض الصور",
+    "takePhotosToStart": "التقط بعض الصور قبل/بعد للبدء",
+    "share": "مشاركة"
+  },
+  "camera": {
+    "before": "قبل",
+    "after": "بعد",
+    "combined": "مدمج",
+    "takePhoto": "التقاط صورة",
+    "flip": "قلب الكاميرا"
+  },
+  "settings": {
+    "title": "الإعدادات",
+    "labelCustomization": "تخصيص التسميات",
+    "customize": "تخصيص",
+    "language": "اللغة",
+    "changeLanguage": "تغيير اللغة"
+  },
+  "labels": {
+    "position": "الموضع",
+    "margins": "الهوامش",
+    "verticalMargin": "الهامش العمودي",
+    "horizontalMargin": "الهامش الأفقي",
+    "backgroundColor": "لون الخلفية",
+    "textColor": "لون النص",
+    "fontSize": "حجم الخط",
+    "fontFamily": "عائلة الخط",
+    "cornerStyle": "نمط الزوايا",
+    "rounded": "مستدير",
+    "straight": "مستقيم"
+  }
+}
