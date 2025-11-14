@@ -8,9 +8,11 @@ import {
   Image,
   Dimensions,
   ScrollView,
-  TextInput
+  TextInput,
+  Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { useAdmin } from '../context/AdminContext';
 import { useSettings } from '../context/SettingsContext';
 import { COLORS } from '../constants/rooms';
@@ -18,11 +20,38 @@ import { FONTS } from '../constants/fonts';
 
 const { width, height } = Dimensions.get('window');
 
+const LANGUAGES = [
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
+  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+  { code: 'ru', name: 'Русский', flag: '🇷🇺' },
+  { code: 'be', name: 'Беларуская', flag: '🇧🇾' },
+  { code: 'uk', name: 'Українська', flag: '🇺🇦' },
+  { code: 'zh', name: '中文', flag: '🇨🇳' },
+  { code: 'tl', name: 'Tagalog', flag: '🇵🇭' },
+  { code: 'ar', name: 'العربية', flag: '🇸🇦' },
+  { code: 'ko', name: '한국어', flag: '🇰🇷' },
+  { code: 'pt', name: 'Português', flag: '🇵🇹' },
+  { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
+];
+
 export default function FirstLoadScreen({ navigation }) {
+  const { t, i18n } = useTranslation();
   const { individualSignIn } = useAdmin();
   const { updateUserInfo, updateUserPlan } = useSettings();
   const [userName, setUserName] = useState('');
   const [selection, setSelection] = useState(null); // 'team' or 'individual'
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
+
+  const changeLanguage = (languageCode) => {
+    i18n.changeLanguage(languageCode);
+    setLanguageModalVisible(false);
+  };
+
+  const getCurrentLanguage = () => {
+    return LANGUAGES.find(lang => lang.code === i18n.language) || LANGUAGES[0];
+  };
 
   const validateName = () => {
     if (!userName.trim()) {
@@ -59,12 +88,12 @@ export default function FirstLoadScreen({ navigation }) {
   const renderInitialSelection = () => (
     <View style={styles.formContainer}>
       <View style={styles.inputContainer}>
-        <Text style={styles.inputLabel}>Your Name</Text>
+        <Text style={styles.inputLabel}>{t('firstLoad.yourName')}</Text>
         <TextInput
           style={styles.textInput}
           value={userName}
           onChangeText={setUserName}
-          placeholder="Enter your name"
+          placeholder={t('firstLoad.enterYourName')}
           placeholderTextColor="#999"
           autoCapitalize="words"
           autoCorrect={false}
@@ -76,7 +105,7 @@ export default function FirstLoadScreen({ navigation }) {
           style={[styles.selectionButton, styles.teamButton]}
           onPress={handleSelectTeam}
         >
-          <Text style={[styles.selectionButtonText, styles.teamButtonText]}>Join a Team</Text>
+          <Text style={[styles.selectionButtonText, styles.teamButtonText]}>{t('firstLoad.joinTeam')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -85,9 +114,9 @@ export default function FirstLoadScreen({ navigation }) {
           style={[styles.selectionButton, styles.individualButton]}
           onPress={handleSelectIndividual}
         >
-          <Text style={[styles.selectionButtonText, styles.individualButtonText]}>Use as an Individual</Text>
+          <Text style={[styles.selectionButtonText, styles.individualButtonText]}>{t('firstLoad.useIndividual')}</Text>
         </TouchableOpacity>
-        <Text style={styles.selectionSubtext}>Manage your own projects, with free and paid plans.</Text>
+        <Text style={styles.selectionSubtext}>{t('firstLoad.individualSubtext')}</Text>
       </View>
     </View>
   );
@@ -95,36 +124,36 @@ export default function FirstLoadScreen({ navigation }) {
   const renderPlanSelection = () => (
     <View style={styles.formContainer}>
       <TouchableOpacity onPress={() => setSelection(null)} style={styles.backLink}>
-        <Text style={styles.backLinkText}>&larr; Back</Text>
+        <Text style={styles.backLinkText}>&larr; {t('firstLoad.back')}</Text>
       </TouchableOpacity>
-      <Text style={styles.welcomeText}>Choose a Plan</Text>
+      <Text style={styles.welcomeText}>{t('firstLoad.choosePlan')}</Text>
 
       <View style={styles.planContainer}>
         <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('starter')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>Starter</Text>
+          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.starter')}</Text>
         </TouchableOpacity>
-        <Text style={styles.planSubtext}>Free forever. Easily manage your first project and create stunning before/after photos ready for social sharing.</Text>
+        <Text style={styles.planSubtext}>{t('firstLoad.starterDesc')}</Text>
       </View>
 
       <View style={styles.planContainer}>
         <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('pro')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>Pro</Text>
+          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.pro')}</Text>
         </TouchableOpacity>
-        <Text style={styles.planSubtext}>For professionals. Cloud sync + bulk upload.</Text>
+        <Text style={styles.planSubtext}>{t('firstLoad.proDesc')}</Text>
       </View>
       
       <View style={styles.planContainer}>
         <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('business')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>Business</Text>
+          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.business')}</Text>
         </TouchableOpacity>
-        <Text style={styles.planSubtext}>For small teams. Includes team management.</Text>
+        <Text style={styles.planSubtext}>{t('firstLoad.businessDesc')}</Text>
       </View>
       
       <View style={styles.planContainer}>
         <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('enterprise')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>Enterprise</Text>
+          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.enterprise')}</Text>
         </TouchableOpacity>
-        <Text style={styles.planSubtext}>For growing organizations. Unlimited members, multi-location support.</Text>
+        <Text style={styles.planSubtext}>{t('firstLoad.enterpriseDesc')}</Text>
       </View>
     </View>
   );
@@ -132,7 +161,17 @@ export default function FirstLoadScreen({ navigation }) {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        
+
+        {/* Language Selector Button */}
+        <TouchableOpacity
+          style={styles.languageButton}
+          onPress={() => setLanguageModalVisible(true)}
+        >
+          <Text style={styles.languageButtonText}>
+            {getCurrentLanguage().flag} {getCurrentLanguage().name}
+          </Text>
+        </TouchableOpacity>
+
         {selection !== 'individual' && (
           <View style={styles.logoContainer}>
             <Image
@@ -141,13 +180,58 @@ export default function FirstLoadScreen({ navigation }) {
               resizeMode="contain"
             />
             <Text style={styles.appTitle}>ProofPix</Text>
-            <Text style={styles.appSubtitle}>Before & After Photo Management</Text>
+            <Text style={styles.appSubtitle}>{t('firstLoad.subtitle')}</Text>
           </View>
         )}
 
         {selection === 'individual' ? renderPlanSelection() : renderInitialSelection()}
 
       </ScrollView>
+
+      {/* Language Selection Modal */}
+      <Modal
+        visible={languageModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setLanguageModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{t('firstLoad.selectLanguage')}</Text>
+
+            <ScrollView style={styles.languageScrollView} showsVerticalScrollIndicator={true}>
+              {LANGUAGES.map((language) => (
+                <TouchableOpacity
+                  key={language.code}
+                  style={[
+                    styles.languageOption,
+                    i18n.language === language.code && styles.languageOptionActive
+                  ]}
+                  onPress={() => changeLanguage(language.code)}
+                >
+                  <Text style={styles.languageFlag}>{language.flag}</Text>
+                  <Text style={[
+                    styles.languageOptionText,
+                    i18n.language === language.code && styles.languageOptionTextActive
+                  ]}>
+                    {language.name}
+                  </Text>
+                  {i18n.language === language.code && (
+                    <Text style={styles.checkmark}>✓</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.closeModalButton}
+              onPress={() => setLanguageModalVisible(false)}
+            >
+              <Text style={styles.closeModalButtonText}>{t('common.close')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -288,5 +372,84 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#666',
     marginTop: 4,
-  }
+  },
+  languageButton: {
+    alignSelf: 'flex-end',
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 20,
+  },
+  languageButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#000',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: width * 0.85,
+    maxWidth: 400,
+    maxHeight: height * 0.7,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#000',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  languageScrollView: {
+    maxHeight: height * 0.45,
+  },
+  languageOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    marginBottom: 8,
+    backgroundColor: '#F5F5F5',
+  },
+  languageOptionActive: {
+    backgroundColor: '#F2C31B',
+  },
+  languageFlag: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  languageOptionText: {
+    flex: 1,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  languageOptionTextActive: {
+    color: '#000',
+  },
+  checkmark: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  closeModalButton: {
+    marginTop: 16,
+    backgroundColor: '#F2F2F2',
+    paddingVertical: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  closeModalButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
 });

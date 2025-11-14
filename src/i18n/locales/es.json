@@ -6,7 +6,11 @@
     "delete": "Eliminar",
     "confirm": "Confirmar",
     "loading": "Cargando...",
-    "error": "Error"
+    "error": "Error",
+    "back": "Atrás",
+    "apply": "Aplicar",
+    "ok": "OK",
+    "success": "Éxito"
   },
   "firstLoad": {
     "title": "Bienvenido a ProofPix",

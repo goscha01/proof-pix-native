@@ -13,6 +13,7 @@ import { RobotoMono_700Bold } from '@expo-google-fonts/roboto-mono';
 import { Lato_700Bold } from '@expo-google-fonts/lato';
 import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 import { Oswald_600SemiBold } from '@expo-google-fonts/oswald';
+import './src/i18n/i18n'; // Initialize i18n
 
 // Screens
 import HomeScreen from './src/screens/HomeScreen';
