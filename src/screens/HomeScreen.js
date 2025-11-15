@@ -688,6 +688,17 @@ export default function HomeScreen({ navigation }) {
   }, [openProjectVisible]);
 
   const openNewProjectModal = (navigateToCamera = false) => {
+    if (!userName || userName.trim() === '') {
+      Alert.alert(
+        t('projects.userNameRequiredTitle'),
+        t('projects.userNameRequiredMessage'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('projects.goToSettings'), onPress: () => navigation.navigate('Settings') }
+        ]
+      );
+      return;
+    }
     const base = createAlbumName(userName) || `Project`;
     const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[^a-z0-9_\- ]/gi, '_');
     const existing = projects.map(p => p.name);
@@ -707,7 +718,9 @@ export default function HomeScreen({ navigation }) {
 
   const handleCreateProject = async () => {
     try {
-      const safeName = (newProjectName || 'Project').replace(/[^a-z0-9_\- ]/gi, '_');
+      const originalName = newProjectName || 'Project';
+      const safeName = originalName.replace(/[^\p{L}\p{N}_\- ]/gu, '_');
+      console.log(`--- [Sanitization] Original: "${originalName}", Sanitized: "${safeName}"`);
       const proj = await createProject(safeName);
       await setActiveProject(proj.id);
       setNewProjectVisible(false);
@@ -1686,7 +1699,8 @@ const styles = StyleSheet.create({
   addPhotoText: {
     color: COLORS.GRAY,
     fontSize: 14,
-    fontWeight: '600'
+    fontWeight: '600',
+    textAlign: 'center'
   },
   emptyStateContainer: {
     flex: 1,

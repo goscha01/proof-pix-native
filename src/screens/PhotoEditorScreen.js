@@ -489,7 +489,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
             }
           }}
         >
-          <Text style={styles.backButtonText}>‹ Back</Text>
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         
         <View style={styles.titleContainer}>
@@ -602,7 +602,8 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     color: COLORS.PRIMARY,
-    fontSize: 18
+    fontSize: 24,
+    fontWeight: 'bold'
   },
   title: {
     fontSize: 18,

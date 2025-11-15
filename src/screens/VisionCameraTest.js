@@ -219,7 +219,7 @@ export default function VisionCameraTest({ navigation }) {
             <Text style={styles.buttonText}>Retake</Text>
           </TouchableOpacity>
           <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
-            <Text style={styles.buttonText}>Back</Text>
+            <Text style={styles.buttonText}>←</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -270,7 +270,7 @@ export default function VisionCameraTest({ navigation }) {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Text style={styles.backButtonText}>← Back</Text>
+            <Text style={styles.backButtonText}>←</Text>
           </TouchableOpacity>
         </>
       )}
@@ -321,8 +321,8 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: 'bold',
   },
   zoomControls: {
     position: 'absolute',

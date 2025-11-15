@@ -4,8 +4,10 @@ import { useAdmin } from '../context/AdminContext';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
+import { useTranslation } from 'react-i18next';
 
 export default function JoinTeamScreen({ navigation }) {
+  const { t } = useTranslation();
   const [inviteCode, setInviteCode] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const { isAuthenticated } = useAdmin();
@@ -53,7 +55,7 @@ export default function JoinTeamScreen({ navigation }) {
         style={[styles.backButton, { top: insets.top, left: insets.left + 10 }]}
         onPress={handleGoBack}
       >
-        <Text style={styles.backButtonText}>&larr; Back</Text>
+        <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -160,9 +162,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   backButtonText: {
-    color: '#000',
-    fontSize: 15,
-    fontWeight: '600',
+    color: COLORS.PRIMARY,
+    fontSize: 24,
+    fontWeight: 'bold',
   },
   logoContainer: {
     alignItems: 'center',

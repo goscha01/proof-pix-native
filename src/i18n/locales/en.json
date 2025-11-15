@@ -67,7 +67,10 @@
     "deleteProjects": "Delete Projects",
     "deleteProjectsConfirm": "Are you sure you want to delete {{count}} project(s)? ({{names}})",
     "createError": "Failed to create project",
-    "create": "Create"
+    "create": "Create",
+    "userNameRequiredTitle": "User Name Required",
+    "userNameRequiredMessage": "Please set your name in the settings before creating a new project.",
+    "goToSettings": "Go to Settings"
   },
   "gallery": {
     "title": "Gallery",
@@ -204,16 +207,16 @@
     "business": "Business",
     "businessDescription": "Watermark customization requires Business plan or higher",
     "folderCustomization": "Folder Customization",
-    "folderCustomizationDescription": "Organize your photos with custom folders.",
+    "folderCustomizationDescription": "Customize the names and default status of your project folders.",
     "customFolders": "Custom Folders",
     "customFoldersCount": "{{count}} custom folders",
     "usingDefaultFolders": "Using default folders",
     "uploadStructure": "Upload Structure",
-    "useFolderStructure": "Use Folder Structure",
-    "useFolderStructureDescription": "Organize uploads in folders (BEFORE, AFTER, COMBINED)",
-    "beforeFolder": "Before Folder",
-    "beforeFolderDescription": "Upload before photos to this folder",
-    "afterFolder": "After Folder",
+    "useFolderStructure": "Use 'Before/After/Combined' folder structure",
+    "useFolderStructureDescription": "Automatically create subfolders for different states of photos.",
+    "beforeFolder": "'Before' Folder",
+    "beforeFolderDescription": "Enable the folder for original photos.",
+    "afterFolder": "'After' Folder",
     "afterFolderDescription": "Upload after photos to this folder",
     "combinedFolder": "Combined Folder",
     "combinedFolderDescription": "Upload combined photos to this folder",
@@ -404,5 +407,7 @@
     "watermarkColor": "Watermark Color",
     "backgroundColor": "Background Color",
     "default": "Default"
-  }
+  },
+  "labelCustomization_short": "Labels",
+  "folderCustomization_short": "Folders"
 }

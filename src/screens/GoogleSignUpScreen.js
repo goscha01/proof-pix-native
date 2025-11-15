@@ -41,7 +41,7 @@ export default function GoogleSignUpScreen({ navigation, route }) {
         style={[styles.backButton, { top: insets.top, left: insets.left + 10 }]}
         onPress={handleGoBack}
       >
-        <Text style={styles.backButtonText}>← {t('common.back')}</Text>
+        <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
       <View style={styles.content}>
         <Text style={styles.title}>{t('googleSignUp.title')}</Text>
@@ -96,8 +96,10 @@ const styles = StyleSheet.create({
   button: {
     borderRadius: 12,
     paddingVertical: 16,
+    paddingHorizontal: 20,
     alignItems: 'center',
     marginBottom: 16,
+    minHeight: 50,
   },
   googleButton: {
     backgroundColor: COLORS.PRIMARY,
@@ -111,6 +113,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+    textAlign: 'center',
+    flexShrink: 1,
   },
   googleButtonText: {
     color: '#fff',
@@ -121,8 +125,9 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   backButtonText: {
-    color: '#000',
-    fontSize: 15,
-    fontWeight: '600',
+    color: COLORS.PRIMARY,
+    fontSize: 24,
+    fontWeight: 'bold',
+    flexShrink: 1,
   },
 });

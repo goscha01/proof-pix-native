@@ -1180,7 +1180,7 @@ export default function GalleryScreen({ navigation, route }) {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>‹ {t('common.back')}</Text>
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{t('gallery.title')}</Text>
         <View style={{ width: 40 }} />
@@ -1785,7 +1785,8 @@ const styles = StyleSheet.create({
   },
   backButtonText: {
     color: COLORS.PRIMARY,
-    fontSize: 18
+    fontSize: 24,
+    fontWeight: 'bold'
   },
   title: {
     fontSize: 24,
@@ -1848,12 +1849,14 @@ const styles = StyleSheet.create({
     marginRight: 8
   },
   columnHeader: {
-    width: COLUMN_WIDTH,
+    flex: 1,
     marginRight: 8,
     fontSize: 10,
     fontWeight: 'bold',
     color: COLORS.GRAY,
-    textAlign: 'center'
+    textAlign: 'center',
+    flexShrink: 1,
+    numberOfLines: 1
   },
   scrollView: {
     flex: 1
@@ -1965,12 +1968,16 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: COLORS.TEXT,
-    marginBottom: 8
+    marginBottom: 8,
+    textAlign: 'center',
+    flexShrink: 1
   },
   emptyStateSubtext: {
     fontSize: 14,
     color: COLORS.GRAY,
-    textAlign: 'center'
+    textAlign: 'center',
+    flexShrink: 1,
+    flexWrap: 'wrap'
   },
   fullScreenPhotoContainer: {
     position: 'absolute',

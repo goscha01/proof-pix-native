@@ -271,7 +271,7 @@ export default function LabelCustomizationScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← {t('common.back')}</Text>
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{t('labelCustomization.title')}</Text>
         <View style={styles.headerSpacer} />
@@ -792,12 +792,12 @@ const styles = StyleSheet.create({
     padding: 4,
   },
   backButtonText: {
-    fontSize: 16,
+    fontSize: 24,
     color: COLORS.PRIMARY,
-    fontWeight: '600',
+    fontWeight: 'bold',
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 22,
     fontWeight: '700',
     color: COLORS.TEXT,
   },

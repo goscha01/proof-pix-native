@@ -896,7 +896,7 @@ export default function SettingsScreen({ navigation }) {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>&larr; {t('common.back')}</Text>
+          <Text style={styles.backButtonText}>←</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{t('settings.title')}</Text>
         <View style={{ width: 60 }} />
@@ -1385,7 +1385,7 @@ export default function SettingsScreen({ navigation }) {
               {userMode === 'admin' && isSetupComplete() && (
                 <>
                   <View style={styles.connectedStatus}>
-                    <Text style={styles.connectedText}>Γ£ô {t('settings.teamConnected')}</Text>
+                    <Text style={styles.connectedText}>✓ {t('settings.teamConnected')}</Text>
                   </View>
 
                   {/* Editable Team Name */}
@@ -1436,7 +1436,7 @@ export default function SettingsScreen({ navigation }) {
                         ]}>
                           {teamName || t('settings.tapToAddTeamName')}
                         </Text>
-                        <Text style={styles.teamNameEditIcon}>Γ£Å∩╕Å</Text>
+                        <Text style={styles.teamNameEditIcon}>✎</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -1565,7 +1565,7 @@ export default function SettingsScreen({ navigation }) {
 
             {/* Label Customization */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('settings.labelCustomization')}</Text>
+              <Text style={styles.sectionTitle}>{t('settings.labelCustomization_short')}</Text>
               <Text style={styles.sectionDescription}>
                 {t('settings.labelCustomizationDescription')}
               </Text>
@@ -1618,7 +1618,7 @@ export default function SettingsScreen({ navigation }) {
 
             {/* Room Customization */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('settings.folderCustomization')}</Text>
+              <Text style={styles.sectionTitle}>{t('settings.folderCustomization_short')}</Text>
               <Text style={styles.sectionDescription}>
                 {t('settings.folderCustomizationDescription')}
               </Text>
@@ -2185,7 +2185,8 @@ const sliderStyles = StyleSheet.create({
     },
     backButtonText: {
       color: COLORS.PRIMARY,
-      fontSize: 18
+      fontSize: 24,
+      fontWeight: 'bold'
     },
     title: {
       fontSize: 24,

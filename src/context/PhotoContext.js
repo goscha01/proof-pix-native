@@ -256,26 +256,21 @@ export const PhotoProvider = ({ children }) => {
 
   // ===== Project operations =====
   const createProject = async (name) => {
-    // Ensure unique name against current tracked projects
-    const existing = projects.map(p => p.name);
-    const base = name?.trim() || 'Project';
-    const unique = (() => {
-      if (!existing.includes(base)) return base;
-      let i = 2;
-      while (existing.includes(`${i} ${base}`)) i++;
-      return `${i} ${base}`;
-    })();
-    const project = await storageCreateProject(unique);
-    setProjects(prev => [project, ...prev]);
+    const newProject = {
+      id: `proj_${Date.now()}`,
+      name: name,
+      createdAt: new Date().toISOString(),
+    };
+    setProjects(prev => [newProject, ...prev]);
     
     // Reset custom rooms to default when new project is created
     // Auto-assign only unassigned photos to the new project
     const unassigned = photos.filter(p => !p.projectId);
     if (unassigned.length > 0) {
-      const updated = photos.map(p => (!p.projectId ? { ...p, projectId: project.id } : p));
+      const updated = photos.map(p => (!p.projectId ? { ...p, projectId: newProject.id } : p));
       await savePhotos(updated);
     }
-    return project;
+    return newProject;
   };
 
   const assignPhotosToProject = async (projectId) => {
