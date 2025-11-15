@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -26,61 +26,62 @@ import RoomEditor from '../components/RoomEditor';
 import PhotoLabel from '../components/PhotoLabel';
 import googleDriveService from '../services/googleDriveService';
 import InviteManager from '../components/InviteManager';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import proxyService from '../services/proxyService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Modal from 'react-native-modal';
 import ColorPicker from 'react-native-wheel-color-picker';
+import { useTranslation } from 'react-i18next';
 
-const FONT_OPTIONS = [
+const getFontOptions = (t) => [
   {
     key: 'system',
-    label: 'System Default',
-    description: 'Matches the device font',
+    label: t('labelCustomization.fontModal.systemDefault'),
+    description: t('labelCustomization.fontModal.systemDefaultDescription'),
     fontFamily: null,
   },
   {
     key: 'montserratBold',
-    label: 'Montserrat Bold',
-    description: 'Modern sans-serif',
+    label: t('labelCustomization.fontModal.montserratBold'),
+    description: t('labelCustomization.fontModal.montserratBoldDescription'),
     fontFamily: 'Montserrat_700Bold',
   },
   {
     key: 'latoBold',
-    label: 'Lato Bold',
-    description: 'Friendly sans-serif',
+    label: t('labelCustomization.fontModal.latoBold'),
+    description: t('labelCustomization.fontModal.latoBoldDescription'),
     fontFamily: 'Lato_700Bold',
   },
   {
     key: 'playfairBold',
-    label: 'Playfair Display',
-    description: 'Elegant serif',
+    label: t('labelCustomization.fontModal.playfairDisplay'),
+    description: t('labelCustomization.fontModal.playfairDisplayDescription'),
     fontFamily: 'PlayfairDisplay_700Bold',
   },
   {
     key: 'poppinsSemiBold',
-    label: 'Poppins SemiBold',
-    description: 'Rounded modern style',
+    label: t('labelCustomization.fontModal.poppinsSemiBold'),
+    description: t('labelCustomization.fontModal.poppinsSemiBoldDescription'),
     fontFamily: 'Poppins_600SemiBold',
   },
   {
     key: 'robotoMonoBold',
-    label: 'Roboto Mono',
-    description: 'Monospaced tech feel',
+    label: t('labelCustomization.fontModal.robotoMono'),
+    description: t('labelCustomization.fontModal.robotoMonoDescription'),
     fontFamily: 'RobotoMono_700Bold',
   },
   {
     key: 'oswaldSemiBold',
-    label: 'Oswald SemiBold',
-    description: 'Condensed headline style',
+    label: t('labelCustomization.fontModal.oswaldSemiBold'),
+    description: t('labelCustomization.fontModal.oswaldSemiBoldDescription'),
     fontFamily: 'Oswald_600SemiBold',
   },
 ];
 
-const LABEL_SIZE_OPTIONS = [
-  { key: 'small', label: 'Small' },
-  { key: 'medium', label: 'Default' },
-  { key: 'large', label: 'Large' },
+const getLabelSizeOptions = (t) => [
+  { key: 'small', label: t('labelCustomization.small') },
+  { key: 'medium', label: t('labelCustomization.default') },
+  { key: 'large', label: t('labelCustomization.large') },
 ];
 
 const LABEL_SIZE_STYLE_MAP = {
@@ -107,9 +108,9 @@ const LABEL_SIZE_STYLE_MAP = {
   },
 };
 
-const LABEL_CORNER_OPTIONS = [
-  { key: 'rounded', label: 'Rounded' },
-  { key: 'square', label: 'Straight' },
+const getLabelCornerOptions = (t) => [
+  { key: 'rounded', label: t('labelCustomization.cornerOptions.rounded') },
+  { key: 'square', label: t('labelCustomization.cornerOptions.straight') },
 ];
 
 const DEFAULT_LABEL_BACKGROUND = '#FFD700';
@@ -252,7 +253,14 @@ export default function SettingsScreen({ navigation }) {
     userPlan,
     updateUserPlan
   } = useSettings();
-  
+
+  const { t } = useTranslation();
+
+  // Memoize translated options
+  const FONT_OPTIONS = useMemo(() => getFontOptions(t), [t]);
+  const LABEL_SIZE_OPTIONS = useMemo(() => getLabelSizeOptions(t), [t]);
+  const LABEL_CORNER_OPTIONS = useMemo(() => getLabelCornerOptions(t), [t]);
+
   const [showPlanSelection, setShowPlanSelection] = useState(false);
   const [colorModalVisible, setColorModalVisible] = useState(false);
   const [colorModalType, setColorModalType] = useState(null);
@@ -364,7 +372,7 @@ export default function SettingsScreen({ navigation }) {
       FONT_OPTIONS.find((option) => option.key === labelFontFamily) ||
       FONT_OPTIONS[0]
     );
-  }, [labelFontFamily]);
+  }, [labelFontFamily, FONT_OPTIONS]);
 
   useEffect(() => {
     if (colorModalVisible) {
@@ -481,7 +489,7 @@ export default function SettingsScreen({ navigation }) {
 
     // Check if already set up - only consider it connected if folderId is also saved (admin setup)
     if (isSetupComplete()) {
-      Alert.alert('Already Connected', 'Your team is already connected. You can manage invites below.');
+      Alert.alert(t('settings.alreadyConnected'), t('settings.alreadyConnectedMessage'));
       return;
     }
 
@@ -509,16 +517,16 @@ export default function SettingsScreen({ navigation }) {
       }
 
       Alert.alert(
-        'Team Connected!', 
-        'Your team is now connected. You can now generate invite links for your team members.'
+        t('settings.teamConnectedTitle'),
+        t('settings.teamConnectedMessage')
       );
 
     } catch (error) {
       console.error('[SETUP] Setup failed:', error.message);
       Alert.alert(
-        'Setup Failed',
-        error.message || 'Failed to connect team. Please try again.',
-        [{ text: 'OK', style: 'cancel' }]
+        t('settings.setupFailed'),
+        error.message || t('settings.setupFailedMessage'),
+        [{ text: t('common.ok'), style: 'cancel' }]
       );
     } finally {
       setIsSigningIn(false);
@@ -532,33 +540,33 @@ export default function SettingsScreen({ navigation }) {
 
   const handleLeaveTeam = () => {
     Alert.alert(
-      'Leave Team',
-      'This will disconnect you from the team on this device while keeping your existing projects. Your invite token is shown above—copy it if you plan to rejoin later.',
+      t('settings.leaveTeam'),
+      t('settings.leaveTeamMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Leave Team',
+          text: t('settings.leaveTeam'),
           style: 'destructive',
           onPress: async () => {
             try {
               const signOutResult = await signOutFromTeam();
               if (!signOutResult?.success) {
-                Alert.alert('Error', signOutResult?.error || 'Failed to leave the team. Please try again.');
+                Alert.alert(t('common.error'), signOutResult?.error || t('settings.leaveTeamError'));
                 return;
               }
 
               const switchResult = await switchToIndividualMode();
               if (switchResult?.success) {
                 Alert.alert(
-                  'Team Left',
-                  'You have been disconnected from the team. You can rejoin later with your invite token.'
+                  t('settings.teamLeft'),
+                  t('settings.teamLeftMessage')
                 );
               } else if (switchResult?.error) {
-                Alert.alert('Notice', 'Left the team, but could not restore your previous mode automatically.');
+                Alert.alert(t('settings.notice'), t('settings.teamLeftNotice'));
               }
             } catch (error) {
               console.error('[SETTINGS] Error leaving team:', error);
-              Alert.alert('Error', 'Unexpected error occurred while leaving the team.');
+              Alert.alert(t('common.error'), t('settings.leaveTeamUnexpectedError'));
             }
           },
         },
@@ -568,23 +576,23 @@ export default function SettingsScreen({ navigation }) {
 
   const handleResetUserData = () => {
     const resetMessage = isTeamMember
-      ? 'This will clear your local settings and disconnect you from the team. Make sure you have your invite token if you plan to rejoin. Continue?'
-      : 'This will clear your name settings. You will be taken to the setup screen to configure them again. Continue?';
+      ? t('settings.resetTeamMemberConfirm')
+      : t('settings.resetIndividualConfirm');
 
     Alert.alert(
-      'Reset User Data',
+      t('settings.resetUserData'),
       resetMessage,
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Reset',
+          text: t('settings.reset'),
           style: 'destructive',
           onPress: async () => {
             if (isTeamMember) {
               try {
                 const signOutResult = await signOutFromTeam();
                 if (!signOutResult?.success) {
-                  Alert.alert('Error', signOutResult?.error || 'Failed to disconnect from the team.');
+                  Alert.alert(t('common.error'), signOutResult?.error || t('settings.disconnectTeamError'));
                   return;
                 }
                 await switchToIndividualMode();
@@ -631,26 +639,26 @@ export default function SettingsScreen({ navigation }) {
 
     if (!isGoogleSignInAvailable) {
       Alert.alert(
-        'Unavailable',
-        'Google Sign-In is not available in this build. Please use a development build.'
+        t('settings.unavailable'),
+        t('settings.googleSignInUnavailable')
       );
       return;
     }
 
     Alert.alert(
-      'Switch Google Account',
-      `Switch active account to ${account.email}? You will be prompted to sign in again with this account.`,
+      t('settings.switchGoogleAccount'),
+      t('settings.switchGoogleAccountMessage', { email: account.email }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Switch',
+          text: t('settings.switch'),
           onPress: async () => {
             setIsSigningIn(true);
             try {
               await adminSignIn();
             } catch (error) {
               console.error('[SETTINGS] Error switching connected account:', error);
-              Alert.alert('Error', 'Failed to switch accounts. Please try again.');
+              Alert.alert(t('common.error'), t('settings.switchAccountError'));
             } finally {
               setIsSigningIn(false);
             }
@@ -667,26 +675,26 @@ export default function SettingsScreen({ navigation }) {
 
     if (account.isActive) {
       Alert.alert(
-        'Account Active',
-        'Switch to another account before removing this one.'
+        t('settings.accountActive'),
+        t('settings.accountActiveMessage')
       );
       return;
     }
 
     Alert.alert(
-      'Remove Google Account',
-      `Remove ${account.email} from your connected accounts?`,
+      t('settings.removeGoogleAccount'),
+      t('settings.removeGoogleAccountMessage', { email: account.email }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Remove',
+          text: t('settings.remove'),
           style: 'destructive',
           onPress: async () => {
             try {
               await removeConnectedAccount(account.id);
             } catch (error) {
               console.error('[SETTINGS] Failed to remove connected account:', error);
-              Alert.alert('Error', 'Failed to remove account. Please try again.');
+              Alert.alert(t('common.error'), t('settings.removeAccountError'));
             }
           },
         },
@@ -707,19 +715,19 @@ export default function SettingsScreen({ navigation }) {
 
   const handleGoogleSignOut = () => {
     Alert.alert(
-      'Sign Out',
-      'This will sign you out and clear all admin setup data. Continue?',
+      t('settings.signOut'),
+      t('settings.signOutMessage'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Sign Out',
+          text: t('settings.signOut'),
           style: 'destructive',
           onPress: async () => {
             const result = await signOut();
             if (result.success) {
-              Alert.alert('Success', 'Signed out successfully');
+              Alert.alert(t('common.success'), t('settings.signOutSuccess'));
             } else {
-              Alert.alert('Error', result.error || 'Failed to sign out');
+              Alert.alert(t('common.error'), result.error || t('settings.signOutError'));
             }
           }
         }
@@ -797,19 +805,19 @@ export default function SettingsScreen({ navigation }) {
     // This keeps Google authentication but clears team setup, showing "Set Up Team" button again
     if (userMode === 'admin' && isSetupComplete() && (userPlan === 'business' || userPlan === 'enterprise')) {
       Alert.alert(
-        'Disconnect Team',
-        'This will disconnect your team setup but keep you signed in to Google. You can set up your team again later.',
+        t('settings.disconnectTeam'),
+        t('settings.disconnectTeamMessage'),
         [
-          { text: 'Cancel', style: 'cancel' },
+          { text: t('common.cancel'), style: 'cancel' },
           {
-            text: 'Disconnect',
+            text: t('settings.disconnect'),
             style: 'destructive',
             onPress: async () => {
               const result = await signOutFromTeam();
               if (result.success) {
-                Alert.alert('Success', 'Team disconnected successfully');
+                Alert.alert(t('common.success'), t('settings.teamDisconnectedSuccess'));
               } else {
-                Alert.alert('Error', result.error || 'Failed to disconnect team');
+                Alert.alert(t('common.error'), result.error || t('settings.teamDisconnectedError'));
               }
             }
           }
@@ -863,29 +871,29 @@ export default function SettingsScreen({ navigation }) {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>‹ Back</Text>
+          <Text style={styles.backButtonText}>&larr; {t('common.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Settings</Text>
+        <Text style={styles.title}>{t('settings.title')}</Text>
         <View style={{ width: 60 }} />
       </View>
 
       <ScrollView style={styles.content}>
         {/* Admin Setup Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Cloud & Team Sync</Text>
-          
+          <Text style={styles.sectionTitle}>{t('settings.cloudTeamSync')}</Text>
+
           {/* Show current plan above buttons */}
           {userPlan && (
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.currentPlanBox}
               onPress={() => setShowPlanModal(true)}
             >
-              <Text style={styles.currentPlanLabel}>Current Plan:</Text>
+              <Text style={styles.currentPlanLabel}>{t('settings.currentPlan')}</Text>
               <View style={styles.currentPlanValueContainer}>
                 <Text style={styles.currentPlanValue}>
                   {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
                 </Text>
-                <Text style={styles.changePlanText}>Change</Text>
+                <Text style={styles.changePlanText}>{t('settings.change')}</Text>
               </View>
             </TouchableOpacity>
           )}
@@ -894,13 +902,13 @@ export default function SettingsScreen({ navigation }) {
             <>
               {/* Team Member View - Show team connection info (read-only) */}
               <View style={styles.adminInfoBox}>
-                <Text style={styles.adminInfoLabel}>Connected to Team:</Text>
+                <Text style={styles.adminInfoLabel}>{t('settings.connectedToTeam')}</Text>
                 {loadingAdminInfo ? (
                   <ActivityIndicator size="small" color={COLORS.PRIMARY} style={{ marginVertical: 8 }} />
                 ) : adminInfo && (adminInfo.name || adminInfo.email) ? (
                   <>
                     <Text style={styles.adminInfoValue}>
-                      {adminInfo.name || adminInfo.email || 'Admin'}
+                      {adminInfo.name || adminInfo.email || t('settings.admin')}
                     </Text>
                     {adminInfo.email && adminInfo.name && (
                       <Text style={styles.adminInfoEmail}>
@@ -910,7 +918,7 @@ export default function SettingsScreen({ navigation }) {
                   </>
                 ) : (
                   <Text style={styles.adminInfoValue}>
-                    ✓ Connected to Team
+                    Γ£ô {t('settings.connectedToTeamStatus')}
                   </Text>
                 )}
               </View>
@@ -918,15 +926,15 @@ export default function SettingsScreen({ navigation }) {
               {teamInfo?.token && (
                 <View style={styles.tokenBox}>
                   <View style={styles.tokenHeader}>
-                    <Text style={styles.tokenLabel}>Invite Token</Text>
+                    <Text style={styles.tokenLabel}>{t('settings.inviteToken')}</Text>
                     <TouchableOpacity
                       style={styles.tokenCopyButton}
                       onPress={() => {
                         Clipboard.setString(teamInfo.token);
-                        Alert.alert('Copied', 'Invite token copied to clipboard.');
+                        Alert.alert(t('settings.copied'), t('settings.tokenCopied'));
                       }}
                     >
-                      <Text style={styles.tokenCopyText}>Copy</Text>
+                      <Text style={styles.tokenCopyText}>{t('settings.copy')}</Text>
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.tokenValue} selectable>{teamInfo.token}</Text>
@@ -934,7 +942,7 @@ export default function SettingsScreen({ navigation }) {
               )}
 
               <Text style={styles.teamWarningText}>
-                Remember to save your invite token. You’ll need it to rejoin this team later.
+                {t('settings.tokenWarning')}
               </Text>
 
               {canSwitchBack && (
@@ -942,29 +950,29 @@ export default function SettingsScreen({ navigation }) {
                   style={styles.switchModeButton}
                   onPress={async () => {
                     Alert.alert(
-                      'Switch Back',
-                      'This will restore your previous mode on this device.',
+                      t('settings.switchBack'),
+                      t('settings.switchBackMessage'),
                       [
-                        { text: 'Cancel', style: 'cancel' },
+                        { text: t('common.cancel'), style: 'cancel' },
                         {
-                          text: 'Switch',
+                          text: t('settings.switch'),
                           onPress: async () => {
                             try {
                               const result = await switchToIndividualMode();
                               if (result?.success) {
                                 setTimeout(() => {
                                   Alert.alert(
-                                    'Switched Back',
-                                    `You are now in ${result.mode ? result.mode.charAt(0).toUpperCase() + result.mode.slice(1) : 'individual'} mode.`,
-                                    [{ text: 'OK' }]
+                                    t('settings.switchedBack'),
+                                    t('settings.switchedBackMessage', { mode: result.mode ? result.mode.charAt(0).toUpperCase() + result.mode.slice(1) : 'individual' }),
+                                    [{ text: t('common.ok') }]
                                   );
                                 }, 100);
                               } else if (result?.error) {
-                                Alert.alert('Error', result.error);
+                                Alert.alert(t('common.error'), result.error);
                               }
                             } catch (error) {
                               console.error('[SETTINGS] Error switching modes:', error);
-                              Alert.alert('Error', 'An unexpected error occurred while switching modes.');
+                              Alert.alert(t('common.error'), t('settings.switchModeError'));
                             }
                           },
                         },
@@ -972,7 +980,7 @@ export default function SettingsScreen({ navigation }) {
                     );
                   }}
                 >
-                  <Text style={styles.switchModeButtonText}>Switch Back</Text>
+                  <Text style={styles.switchModeButtonText}>{t('settings.switchBack')}</Text>
                 </TouchableOpacity>
               )}
 
@@ -980,88 +988,88 @@ export default function SettingsScreen({ navigation }) {
                 style={styles.leaveTeamButton}
                 onPress={handleLeaveTeam}
               >
-                <Text style={styles.leaveTeamButtonText}>Leave Team</Text>
+                <Text style={styles.leaveTeamButtonText}>{t('settings.leaveTeam')}</Text>
               </TouchableOpacity>
               
             </>
           ) : isSigningIn ? (
              <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color="#0000ff" />
-                <Text style={styles.loadingText}>Connecting to Google...</Text>
+                <Text style={styles.loadingText}>{t('settings.connectingToGoogle')}</Text>
              </View>
           ) : !isAuthenticated ? (
             <>
               {showPlanSelection ? (
                 <>
                   <TouchableOpacity onPress={() => setShowPlanSelection(false)} style={styles.backLink}>
-                    <Text style={styles.backLinkText}>&larr; Back</Text>
+                    <Text style={styles.backLinkText}>&larr; {t('common.back')}</Text>
                   </TouchableOpacity>
                   <Text style={styles.sectionDescription}>
-                    Choose a Plan
+                    {t('firstLoad.choosePlan')}
                   </Text>
                   
                   <View style={styles.planContainer}>
-                    <TouchableOpacity 
-                      style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]} 
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
                       onPress={async () => {
                         await updateUserPlan('starter');
                         setShowPlanSelection(false);
                       }}
                     >
-                      <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>Starter</Text>
+                      <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('settings.plans.starter')}</Text>
                     </TouchableOpacity>
-                    <Text style={styles.planSubtext}>Free forever. Easily manage your first project and create stunning before/after photos ready for social sharing.</Text>
+                    <Text style={styles.planSubtext}>{t('settings.plans.starterDescription')}</Text>
                   </View>
 
                   <View style={styles.planContainer}>
-                    <TouchableOpacity 
-                      style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]} 
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
                       onPress={async () => {
                         await updateUserPlan('pro');
                         setShowPlanSelection(false);
                         navigation.navigate('GoogleSignUp', { plan: 'pro' });
                       }}
                     >
-                      <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>Pro</Text>
+                      <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('settings.plans.pro')}</Text>
                     </TouchableOpacity>
-                    <Text style={styles.planSubtext}>For professionals. Cloud sync + bulk upload.</Text>
+                    <Text style={styles.planSubtext}>{t('settings.plans.proDescription')}</Text>
                   </View>
-                  
+
                   <View style={styles.planContainer}>
-                    <TouchableOpacity 
-                      style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]} 
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
                       onPress={async () => {
                         await updateUserPlan('business');
                         setShowPlanSelection(false);
                         navigation.navigate('GoogleSignUp', { plan: 'business' });
                       }}
                     >
-                      <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>Business</Text>
+                      <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('settings.plans.business')}</Text>
                     </TouchableOpacity>
-                    <Text style={styles.planSubtext}>For small teams. Includes team management.</Text>
+                    <Text style={styles.planSubtext}>{t('settings.plans.businessDescription')}</Text>
                   </View>
-                  
+
                   <View style={styles.planContainer}>
-                    <TouchableOpacity 
-                      style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]} 
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
                       onPress={async () => {
                         await updateUserPlan('enterprise');
                         setShowPlanSelection(false);
                         navigation.navigate('GoogleSignUp', { plan: 'enterprise' });
                       }}
                     >
-                      <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>Enterprise</Text>
+                      <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('settings.plans.enterprise')}</Text>
                     </TouchableOpacity>
-                    <Text style={styles.planSubtext}>For growing organizations. Unlimited members, multi-location support.</Text>
+                    <Text style={styles.planSubtext}>{t('settings.plans.enterpriseDescription')}</Text>
                   </View>
                 </>
               ) : (
                 <>
                   {/* Show feature buttons with enable/disable based on plan */}
                   <Text style={styles.sectionDescription}>
-                    {userPlan ? 
-                      `Your ${userPlan.charAt(0).toUpperCase() + userPlan.slice(1)} plan features:` :
-                      'Sign in to sync your photos to the cloud and enable team features.'
+                    {userPlan ?
+                      t('settings.planFeatures', { plan: userPlan.charAt(0).toUpperCase() + userPlan.slice(1) }) :
+                      t('settings.signInPrompt')
                     }
                   </Text>
                   
@@ -1085,7 +1093,7 @@ export default function SettingsScreen({ navigation }) {
                           ]}
                           onPress={async () => {
                             if (!canConnectGoogle) {
-                              Alert.alert('Feature Unavailable', 'Google Account connection is available for Pro, Business, and Enterprise plans.');
+                              Alert.alert(t('settings.featureUnavailable'), t('settings.googleAccountFeature'));
                               return;
                             }
                             setIsSigningIn(true);
@@ -1111,7 +1119,7 @@ export default function SettingsScreen({ navigation }) {
                               styles.featureButtonText,
                               (!canConnectGoogle || !isGoogleSignInAvailable) && styles.buttonTextDisabled
                             ]}>
-                              Connect to Google Account
+                              {t('settings.connectToGoogleAccount')}
                             </Text>
                           )}
                         </TouchableOpacity>
@@ -1124,11 +1132,11 @@ export default function SettingsScreen({ navigation }) {
                           ]}
                           onPress={async () => {
                             if (!canSetupTeam) {
-                              Alert.alert('Feature Unavailable', 'Team setup is available for Business and Enterprise plans.');
+                              Alert.alert(t('settings.featureUnavailable'), t('settings.teamSetupFeature'));
                               return;
                             }
                             if (!isAuthenticated) {
-                              Alert.alert('Sign In Required', 'Please connect your Google account first.');
+                              Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
                               return;
                             }
                             await handleSetupTeam();
@@ -1139,21 +1147,21 @@ export default function SettingsScreen({ navigation }) {
                             styles.featureButtonText,
                             !canSetupTeam && styles.buttonTextDisabled
                           ]}>
-                            Set Up Team
+                            {t('settings.setUpTeam')}
                           </Text>
                         </TouchableOpacity>
                         
                         {!isGoogleSignInAvailable && (canConnectGoogle || canSetupTeam) && (
                           <View style={styles.expoGoWarning}>
                             <Text style={styles.expoGoWarningText}>
-                              ⚠️ Google Sign-in requires a development build and is not available in Expo Go.
+                              {t('settings.expoGoWarning')}
                             </Text>
                             <Text style={styles.expoGoWarningSubtext}>
-                              Run: npx expo install expo-dev-client && eas build --profile development
+                              {t('settings.expoGoWarningCommand')}
                             </Text>
                           </View>
                         )}
-                        
+
                         {/* Show plan selection option for Starter users */}
                         {isStarter && (
                           <>
@@ -1162,7 +1170,7 @@ export default function SettingsScreen({ navigation }) {
                               onPress={() => setShowPlanSelection(true)}
                             >
                               <Text style={styles.signInButtonText}>
-                                Upgrade Plan
+                                {t('settings.upgradePlan')}
                               </Text>
                             </TouchableOpacity>
                             <TouchableOpacity
@@ -1170,7 +1178,7 @@ export default function SettingsScreen({ navigation }) {
                               onPress={() => navigation.navigate('JoinTeam')}
                             >
                               <Text style={styles.googleSignInButtonText}>
-                                Join a Team
+                                {t('settings.joinTeam')}
                               </Text>
                             </TouchableOpacity>
                           </>
@@ -1186,25 +1194,25 @@ export default function SettingsScreen({ navigation }) {
               <View style={styles.adminInfoBox}>
                 <View style={styles.adminInfoHeader}>
                   <View style={styles.activeAccountContainer}>
-                    <Text style={styles.activeAccountLabel}>Active Google Account</Text>
+                    <Text style={styles.activeAccountLabel}>{t('settings.activeGoogleAccount')}</Text>
                     <Text style={styles.activeAccountName}>
-                      {displayedActiveAccount?.name || 'Unknown Name'}
+                      {displayedActiveAccount?.name || t('settings.unknownName')}
                     </Text>
                     <Text style={styles.activeAccountEmail}>
-                      {displayedActiveAccount?.email || 'Unknown Email'}
+                      {displayedActiveAccount?.email || t('settings.unknownEmail')}
                     </Text>
                   </View>
                   <TouchableOpacity
                     style={styles.disconnectButton}
                     onPress={handleSignOut}
                   >
-                    <Text style={styles.disconnectButtonText}>Disconnect</Text>
+                    <Text style={styles.disconnectButtonText}>{t('settings.disconnect')}</Text>
                   </TouchableOpacity>
                 </View>
 
                 {isEnterprisePlan && otherEnterpriseAccounts.length > 0 && (
                   <View style={styles.connectedAccountsList}>
-                    <Text style={styles.connectedAccountsTitle}>Other connected accounts</Text>
+                    <Text style={styles.connectedAccountsTitle}>{t('settings.otherConnectedAccounts')}</Text>
                     {otherEnterpriseAccounts.map((account, index) => (
                       <View
                         key={account.id}
@@ -1224,7 +1232,7 @@ export default function SettingsScreen({ navigation }) {
                           </View>
                           <View style={[styles.accountStatusBadge, styles.accountStatusInactive]}>
                             <Text style={[styles.accountStatusText, styles.accountStatusTextInactive]}>
-                              Inactive
+                              {t('settings.inactive')}
                             </Text>
                           </View>
                         </View>
@@ -1238,7 +1246,7 @@ export default function SettingsScreen({ navigation }) {
                             disabled={isSigningIn}
                           >
                             <Text style={styles.accountActionButtonText}>
-                              {isSigningIn ? 'Switching…' : 'Make Active'}
+                              {isSigningIn ? t('settings.switching') : t('settings.makeActive')}
                             </Text>
                           </TouchableOpacity>
                           <TouchableOpacity
@@ -1251,7 +1259,7 @@ export default function SettingsScreen({ navigation }) {
                                 styles.accountRemoveButtonText,
                               ]}
                             >
-                              Remove
+                              {t('settings.remove')}
                             </Text>
                           </TouchableOpacity>
                         </View>
@@ -1305,7 +1313,7 @@ export default function SettingsScreen({ navigation }) {
                           styles.featureButtonText,
                           connectButtonDisabled && styles.buttonTextDisabled
                         ]}>
-                          Connect to Google Account
+                          {t('settings.connectToGoogleAccount')}
                         </Text>
                       )}
                     </TouchableOpacity>
@@ -1323,7 +1331,7 @@ export default function SettingsScreen({ navigation }) {
                           <ActivityIndicator size="small" color="#fff" />
                         ) : (
                           <Text style={styles.featureButtonText}>
-                            Set Up Team
+                            {t('settings.setUpTeam')}
                           </Text>
                         )}
                       </TouchableOpacity>
@@ -1337,19 +1345,19 @@ export default function SettingsScreen({ navigation }) {
               {userMode === 'admin' && isSetupComplete() && (
                 <>
                   <View style={styles.connectedStatus}>
-                    <Text style={styles.connectedText}>✓ Team Connected</Text>
+                    <Text style={styles.connectedText}>Γ£ô {t('settings.teamConnected')}</Text>
                   </View>
-                  
+
                   {/* Editable Team Name */}
                   <View style={styles.teamNameContainer}>
-                    <Text style={styles.teamNameLabel}>Team Name</Text>
+                    <Text style={styles.teamNameLabel}>{t('settings.teamName')}</Text>
                     {editingTeamName ? (
                       <View style={styles.teamNameEditContainer}>
                         <TextInput
                           style={styles.teamNameInput}
                           value={teamNameInput}
                           onChangeText={setTeamNameInput}
-                          placeholder="Enter team name"
+                          placeholder={t('settings.enterTeamName')}
                           placeholderTextColor={COLORS.GRAY}
                           autoFocus={true}
                         />
@@ -1361,7 +1369,7 @@ export default function SettingsScreen({ navigation }) {
                               setEditingTeamName(false);
                             }}
                           >
-                            <Text style={styles.teamNameButtonText}>Save</Text>
+                            <Text style={styles.teamNameButtonText}>{t('common.save')}</Text>
                           </TouchableOpacity>
                           <TouchableOpacity
                             style={[styles.teamNameButton, styles.teamNameButtonCancel]}
@@ -1370,7 +1378,7 @@ export default function SettingsScreen({ navigation }) {
                               setEditingTeamName(false);
                             }}
                           >
-                            <Text style={[styles.teamNameButtonText, styles.teamNameButtonTextCancel]}>Cancel</Text>
+                            <Text style={[styles.teamNameButtonText, styles.teamNameButtonTextCancel]}>{t('common.cancel')}</Text>
                           </TouchableOpacity>
                         </View>
                       </View>
@@ -1386,9 +1394,9 @@ export default function SettingsScreen({ navigation }) {
                           styles.teamNameText,
                           !teamName && styles.teamNameTextPlaceholder
                         ]}>
-                          {teamName || 'Tap to add team name'}
+                          {teamName || t('settings.tapToAddTeamName')}
                         </Text>
-                        <Text style={styles.teamNameEditIcon}>✏️</Text>
+                        <Text style={styles.teamNameEditIcon}>Γ£Å∩╕Å</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -1403,12 +1411,12 @@ export default function SettingsScreen({ navigation }) {
         {userMode !== 'team_member' && (
           <>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Display Settings</Text>
+              <Text style={styles.sectionTitle}>{t('settings.displaySettings')}</Text>
               <View style={styles.settingRow}>
                 <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Show Labels</Text>
+                  <Text style={styles.settingLabel}>{t('settings.showLabels')}</Text>
                   <Text style={styles.settingDescription}>
-                    Display "BEFORE" and "AFTER" labels on all photos
+                    {t('settings.showLabelsDescription')}
                   </Text>
                 </View>
                 <Switch
@@ -1421,11 +1429,11 @@ export default function SettingsScreen({ navigation }) {
 
               <View style={styles.settingRow}>
                 <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Remove / Customize Watermark</Text>
+                  <Text style={styles.settingLabel}>{t('settings.customizeWatermark')}</Text>
                   <Text style={styles.settingDescription}>
                     {customWatermarkEnabled
-                      ? 'Update watermark text or leave blank to remove it'
-                      : 'Use the default ProofPix watermark on exported photos'}
+                      ? t('settings.watermarkCustomDescription')
+                      : t('settings.watermarkDefaultDescription')}
                   </Text>
                 </View>
                 <Switch
@@ -1438,22 +1446,22 @@ export default function SettingsScreen({ navigation }) {
               {customWatermarkEnabled && (
                 <View style={styles.watermarkCustomization}>
                   <View style={styles.watermarkField}>
-                    <Text style={styles.watermarkFieldLabel}>Watermark Text</Text>
+                    <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkText')}</Text>
                     <TextInput
                       style={styles.watermarkInput}
                       value={watermarkText}
                       onChangeText={updateWatermarkText}
-                      placeholder="Leave blank to remove watermark"
+                      placeholder={t('settings.watermarkTextPlaceholder')}
                       placeholderTextColor={COLORS.GRAY}
                     />
                   </View>
                   <View style={styles.watermarkField}>
-                    <Text style={styles.watermarkFieldLabel}>Click Through Link (optional)</Text>
+                    <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkLink')}</Text>
                     <TextInput
                       style={styles.watermarkInput}
                       value={watermarkLink}
                       onChangeText={updateWatermarkLink}
-                      placeholder="https://your-site.com"
+                      placeholder={t('settings.watermarkLinkPlaceholder')}
                       placeholderTextColor={COLORS.GRAY}
                       autoCapitalize="none"
                       autoCorrect={false}
@@ -1462,7 +1470,7 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                   <View style={styles.watermarkColorRow}>
                     <View style={styles.watermarkColorInfo}>
-                      <Text style={styles.watermarkFieldLabel}>Watermark Color</Text>
+                      <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkColor')}</Text>
                       <Text style={styles.watermarkColorValue}>{watermarkSwatchColor}</Text>
                     </View>
                     <TouchableOpacity
@@ -1476,11 +1484,11 @@ export default function SettingsScreen({ navigation }) {
                           { backgroundColor: watermarkSwatchColor },
                         ]}
                       />
-                      <Text style={styles.customSelectorButtonText}>Pick color</Text>
+                      <Text style={styles.customSelectorButtonText}>{t('settings.pickColor')}</Text>
                     </TouchableOpacity>
                   </View>
                   <View style={styles.watermarkOpacityRow}>
-                    <Text style={styles.watermarkFieldLabel}>Opacity</Text>
+                    <Text style={styles.watermarkFieldLabel}>{t('settings.opacity')}</Text>
                     <View style={styles.watermarkOpacityControls}>
                       <WatermarkOpacitySlider
                         value={watermarkOpacityPreview}
@@ -1494,16 +1502,16 @@ export default function SettingsScreen({ navigation }) {
                     </View>
                   </View>
                   <Text style={styles.watermarkHelperText}>
-                    Leave the text empty to remove the watermark entirely. The link is opened when viewers tap the watermark.
+                    {t('settings.watermarkHelperText')}
                   </Text>
                 </View>
               )}
 
               <View style={styles.settingRow}>
                 <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Business</Text>
+                  <Text style={styles.settingLabel}>{t('settings.business')}</Text>
                   <Text style={styles.settingDescription}>
-                    Enable business mode features
+                    {t('settings.businessDescription')}
                   </Text>
                 </View>
                 <Switch
@@ -1517,9 +1525,9 @@ export default function SettingsScreen({ navigation }) {
 
             {/* Label Customization */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Label Customization</Text>
+              <Text style={styles.sectionTitle}>{t('settings.labelCustomization')}</Text>
               <Text style={styles.sectionDescription}>
-                Customize the appearance of BEFORE and AFTER labels
+                {t('settings.labelCustomizationDescription')}
               </Text>
 
               {/* Dummy Photo Preview */}
@@ -1564,22 +1572,22 @@ export default function SettingsScreen({ navigation }) {
                 style={styles.customizeButton}
                 onPress={() => navigation.navigate('LabelCustomization')}
               >
-                <Text style={styles.customizeButtonText}>Customize</Text>
+                <Text style={styles.customizeButtonText}>{t('settings.customize')}</Text>
               </TouchableOpacity>
             </View>
 
             {/* Room Customization */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Folder Customization</Text>
+              <Text style={styles.sectionTitle}>{t('settings.folderCustomization')}</Text>
               <Text style={styles.sectionDescription}>
-                Customize the names and icons of folders in your app
+                {t('settings.folderCustomizationDescription')}
               </Text>
 
               <View style={styles.settingRowStacked}>
                 <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Custom Folders</Text>
+                  <Text style={styles.settingLabel}>{t('settings.customFolders')}</Text>
                   <Text style={styles.settingDescription}>
-                    {customRooms ? `${customRooms.length} custom folders` : 'Using default folders'}
+                    {customRooms ? t('settings.customFoldersCount', { count: customRooms.length }) : t('settings.usingDefaultFolders')}
                   </Text>
                 </View>
               </View>
@@ -1591,19 +1599,19 @@ export default function SettingsScreen({ navigation }) {
                   setShowRoomEditor(true);
                 }}
               >
-                <Text style={styles.customizeButtonText}>Customize</Text>
+                <Text style={styles.customizeButtonText}>{t('settings.customize')}</Text>
               </TouchableOpacity>
             </View>
 
             {/* Upload Structure */}
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Upload Structure</Text>
+              <Text style={styles.sectionTitle}>{t('settings.uploadStructure')}</Text>
 
               <View style={styles.settingRow}>
                 <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>Use folder structure</Text>
+                  <Text style={styles.settingLabel}>{t('settings.useFolderStructure')}</Text>
                   <Text style={styles.settingDescription}>
-                    If off, all photos go into the project folder
+                    {t('settings.useFolderStructureDescription')}
                   </Text>
                 </View>
                 <Switch
@@ -1618,8 +1626,8 @@ export default function SettingsScreen({ navigation }) {
                 <>
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>Before folder</Text>
-                      <Text style={styles.settingDescription}>Uploads to "before" subfolder</Text>
+                      <Text style={styles.settingLabel}>{t('settings.beforeFolder')}</Text>
+                      <Text style={styles.settingDescription}>{t('settings.beforeFolderDescription')}</Text>
                     </View>
                     <Switch
                       value={enabledFolders.before}
@@ -1630,8 +1638,8 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>After folder</Text>
-                      <Text style={styles.settingDescription}>Uploads to "after" subfolder</Text>
+                      <Text style={styles.settingLabel}>{t('settings.afterFolder')}</Text>
+                      <Text style={styles.settingDescription}>{t('settings.afterFolderDescription')}</Text>
                     </View>
                     <Switch
                       value={enabledFolders.after}
@@ -1642,8 +1650,8 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                   <View style={styles.settingRow}>
                     <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>Combined folder</Text>
-                      <Text style={styles.settingDescription}>Uploads to "combined"/formats subfolders</Text>
+                      <Text style={styles.settingLabel}>{t('settings.combinedFolder')}</Text>
+                      <Text style={styles.settingDescription}>{t('settings.combinedFolderDescription')}</Text>
                     </View>
                     <Switch
                       value={enabledFolders.combined}
@@ -1660,15 +1668,15 @@ export default function SettingsScreen({ navigation }) {
 
         {/* Account & Data */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Account & Data</Text>
+          <Text style={styles.sectionTitle}>{t('settings.accountData')}</Text>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>User name</Text>
+            <Text style={styles.label}>{t('settings.userName')}</Text>
             <TextInput
               style={[styles.input, isTeamMember && styles.inputDisabled]}
               value={name}
               onChangeText={setName}
-              placeholder="Enter your name"
+              placeholder={t('settings.enterYourName')}
               placeholderTextColor={COLORS.GRAY}
               onBlur={handleSaveUserInfo}
               editable={!isTeamMember}
@@ -1679,14 +1687,14 @@ export default function SettingsScreen({ navigation }) {
 
           <Text style={styles.sectionDescription}>
             {isTeamMember
-              ? 'Reset will clear local data and disconnect this device from the team.'
-              : 'Reset clears your settings and connected accounts on this device.'}
+              ? t('settings.resetTeamMemberDescription')
+              : t('settings.resetIndividualDescription')}
           </Text>
           <TouchableOpacity
             style={styles.resetButton}
             onPress={handleResetUserData}
           >
-            <Text style={styles.resetButtonText}>Reset User Data</Text>
+            <Text style={styles.resetButtonText}>{t('settings.resetUserData')}</Text>
           </TouchableOpacity>
         </View>
 
@@ -1721,16 +1729,16 @@ export default function SettingsScreen({ navigation }) {
               <View style={styles.customModalHeader}>
                 <Text style={styles.customModalTitle}>
                   {colorModalType === 'text'
-                    ? 'Text Color'
+                    ? t('colorPickerModal.textColor')
                     : colorModalType === 'watermark'
-                    ? 'Watermark Color'
-                    : 'Background Color'}
+                    ? t('colorPickerModal.watermarkColor')
+                    : t('colorPickerModal.backgroundColor')}
                 </Text>
                 <TouchableOpacity
                   onPress={handleCancelColor}
                   style={styles.customModalCloseButton}
                 >
-                  <Text style={styles.customModalCloseText}>✕</Text>
+                  <Text style={styles.customModalCloseText}>Γ£ò</Text>
                 </TouchableOpacity>
               </View>
               <ScrollView
@@ -1764,7 +1772,7 @@ export default function SettingsScreen({ navigation }) {
                         onPress={handleDefaultColor}
                         activeOpacity={0.7}
                       >
-                        <Text style={styles.inlineDefaultButtonText}>Default</Text>
+                        <Text style={styles.inlineDefaultButtonText}>{t('colorPickerModal.default')}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1788,7 +1796,7 @@ export default function SettingsScreen({ navigation }) {
                     style={styles.customApplyButton}
                     onPress={handleApplyColor}
                   >
-                    <Text style={styles.customApplyButtonText}>Apply</Text>
+                    <Text style={styles.customApplyButtonText}>{t('common.apply')}</Text>
                   </TouchableOpacity>
                 </View>
               </ScrollView>
@@ -1798,7 +1806,7 @@ export default function SettingsScreen({ navigation }) {
                     <View style={styles.inlineOverlayBackdrop} />
                   </TouchableWithoutFeedback>
                   <View style={styles.inlineModal}>
-                    <Text style={styles.inlineModalTitle}>Enter Color Code</Text>
+                    <Text style={styles.inlineModalTitle}>{t('labelCustomization.colorPicker.enterColorCode')}</Text>
                     <TextInput
                       style={[
                         styles.inlineModalInput,
@@ -1808,7 +1816,7 @@ export default function SettingsScreen({ navigation }) {
                       onChangeText={handleHexModalChange}
                       autoCapitalize="characters"
                       autoCorrect={false}
-                      placeholder="#FFFFFF or rgb(255, 255, 255)"
+                      placeholder={t('labelCustomization.colorPicker.hexPlaceholderLong')}
                       placeholderTextColor="#888"
                       returnKeyType="done"
                       autoFocus
@@ -1821,13 +1829,13 @@ export default function SettingsScreen({ navigation }) {
                         style={[styles.inlineModalButton, styles.inlineModalCancel]}
                         onPress={handleHexModalCancel}
                       >
-                        <Text style={styles.inlineModalCancelText}>Cancel</Text>
+                        <Text style={styles.inlineModalCancelText}>{t('common.cancel')}</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={[styles.inlineModalButton, styles.inlineModalApply]}
                         onPress={handleHexModalApply}
                       >
-                        <Text style={styles.inlineModalApplyText}>Apply</Text>
+                        <Text style={styles.inlineModalApplyText}>{t('common.apply')}</Text>
                       </TouchableOpacity>
                     </View>
                   </View>
@@ -1847,12 +1855,12 @@ export default function SettingsScreen({ navigation }) {
         >
           <View style={styles.customModalSheet}>
             <View style={styles.customModalHeader}>
-              <Text style={styles.customModalTitle}>Choose Font</Text>
+              <Text style={styles.customModalTitle}>{t('labelCustomization.fontModal.title')}</Text>
               <TouchableOpacity
                 onPress={() => setFontModalVisible(false)}
                 style={styles.customModalCloseButton}
               >
-                <Text style={styles.customModalCloseText}>✕</Text>
+                <Text style={styles.customModalCloseText}>Γ£ò</Text>
               </TouchableOpacity>
             </View>
             <ScrollView style={styles.fontList}>
@@ -1884,7 +1892,7 @@ export default function SettingsScreen({ navigation }) {
                     >
                       BEFORE / AFTER
                     </Text>
-                    {isSelected && <Text style={styles.fontSelectedBadge}>Selected</Text>}
+                    {isSelected && <Text style={styles.fontSelectedBadge}>{t('common.selected')}</Text>}
                   </TouchableOpacity>
                 );
               })}
@@ -1904,32 +1912,32 @@ export default function SettingsScreen({ navigation }) {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Choose a Plan</Text>
-                <TouchableOpacity 
+                <Text style={styles.modalTitle}>{t('planModal.title')}</Text>
+                <TouchableOpacity
                   onPress={() => setShowPlanModal(false)}
                   style={styles.modalCloseButton}
                 >
-                  <Text style={styles.modalCloseText}>✕</Text>
+                  <Text style={styles.modalCloseText}>Γ£ò</Text>
                 </TouchableOpacity>
               </View>
 
               <ScrollView style={styles.modalScrollView}>
                 <View style={styles.planContainer}>
-                  <TouchableOpacity 
-                    style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]} 
+                  <TouchableOpacity
+                    style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
                     onPress={async () => {
                       await updateUserPlan('starter');
                       setShowPlanModal(false);
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>Starter</Text>
+                    <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>Free forever. Easily manage your first project and create stunning before/after photos ready for social sharing.</Text>
+                  <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
                 </View>
 
                 <View style={styles.planContainer}>
-                  <TouchableOpacity 
-                    style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]} 
+                  <TouchableOpacity
+                    style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
                     onPress={async () => {
                       await updateUserPlan('pro');
                       setShowPlanModal(false);
@@ -1938,14 +1946,14 @@ export default function SettingsScreen({ navigation }) {
                       }
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>Pro</Text>
+                    <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>For professionals. Cloud sync + bulk upload.</Text>
+                  <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
                 </View>
-                
+
                 <View style={styles.planContainer}>
-                  <TouchableOpacity 
-                    style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]} 
+                  <TouchableOpacity
+                    style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
                     onPress={async () => {
                       await updateUserPlan('business');
                       setShowPlanModal(false);
@@ -1954,14 +1962,14 @@ export default function SettingsScreen({ navigation }) {
                       }
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>Business</Text>
+                    <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>For small teams. Includes team management.</Text>
+                  <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
                 </View>
-                
+
                 <View style={styles.planContainer}>
-                  <TouchableOpacity 
-                    style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]} 
+                  <TouchableOpacity
+                    style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
                     onPress={async () => {
                       await updateUserPlan('enterprise');
                       setShowPlanModal(false);
@@ -1970,9 +1978,9 @@ export default function SettingsScreen({ navigation }) {
                       }
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>Enterprise</Text>
+                    <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>For growing organizations. Unlimited members, multi-location support.</Text>
+                  <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
                 </View>
               </ScrollView>
             </View>

@@ -16,7 +16,14 @@
       "Bash(npx expo start:*)",
       "Bash(node -c:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(for file in \"c:\\Users\\HP\\Desktop\\Projects\\Active\\Running\\ProofPix\\proof-pix-native\\src\\i18n\\locales\"/*.json)",
+      "Bash(do python -m json.tool \"$file\")",
+      "Bash(/dev/null)",
+      "Bash(done)",
+      "Bash(for lang in ar de fr ru zh)",
+      "Bash(do echo \"Checking $lang.json:\")",
+      "Bash(python:*)"
     ],
     "deny": [],
     "ask": []

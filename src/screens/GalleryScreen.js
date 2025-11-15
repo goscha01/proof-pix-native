@@ -36,6 +36,7 @@ import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import UploadCompletionModal from '../components/UploadCompletionModal';
 import { filterNewPhotos, markPhotosAsUploaded } from '../services/uploadTracker';
 import JSZip from 'jszip';
+import { useTranslation } from 'react-i18next';
 
 const { width } = Dimensions.get('window');
 const SET_NAME_WIDTH = 80;
@@ -45,6 +46,7 @@ const AVAILABLE_WIDTH = width - SET_NAME_WIDTH - CONTAINER_PADDING - PHOTO_SPACI
 const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function GalleryScreen({ navigation, route }) {
+  const { t } = useTranslation();
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
   const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels, userPlan } = useSettings();
   const { userMode, teamInfo, isAuthenticated, folderId, proxySessionId, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
@@ -1180,7 +1182,7 @@ export default function GalleryScreen({ navigation, route }) {
         >
           <Text style={styles.backButtonText}>‹ Back</Text>
         </TouchableOpacity>
-        <Text style={styles.title}>Gallery</Text>
+        <Text style={styles.title}>{t('gallery.title')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -1197,9 +1199,9 @@ export default function GalleryScreen({ navigation, route }) {
 
       <View style={styles.columnHeaders}>
         <View style={styles.setNamePlaceholder} />
-        <Text style={[styles.columnHeader, { color: '#4CAF50' }]}>BEFORE</Text>
-        <Text style={[styles.columnHeader, { color: '#2196F3' }]}>AFTER</Text>
-        <Text style={[styles.columnHeader, { color: '#FFC107', marginRight: 0 }]}>COMBINED</Text>
+        <Text style={[styles.columnHeader, { color: '#4CAF50' }]}>{t('gallery.before')}</Text>
+        <Text style={[styles.columnHeader, { color: '#2196F3' }]}>{t('gallery.after')}</Text>
+        <Text style={[styles.columnHeader, { color: '#FFC107', marginRight: 0 }]}>{t('gallery.combined')}</Text>
       </View>
 
       {photos.length === 0 || !activeProjectId ? (
@@ -1251,7 +1253,7 @@ export default function GalleryScreen({ navigation, route }) {
               {sharing ? (
                 <ActivityIndicator />
               ) : (
-                <Text style={styles.shareButtonText}>Share</Text>
+                <Text style={styles.shareButtonText}>{t('gallery.share')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -1316,7 +1318,7 @@ export default function GalleryScreen({ navigation, route }) {
               {sharing ? (
                 <ActivityIndicator />
               ) : (
-                <Text style={styles.shareButtonText}>Share</Text>
+                <Text style={styles.shareButtonText}>{t('gallery.share')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -1331,7 +1333,7 @@ export default function GalleryScreen({ navigation, route }) {
       >
         <View style={styles.uploadModalContainer}>
           <View style={styles.uploadModalContent}>
-            <Text style={styles.uploadModalTitle}>Generating Combined Photos</Text>
+            <Text style={styles.uploadModalTitle}>{t('gallery.generatingCombined')}</Text>
             <Text style={styles.uploadModalProgress}>
               {renderingProgress.current} / {renderingProgress.total}
             </Text>
@@ -1397,20 +1399,20 @@ export default function GalleryScreen({ navigation, route }) {
       >
         <View style={styles.optionsModalOverlay}>
           <View style={styles.optionsModalContent}>
-            <Text style={styles.optionsTitle}>Upgrade required</Text>
-            <Text style={[styles.optionsSectionLabel, { marginBottom: 16 }]}>Unlock more formats with Business</Text>
+            <Text style={styles.optionsTitle}>{t('gallery.upgradeRequired')}</Text>
+            <Text style={[styles.optionsSectionLabel, { marginBottom: 16 }]}>{t('gallery.unlockFormats')}</Text>
             <View style={[styles.optionsActionsRow, { marginTop: 0 }]}>
               <TouchableOpacity
                 style={[styles.actionBtn, styles.actionPrimary, styles.actionHalf]}
                 onPress={() => setUpgradeVisible(false)}
               >
-                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Upgrade</Text>
+                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>{t('gallery.upgrade')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.actionBtn, styles.actionCancel, styles.actionHalf]}
                 onPress={() => setUpgradeVisible(false)}
               >
-                <Text style={styles.actionBtnText}>Not now</Text>
+                <Text style={styles.actionBtnText}>{t('gallery.notNow')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1426,7 +1428,7 @@ export default function GalleryScreen({ navigation, route }) {
         <View style={styles.uploadModalContainer}>
           <View style={styles.uploadModalContent}>
             <ActivityIndicator size="large" />
-            <Text style={styles.uploadModalTitle}>Uploading Photos</Text>
+            <Text style={styles.uploadModalTitle}>{t('gallery.uploadingPhotos')}</Text>
             <Text style={styles.uploadModalProgress}>
               {uploadProgress.current} / {uploadProgress.total}
             </Text>
@@ -1456,7 +1458,7 @@ export default function GalleryScreen({ navigation, route }) {
                   }
                 }}
               >
-                <Text style={[styles.actionBtnText, { textTransform: 'none' }]}>Cancel upload</Text>
+                <Text style={[styles.actionBtnText, { textTransform: 'none' }]}>{t('gallery.cancelUpload')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1472,27 +1474,27 @@ export default function GalleryScreen({ navigation, route }) {
       >
         <View style={styles.optionsModalOverlay}>
           <View style={styles.optionsModalContent}>
-            <Text style={styles.optionsTitle}>What would you like to upload?</Text>
+            <Text style={styles.optionsTitle}>{t('gallery.whatToUpload')}</Text>
 
-            <Text style={styles.optionsSectionLabel}>Photo types</Text>
+            <Text style={styles.optionsSectionLabel}>{t('gallery.photoTypes')}</Text>
             <View style={styles.optionsChipsRow}>
               <TouchableOpacity
                 style={[styles.chip, selectedTypes.before && styles.chipActive]}
                 onPress={() => setSelectedTypes(prev => ({ ...prev, before: !prev.before }))}
               >
-                <Text style={[styles.chipText, selectedTypes.before && styles.chipTextActive]}>Before</Text>
+                <Text style={[styles.chipText, selectedTypes.before && styles.chipTextActive]}>{t('camera.before')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.chip, selectedTypes.after && styles.chipActive]}
                 onPress={() => setSelectedTypes(prev => ({ ...prev, after: !prev.after }))}
               >
-                <Text style={[styles.chipText, selectedTypes.after && styles.chipTextActive]}>After</Text>
+                <Text style={[styles.chipText, selectedTypes.after && styles.chipTextActive]}>{t('camera.after')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.chip, selectedTypes.combined && styles.chipActive]}
                 onPress={() => setSelectedTypes(prev => ({ ...prev, combined: !prev.combined }))}
               >
-                <Text style={[styles.chipText, selectedTypes.combined && styles.chipTextActive]}>Combined</Text>
+                <Text style={[styles.chipText, selectedTypes.combined && styles.chipTextActive]}>{t('camera.combined')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -1504,13 +1506,13 @@ export default function GalleryScreen({ navigation, route }) {
                     style={[styles.actionBtn, styles.actionCancel, { marginTop: 12 }]}
                     onPress={() => setShowAdvancedFormats(true)}
                   >
-                    <Text style={styles.actionBtnText}>Show advanced formats</Text>
+                    <Text style={styles.actionBtnText}>{t('gallery.showAdvancedFormats')}</Text>
                   </TouchableOpacity>
                 )}
 
                 {showAdvancedFormats && (
                   <>
-                    <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>Stacked formats</Text>
+                    <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>{t('gallery.stackedFormats')}</Text>
                     <View style={styles.optionsChipsRow}>
                       {Object.entries(TEMPLATE_CONFIGS)
                         .filter(([k, cfg]) => cfg.layout === 'stack')
@@ -1525,7 +1527,7 @@ export default function GalleryScreen({ navigation, route }) {
                         ))}
                     </View>
 
-                    <Text style={[styles.optionsSectionLabel, { marginTop: 12 }]}>Side-by-side formats</Text>
+                    <Text style={[styles.optionsSectionLabel, { marginTop: 12 }]}>{t('gallery.sideBySideFormats')}</Text>
                     <View style={styles.optionsChipsRow}>
                       {Object.entries(TEMPLATE_CONFIGS)
                         .filter(([k, cfg]) => cfg.layout === 'sidebyside')
@@ -1544,7 +1546,7 @@ export default function GalleryScreen({ navigation, route }) {
                       style={[styles.actionBtn, styles.actionCancel, { marginTop: 12 }]}
                       onPress={() => setShowAdvancedFormats(false)}
                     >
-                      <Text style={styles.actionBtnText}>Hide advanced formats</Text>
+                      <Text style={styles.actionBtnText}>{t('gallery.hideAdvancedFormats')}</Text>
                     </TouchableOpacity>
                   </>
                 )}
@@ -1553,10 +1555,10 @@ export default function GalleryScreen({ navigation, route }) {
 
             <View style={styles.optionsActionsRow}>
               <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setOptionsVisible(false)}>
-                <Text style={styles.actionBtnText}>Cancel</Text>
+                <Text style={styles.actionBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} onPress={startUploadWithOptions}>
-                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Start Upload</Text>
+                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>{t('gallery.startUpload')}</Text>
               </TouchableOpacity>
             </View>
             {/* Inline upgrade overlay (absolute) to ensure it's above any content */}
@@ -1574,13 +1576,13 @@ export default function GalleryScreen({ navigation, route }) {
                         navigation.navigate('Settings');
                       }}
                     >
-                      <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Upgrade</Text>
+                      <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>{t('gallery.upgrade')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.actionCancel, styles.actionHalf]}
                       onPress={() => setUpgradeVisible(false)}
                     >
-                      <Text style={styles.actionBtnText}>Not now</Text>
+                      <Text style={styles.actionBtnText}>{t('gallery.notNow')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -1599,7 +1601,7 @@ export default function GalleryScreen({ navigation, route }) {
       >
         <View style={styles.optionsModalOverlay}>
           <View style={styles.optionsModalContent}>
-            <Text style={styles.optionsTitle}>Share Project</Text>
+            <Text style={styles.optionsTitle}>{t('gallery.shareProject')}</Text>
 
             <View>
               <View style={{ marginTop: 4 }} />
@@ -1655,7 +1657,7 @@ export default function GalleryScreen({ navigation, route }) {
 
               <View style={styles.optionsActionsRowCenter}>
                 <TouchableOpacity style={[styles.actionBtn, styles.actionWide, styles.actionCancel]} onPress={() => setManageVisible(false)}>
-                  <Text style={styles.actionBtnText}>Close</Text>
+                  <Text style={styles.actionBtnText}>{t('gallery.close')}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -1673,8 +1675,8 @@ export default function GalleryScreen({ navigation, route }) {
         <View style={styles.modalOverlay}>
           <View style={styles.loadingModal}>
             <ActivityIndicator size="large" />
-            <Text style={styles.loadingText}>Preparing photos for sharing...</Text>
-            <Text style={styles.loadingSubtext}>This may take a few seconds</Text>
+            <Text style={styles.loadingText}>{t('gallery.preparingPhotos')}</Text>
+            <Text style={styles.loadingSubtext}>{t('gallery.mayTakeFewSeconds')}</Text>
           </View>
         </View>
       </Modal>
@@ -1688,39 +1690,39 @@ export default function GalleryScreen({ navigation, route }) {
       >
         <View style={styles.optionsModalOverlay}>
           <View style={styles.optionsModalContent}>
-            <Text style={styles.optionsTitle}>What would you like to share?</Text>
+            <Text style={styles.optionsTitle}>{t('gallery.whatToShare')}</Text>
 
-            <Text style={styles.optionsSectionLabel}>Photo types</Text>
+            <Text style={styles.optionsSectionLabel}>{t('gallery.photoTypes')}</Text>
             <View style={styles.optionsChipsRow}>
               <TouchableOpacity
                 style={[styles.chip, selectedShareTypes.before && styles.chipActive]}
                 onPress={() => setSelectedShareTypes(prev => ({ ...prev, before: !prev.before }))}
               >
-                <Text style={[styles.chipText, selectedShareTypes.before && styles.chipTextActive]}>Before</Text>
+                <Text style={[styles.chipText, selectedShareTypes.before && styles.chipTextActive]}>{t('camera.before')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.chip, selectedShareTypes.after && styles.chipActive]}
                 onPress={() => setSelectedShareTypes(prev => ({ ...prev, after: !prev.after }))}
               >
-                <Text style={[styles.chipText, selectedShareTypes.after && styles.chipTextActive]}>After</Text>
+                <Text style={[styles.chipText, selectedShareTypes.after && styles.chipTextActive]}>{t('camera.after')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.chip, selectedShareTypes.combined && styles.chipActive]}
                 onPress={() => setSelectedShareTypes(prev => ({ ...prev, combined: !prev.combined }))}
               >
-                <Text style={[styles.chipText, selectedShareTypes.combined && styles.chipTextActive]}>Combined</Text>
+                <Text style={[styles.chipText, selectedShareTypes.combined && styles.chipTextActive]}>{t('camera.combined')}</Text>
               </TouchableOpacity>
             </View>
 
             <View style={styles.optionsActionsRow}>
               <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setShareOptionsVisible(false)}>
-                <Text style={styles.actionBtnText}>Cancel</Text>
+                <Text style={styles.actionBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} onPress={() => {
                   setShareOptionsVisible(false);
                   startSharingWithOptions();
               }}>
-                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>Prepare to Share</Text>
+                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>{t('gallery.prepareToShare')}</Text>
               </TouchableOpacity>
             </View>
           </View>

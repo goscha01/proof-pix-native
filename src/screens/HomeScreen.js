@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { usePhotos } from '../context/PhotoContext';
 import { ROOMS, COLORS, PHOTO_MODES } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
@@ -30,6 +31,7 @@ const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 60) / 2; // 2 columns with padding
 
 export default function HomeScreen({ navigation }) {
+  const { t } = useTranslation();
   const {
     currentRoom,
     setCurrentRoom,
@@ -154,20 +156,20 @@ export default function HomeScreen({ navigation }) {
     
     if (isDefaultRoom) {
       Alert.alert(
-        'Protected Folder',
-        'This is a default folder. Please go to Settings > Folder Customization and check "Allow deletion of default folders" to delete it.',
-        [{ text: 'OK' }]
+        t('home.protectedFolder'),
+        t('home.protectedFolderMessage'),
+        [{ text: t('common.confirm') }]
       );
       return;
     }
 
     Alert.alert(
-      'Delete Folder',
-      `Are you sure you want to delete "${room.name}"?`,
+      t('home.deleteFolder'),
+      t('home.deleteFolderConfirm', { name: room.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         { 
-          text: 'Delete', 
+          text: t('common.delete'), 
           style: 'destructive',
           onPress: () => {
             if (customRooms) {
@@ -474,12 +476,12 @@ export default function HomeScreen({ navigation }) {
       if (!photoSet) return;
       
       Alert.alert(
-        'Delete Photo Set',
-        `Are you sure you want to delete "${photoSet.name}" and all its related photos (before, after, combined)? This cannot be undone.`,
+        t('home.deletePhotoSet'),
+        t('home.deletePhotoSetConfirm', { name: photoSet.name }),
         [
-          { text: 'Cancel', style: 'cancel', onPress: () => longPressTriggered.current = false },
+          { text: t('common.cancel'), style: 'cancel', onPress: () => longPressTriggered.current = false },
           { 
-            text: 'Delete', 
+            text: t('common.delete'), 
             style: 'destructive', 
             onPress: () => {
               deletePhotoSet(photoSet.id);
@@ -717,7 +719,7 @@ export default function HomeScreen({ navigation }) {
         });
       }
     } catch (e) {
-      Alert.alert('Error', e?.message || 'Failed to create project');
+      Alert.alert(t('common.error'), e?.message || t('projects.createError'));
     }
   };
 
@@ -753,11 +755,11 @@ export default function HomeScreen({ navigation }) {
     ).filter(Boolean);
     
     Alert.alert(
-      'Delete Projects',
-      `Delete ${selectedProjects.size} project(s) and all their photos? This cannot be undone.\n\n${projectNames.join(', ')}`,
+      t('projects.deleteProjects'),
+      t('projects.deleteProjectsConfirm', { count: selectedProjects.size, names: projectNames.join(', ') }),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: async () => {
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('common.delete'), style: 'destructive', onPress: async () => {
           const wasActiveProjectSelected = selectedProjects.has(activeProjectId);
           for (const projectId of selectedProjects) {
             await deleteProject(projectId, { deleteFromStorage: true });
@@ -785,10 +787,10 @@ export default function HomeScreen({ navigation }) {
 
   const handleDisabledDeleteClick = () => {
     Alert.alert(
-      'Select Projects to Delete',
-      'To delete projects, long press on project cards to enter selection mode, then select the projects you want to delete.',
+      t('projects.selectToDelete'),
+      t('projects.selectToDeleteHint'),
       [
-        { text: 'OK', style: 'default' }
+        { text: t('common.confirm'), style: 'default' }
       ]
     );
   };
@@ -860,7 +862,7 @@ export default function HomeScreen({ navigation }) {
               {rooms.find((r) => r.id === currentRoom)?.icon || '📷'}
             </Text>
             <Text style={styles.addPhotoText}>
-              {!activeProjectId ? 'Select Project' : 'Take Photo'}
+              {!activeProjectId ? t('home.selectProject') : t('camera.takePhoto')}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1063,7 +1065,7 @@ export default function HomeScreen({ navigation }) {
         <Text style={styles.addPhotoIcon}>
           {rooms.find((r) => r.id === currentRoom)?.icon || '📷'}
         </Text>
-        <Text style={styles.addPhotoText}>Take Photo</Text>
+        <Text style={styles.addPhotoText}>{t('camera.takePhoto')}</Text>
       </TouchableOpacity>
     );
 
@@ -1095,7 +1097,7 @@ export default function HomeScreen({ navigation }) {
       {/* Active project name (tiny line under header) */}
       <View style={styles.projectNameContainer}>
         <Text style={styles.projectNameText}>
-          {projects.find(p => p.id === activeProjectId)?.name || 'No project selected'}
+          {projects.find(p => p.id === activeProjectId)?.name || t('projects.noProjects')}
         </Text>
         <UploadIndicatorLine 
           uploadStatus={uploadStatus}
@@ -1119,7 +1121,7 @@ export default function HomeScreen({ navigation }) {
         style={[styles.allPhotosButtonBottom, { backgroundColor: '#F2C31B' }]}
         onPress={() => setOpenProjectVisible(true)}
       >
-        <Text style={[styles.allPhotosButtonText, { color: '#000' }]}>📂 Manage Projects</Text>
+        <Text style={[styles.allPhotosButtonText, { color: '#000' }]}>{t('home.manageProjects')}</Text>
       </TouchableOpacity>
 
       {/* Full-screen photo view - single photo */}
@@ -1138,13 +1140,13 @@ export default function HomeScreen({ navigation }) {
                 {fullScreenIndex + 1} / {fullScreenPhotos.length}
               </Text>
               <Text style={styles.fullScreenHint}>
-                ← → Navigate • ↑ ↓ Close
+                ← → {t('home.navigate')} • ↑ ↓ {t('home.close')}
               </Text>
             </View>
           ) : (
             <View style={styles.fullScreenNavigation}>
               <Text style={styles.fullScreenHint}>
-                ↑ ↓ Close
+                ↑ ↓ {t('home.close')}
               </Text>
             </View>
           )}
@@ -1183,13 +1185,13 @@ export default function HomeScreen({ navigation }) {
                 {fullScreenIndex + 1} / {fullScreenPhotos.length}
               </Text>
               <Text style={styles.fullScreenHint}>
-                ← → Navigate • ↑ ↓ Close
+                ← → {t('home.navigate')} • ↑ ↓ {t('home.close')}
               </Text>
             </View>
           ) : (
             <View style={styles.fullScreenNavigation}>
               <Text style={styles.fullScreenHint}>
-                ↑ ↓ Close
+                ↑ ↓ {t('home.close')}
               </Text>
             </View>
           )}
@@ -1205,11 +1207,11 @@ export default function HomeScreen({ navigation }) {
       >
         <View style={styles.optionsModalOverlay}>
           <View style={styles.optionsModalContent}>
-            <Text style={styles.optionsTitle}>Manage Projects</Text>
+            <Text style={styles.optionsTitle}>{t('home.manageProjects')}</Text>
 
             <ScrollView style={styles.projectList} showsVerticalScrollIndicator={true}>
               {projects.length === 0 ? (
-                <Text style={styles.projectItemText}>No saved projects found</Text>
+                <Text style={styles.projectItemText}>{t('projects.noProjects')}</Text>
               ) : (
                 projects.map((proj) => {
                   const isSelected = selectedProjects.has(proj.id);
@@ -1238,7 +1240,7 @@ export default function HomeScreen({ navigation }) {
                         )}
                         <Text style={styles.projectItemText}>
                           📁 {proj.name} {isCurrent && !isMultiSelectMode ? (
-                            <Text style={{ color: '#FFC107' }}> (current)</Text>
+                            <Text style={{ color: '#FFC107' }}> {t('projects.current')}</Text>
                           ) : ''}
                         </Text>
                       </View>
@@ -1257,7 +1259,7 @@ export default function HomeScreen({ navigation }) {
                     setTimeout(() => openNewProjectModal(false), 50);
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ New Project</Text>
+                  <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ {t('home.newProject')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1275,7 +1277,7 @@ export default function HomeScreen({ navigation }) {
                     styles.actionBtnText,
                     { color: selectedProjects.size > 0 ? '#CC0000' : '#999' }
                   ]}>
-                    🗑️ Delete Selected ({selectedProjects.size})
+                    🗑️ {t('home.deleteSelected')} ({selectedProjects.size})
                   </Text>
                 </TouchableOpacity>
 
@@ -1287,7 +1289,7 @@ export default function HomeScreen({ navigation }) {
                     navigation.navigate('Gallery');
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: '#000' }]}>🖼️ Gallery</Text>
+                  <Text style={[styles.actionBtnText, { color: '#000' }]}>🖼️ {t('home.gallery')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1298,14 +1300,14 @@ export default function HomeScreen({ navigation }) {
                     navigation.navigate('Gallery', { openManage: true });
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: '#000' }]}>📤 Share Project</Text>
+                  <Text style={[styles.actionBtnText, { color: '#000' }]}>📤 {t('home.shareProject')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: '#F2F2F2', marginTop: 8 }]}
                   onPress={exitMultiSelectMode}
                 >
-                  <Text style={styles.actionBtnText}>Cancel Selection</Text>
+                  <Text style={styles.actionBtnText}>{t('home.cancelSelection')}</Text>
                 </TouchableOpacity>
               </>
             ) : (
@@ -1317,7 +1319,7 @@ export default function HomeScreen({ navigation }) {
                     setTimeout(() => openNewProjectModal(false), 50);
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ New Project</Text>
+                  <Text style={[styles.actionBtnText, { color: 'white' }]}>＋ {t('home.newProject')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1331,7 +1333,7 @@ export default function HomeScreen({ navigation }) {
                   onPress={handleDisabledDeleteClick}
                 >
                   <Text style={[styles.actionBtnText, { color: '#999' }]}>
-                    🗑️ Delete Selected (0)
+                    🗑️ {t('home.deleteSelected')} (0)
                   </Text>
                 </TouchableOpacity>
 
@@ -1342,7 +1344,7 @@ export default function HomeScreen({ navigation }) {
                     navigation.navigate('Gallery');
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: '#000' }]}>🖼️ Gallery</Text>
+                  <Text style={[styles.actionBtnText, { color: '#000' }]}>🖼️ {t('home.gallery')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1352,14 +1354,14 @@ export default function HomeScreen({ navigation }) {
                     navigation.navigate('Gallery', { openManage: true });
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: '#000' }]}>📤 Share Project</Text>
+                  <Text style={[styles.actionBtnText, { color: '#000' }]}>📤 {t('home.shareProject')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: '#F2F2F2', marginTop: 8 }]}
                   onPress={() => setOpenProjectVisible(false)}
                 >
-                  <Text style={styles.actionBtnText}>Close</Text>
+                  <Text style={styles.actionBtnText}>{t('common.close')}</Text>
                 </TouchableOpacity>
               </>
             )}
@@ -1375,7 +1377,7 @@ export default function HomeScreen({ navigation }) {
       >
         <View style={styles.optionsModalOverlay}>
           <View style={styles.optionsModalContent}>
-            <Text style={styles.optionsTitle}>New Project</Text>
+            <Text style={styles.optionsTitle}>{t('projects.newProjectTitle')}</Text>
             <View style={{ width: '92%', marginTop: 8 }}>
               <TextInput
                 style={{
@@ -1388,16 +1390,16 @@ export default function HomeScreen({ navigation }) {
                 }}
                 value={newProjectName}
                 onChangeText={setNewProjectName}
-                placeholder="Project name"
+                placeholder={t('projects.projectName')}
                 placeholderTextColor={COLORS.GRAY}
               />
             </View>
             <View style={{ flexDirection: 'row', marginTop: 12 }}>
               <TouchableOpacity style={[styles.actionBtn, { backgroundColor: '#F2F2F2', flex: 1, marginRight: 6 }]} onPress={() => setNewProjectVisible(false)}>
-                <Text style={styles.actionBtnText}>Cancel</Text>
+                <Text style={styles.actionBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, { flex: 1, marginLeft: 6 }]} onPress={handleCreateProject}>
-                <Text style={[styles.actionBtnText, { color: 'white' }]}>Create</Text>
+                <Text style={[styles.actionBtnText, { color: 'white' }]}>{t('projects.create')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -1420,7 +1422,7 @@ export default function HomeScreen({ navigation }) {
                 }}
               >
                 <Text style={styles.contextMenuIcon}>➕</Text>
-                <Text style={styles.contextMenuText}>Add Folder</Text>
+                <Text style={styles.contextMenuText}>{t('home.addFolder')}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
@@ -1431,7 +1433,7 @@ export default function HomeScreen({ navigation }) {
                 }}
               >
                 <Text style={styles.contextMenuIcon}>📋</Text>
-                <Text style={styles.contextMenuText}>Duplicate Folder</Text>
+                <Text style={styles.contextMenuText}>{t('home.duplicateFolder')}</Text>
               </TouchableOpacity>
               
               <TouchableOpacity
@@ -1442,7 +1444,7 @@ export default function HomeScreen({ navigation }) {
                 }}
               >
                 <Text style={styles.contextMenuIcon}>🗑️</Text>
-                <Text style={[styles.contextMenuText, styles.contextMenuTextDanger]}>Delete Folder</Text>
+                <Text style={[styles.contextMenuText, styles.contextMenuTextDanger]}>{t('home.deleteFolder')}</Text>
               </TouchableOpacity>
             </View>
           </View>
