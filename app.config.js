@@ -97,7 +97,7 @@ export default {
         "expo-build-properties",
         {
           "ios": {
-            "useFrameworks": "dynamic",
+            "useFrameworks": "static",
             "deploymentTarget": "15.1"
           },
           "android": {
@@ -108,7 +108,8 @@ export default {
         }
       ],
       "expo-font",
-      "./plugins/withImageCompositor.js"
+      "./plugins/withImageCompositor.js",
+      "./plugins/withFirebaseStaticFramework.js"
     ],
     extra: {
       eas: {
