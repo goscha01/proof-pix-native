@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,6 +13,7 @@ import { RobotoMono_700Bold } from '@expo-google-fonts/roboto-mono';
 import { Lato_700Bold } from '@expo-google-fonts/lato';
 import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 import { Oswald_600SemiBold } from '@expo-google-fonts/oswald';
+import analytics from '@react-native-firebase/analytics';
 import './src/i18n/i18n'; // Initialize i18n
 
 // Screens
@@ -158,6 +159,9 @@ const linking = {
 };
 
 export default function App() {
+  const navigationRef = useRef();
+  const routeNameRef = useRef();
+
   const [fontsLoaded] = useFonts({
     Montserrat_700Bold,
     PlayfairDisplay_700Bold,
@@ -166,6 +170,11 @@ export default function App() {
     Poppins_600SemiBold,
     Oswald_600SemiBold,
   });
+
+  useEffect(() => {
+    // Enable analytics collection on app start
+    analytics().setAnalyticsCollectionEnabled(true);
+  }, []);
 
   if (!fontsLoaded) {
     return (
@@ -182,7 +191,29 @@ export default function App() {
         <SettingsProvider>
           <AdminProvider>
             <PhotoProvider>
-              <NavigationContainer linking={linking} fallback={<Text>Loading...</Text>}>
+              <NavigationContainer
+                ref={navigationRef}
+                linking={linking}
+                fallback={<Text>Loading...</Text>}
+                onReady={() => {
+                  routeNameRef.current = navigationRef.current.getCurrentRoute().name;
+                }}
+                onStateChange={async () => {
+                  const previousRouteName = routeNameRef.current;
+                  const currentRouteName = navigationRef.current.getCurrentRoute().name;
+
+                  if (previousRouteName !== currentRouteName) {
+                    // Log screen view to Firebase Analytics
+                    await analytics().logScreenView({
+                      screen_name: currentRouteName,
+                      screen_class: currentRouteName,
+                    });
+                  }
+
+                  // Save the current route name for next comparison
+                  routeNameRef.current = currentRouteName;
+                }}
+              >
                 <AppNavigator />
               </NavigationContainer>
             </PhotoProvider>
