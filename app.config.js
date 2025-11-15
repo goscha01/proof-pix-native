@@ -108,7 +108,6 @@ export default {
         }
       ],
       "expo-font",
-      "./plugins/withFirebasePodfile.js",
       "./plugins/withImageCompositor.js"
     ],
     extra: {
