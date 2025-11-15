@@ -1,3 +1,4 @@
+import firebase from '@react-native-firebase/app';
 import analytics from '@react-native-firebase/analytics';
 
 /**
@@ -6,16 +7,33 @@ import analytics from '@react-native-firebase/analytics';
  */
 
 /**
+ * Check if Firebase is initialized
+ */
+const isFirebaseReady = () => {
+  try {
+    return firebase.apps.length > 0;
+  } catch (error) {
+    console.error('[Analytics] Error checking Firebase status:', error);
+    return false;
+  }
+};
+
+/**
  * Log a custom event to Firebase Analytics
  * @param {string} eventName - Name of the event
  * @param {object} params - Parameters associated with the event
  */
 export const logEvent = async (eventName, params = {}) => {
+  if (!isFirebaseReady()) {
+    console.warn('[Analytics] Firebase not initialized, skipping event:', eventName);
+    return;
+  }
+
   try {
     await analytics().logEvent(eventName, params);
-    console.log(`Analytics event logged: ${eventName}`, params);
+    console.log(`[Analytics] Event logged: ${eventName}`, params);
   } catch (error) {
-    console.error('Error logging analytics event:', error);
+    console.error('[Analytics] Error logging event:', error);
   }
 };
 
@@ -25,14 +43,19 @@ export const logEvent = async (eventName, params = {}) => {
  * @param {string} screenClass - Class of the screen (optional)
  */
 export const logScreenView = async (screenName, screenClass = screenName) => {
+  if (!isFirebaseReady()) {
+    console.warn('[Analytics] Firebase not initialized, skipping screen view:', screenName);
+    return;
+  }
+
   try {
     await analytics().logScreenView({
       screen_name: screenName,
       screen_class: screenClass,
     });
-    console.log(`Screen view logged: ${screenName}`);
+    console.log(`[Analytics] Screen view logged: ${screenName}`);
   } catch (error) {
-    console.error('Error logging screen view:', error);
+    console.error('[Analytics] Error logging screen view:', error);
   }
 };
 

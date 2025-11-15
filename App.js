@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -13,6 +13,7 @@ import { RobotoMono_700Bold } from '@expo-google-fonts/roboto-mono';
 import { Lato_700Bold } from '@expo-google-fonts/lato';
 import { Poppins_600SemiBold } from '@expo-google-fonts/poppins';
 import { Oswald_600SemiBold } from '@expo-google-fonts/oswald';
+import firebase from '@react-native-firebase/app';
 import analytics from '@react-native-firebase/analytics';
 import './src/i18n/i18n'; // Initialize i18n
 
@@ -161,6 +162,7 @@ const linking = {
 export default function App() {
   const navigationRef = useRef();
   const routeNameRef = useRef();
+  const [firebaseInitialized, setFirebaseInitialized] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Montserrat_700Bold,
@@ -172,8 +174,28 @@ export default function App() {
   });
 
   useEffect(() => {
-    // Enable analytics collection on app start
-    analytics().setAnalyticsCollectionEnabled(true);
+    // Initialize Firebase and Analytics
+    const initializeFirebase = async () => {
+      try {
+        // Check if Firebase is already initialized
+        if (!firebase.apps.length) {
+          console.log('[Firebase] No apps initialized, waiting for auto-init...');
+        } else {
+          console.log('[Firebase] App already initialized:', firebase.app().name);
+        }
+
+        // Enable analytics collection
+        await analytics().setAnalyticsCollectionEnabled(true);
+        console.log('[Firebase] Analytics enabled');
+        setFirebaseInitialized(true);
+      } catch (error) {
+        console.error('[Firebase] Initialization error:', error);
+        // Set as initialized anyway to not block the app
+        setFirebaseInitialized(true);
+      }
+    };
+
+    initializeFirebase();
   }, []);
 
   if (!fontsLoaded) {
@@ -202,12 +224,17 @@ export default function App() {
                   const previousRouteName = routeNameRef.current;
                   const currentRouteName = navigationRef.current.getCurrentRoute().name;
 
-                  if (previousRouteName !== currentRouteName) {
+                  if (previousRouteName !== currentRouteName && firebaseInitialized) {
                     // Log screen view to Firebase Analytics
-                    await analytics().logScreenView({
-                      screen_name: currentRouteName,
-                      screen_class: currentRouteName,
-                    });
+                    try {
+                      await analytics().logScreenView({
+                        screen_name: currentRouteName,
+                        screen_class: currentRouteName,
+                      });
+                      console.log('[Analytics] Screen view logged:', currentRouteName);
+                    } catch (error) {
+                      console.error('[Analytics] Error logging screen view:', error);
+                    }
                   }
 
                   // Save the current route name for next comparison

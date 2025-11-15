@@ -16,7 +16,9 @@
       "Bash(npx expo start:*)",
       "Bash(node -c:*)",
       "Bash(npx tsc:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "Bash(timeout:*)",
+      "Bash(nul)"
     ],
     "deny": [],
     "ask": []
