@@ -108,7 +108,6 @@ export default {
         }
       ],
       "@react-native-firebase/app",
-      "@react-native-firebase/analytics",
       "expo-font",
       "./plugins/withImageCompositor.js"
     ],
