@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/rooms';
 import { ROOMS } from '../constants/rooms';
+import { useTranslation } from 'react-i18next';
 
 const ROOM_ICONS = [
   '🍳', '🛁', '🛏️', '🛋️', '🍽️', '💼', '🚿', '🚪', '🪟', '🪑',
@@ -320,6 +321,7 @@ const ROOM_ICONS = [
 ];
 
 export default function RoomEditor({ visible, onClose, onSave, initialRooms = null, mode = 'customize', editRoom = null }) {
+  const { t } = useTranslation();
   const [rooms, setRooms] = useState([]);
   const [editingRoom, setEditingRoom] = useState(null);
   const [roomName, setRoomName] = useState('');
@@ -390,10 +392,10 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
 
   const handleAddRoom = () => {
     if (rooms.length >= 10) {
-      Alert.alert('Limit Reached', 'You can have a maximum of 10 rooms.');
+      Alert.alert(t('roomEditor.limitReached'), t('roomEditor.limitReachedMessage'));
       return;
     }
-    
+
     const newRoom = {
       id: `room_${Date.now()}`,
       name: 'New Room',
@@ -402,9 +404,9 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
     };
     const updatedRooms = [...rooms, newRoom];
     setRooms(updatedRooms);
-    
+
     // Immediately save the changes
-    // 
+    //
     onSave(updatedRooms);
 
     setEditingRoom(newRoom.id);
@@ -425,9 +427,9 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
   };
 
   const handleSaveRoom = () => {
-    // 
+    //
     if (!roomName.trim()) {
-      Alert.alert('Error', 'Room name cannot be empty.');
+      Alert.alert(t('common.error'), t('roomEditor.emptyNameError'));
       return;
     }
 
@@ -452,28 +454,28 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
 
   const handleDeleteRoom = (roomId) => {
     const roomToDelete = rooms.find(room => room.id === roomId);
-    
+
     if (isDefaultRoom(roomToDelete) && !allowDefaultDeletion) {
       Alert.alert(
-        'Protected Folder',
-        'This is a default folder. Please check "Allow deletion of default folders" to delete it.',
-        [{ text: 'OK' }]
+        t('roomEditor.protectedFolder'),
+        t('roomEditor.protectedFolderMessage'),
+        [{ text: t('common.ok') }]
       );
       return;
     }
 
     if (rooms.length <= 1) {
-      Alert.alert('Cannot Delete', 'You must have at least one room.');
+      Alert.alert(t('roomEditor.cannotDelete'), t('roomEditor.cannotDeleteMessage'));
       return;
     }
 
     Alert.alert(
-      'Delete Room',
-      'Are you sure you want to delete this room? This action cannot be undone.',
+      t('roomEditor.deleteFolder'),
+      t('roomEditor.deleteFolderConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Delete', 
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'), 
           style: 'destructive',
           onPress: () => {
             const updatedRooms = rooms.filter(room => room.id !== roomId);
@@ -490,23 +492,23 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
 
   const handleSaveAll = () => {
     if (rooms.length === 0) {
-      Alert.alert('Error', 'You must have at least one room.');
+      Alert.alert(t('common.error'), t('roomEditor.atLeastOneRoomError'));
       return;
     }
 
-    // 
+    //
     onSave(rooms);
     onClose();
   };
 
   const handleResetToDefault = () => {
     Alert.alert(
-      'Reset to Default',
-      'This will replace all your custom folders with the default folders. Continue?',
+      t('roomEditor.resetToDefault'),
+      t('roomEditor.resetConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Reset', 
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('roomEditor.reset'), 
           style: 'destructive',
           onPress: () => {
             setRooms([...ROOMS]);
@@ -560,18 +562,18 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
 
         <ScrollView style={styles.editorContent}>
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Folder Name</Text>
+            <Text style={styles.label}>{t('roomEditor.folderName')}</Text>
             <TouchableOpacity
               style={styles.roomNameButton}
               onPress={() => setShowNameModal(true)}
             >
-              <Text style={styles.roomNameButtonText}>{roomName || 'Folder Name'}</Text>
-              <Text style={styles.editHintText}>Tap to edit</Text>
+              <Text style={styles.roomNameButtonText}>{roomName || t('roomEditor.folderName')}</Text>
+              <Text style={styles.editHintText}>{t('roomEditor.tapToEdit')}</Text>
             </TouchableOpacity>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Folder Type</Text>
+            <Text style={styles.label}>{t('roomEditor.folderType')}</Text>
             <View style={styles.checkboxContainer}>
               <TouchableOpacity
                 style={styles.checkbox}
@@ -580,19 +582,19 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
                 <View style={[styles.checkboxBox, markAsDefault && styles.checkboxBoxChecked]}>
                   {markAsDefault && <Text style={styles.checkboxCheck}>✓</Text>}
                 </View>
-                <Text style={styles.checkboxLabel}>Mark as Default Folder</Text>
+                <Text style={styles.checkboxLabel}>{t('roomEditor.markAsDefault')}</Text>
               </TouchableOpacity>
             </View>
             <Text style={styles.checkboxDescription}>
-              Default folders are protected from deletion and appear in all projects
+              {t('roomEditor.defaultFolderDescription')}
             </Text>
           </View>
 
           <View style={styles.inputGroup}>
-            <Text style={styles.label}>Select Icon</Text>
+            <Text style={styles.label}>{t('roomEditor.selectIcon')}</Text>
             <View style={styles.currentIconContainer}>
               <Text style={styles.currentIcon}>{selectedIcon}</Text>
-              <Text style={styles.currentIconLabel}>Current Icon</Text>
+              <Text style={styles.currentIconLabel}>{t('roomEditor.currentIcon')}</Text>
             </View>
           </View>
 
@@ -605,23 +607,23 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
           <TouchableOpacity
             style={styles.cancelButton}
             onPress={() => {
-              // 
+              //
               setEditingRoom(null);
               setRoomName('');
               setSelectedIcon('');
               setIsEditingName(false);
             }}
           >
-            <Text style={styles.cancelButtonText}>Cancel</Text>
+            <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.saveButton}
             onPress={() => {
-              // 
+              //
               handleSaveRoom();
             }}
           >
-            <Text style={styles.saveButtonText}>Save</Text>
+            <Text style={styles.saveButtonText}>{t('common.save')}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -636,10 +638,10 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
             style={styles.backButton}
             onPress={onClose}
           >
-            <Text style={styles.backButtonText}>‹ Back</Text>
+            <Text style={styles.backButtonText}>‹ {t('common.back')}</Text>
           </TouchableOpacity>
           <Text style={styles.title}>
-            {mode === 'add' ? 'Add Folder' : mode === 'edit' ? 'Edit Folder' : 'Edit Folders'}
+            {mode === 'add' ? t('roomEditor.addFolder') : mode === 'edit' ? t('roomEditor.editFolder') : t('roomEditor.editFolders')}
           </Text>
           <View style={styles.headerSpacer} />
         </View>
@@ -652,12 +654,12 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
           <ScrollView style={styles.content}>
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Your Folders</Text>
+                <Text style={styles.sectionTitle}>{t('roomEditor.yourFolders')}</Text>
                 <TouchableOpacity
                   style={styles.addButton}
                   onPress={handleAddRoom}
                 >
-                  <Text style={styles.addButtonText}>+ Add Folder</Text>
+                  <Text style={styles.addButtonText}>{t('roomEditor.addButton')}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -670,7 +672,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
                   <View style={[styles.checkboxBox, allowDefaultDeletion && styles.checkboxBoxChecked]}>
                     {allowDefaultDeletion && <Text style={styles.checkboxCheck}>✓</Text>}
                   </View>
-                  <Text style={styles.checkboxLabel}>Allow deletion of default folders</Text>
+                  <Text style={styles.checkboxLabel}>{t('roomEditor.allowDeletion')}</Text>
                 </TouchableOpacity>
               </View>
 
@@ -681,7 +683,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
                     <View style={styles.roomNameContainer}>
                       <Text style={styles.roomName}>{room.name}</Text>
                       {isDefaultRoom(room) && (
-                        <Text style={styles.defaultBadge}>Default</Text>
+                        <Text style={styles.defaultBadge}>{t('roomEditor.defaultBadge')}</Text>
                       )}
                     </View>
                   </View>
@@ -690,7 +692,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
                       style={styles.editButton}
                       onPress={() => handleEditRoom(room)}
                     >
-                      <Text style={styles.editButtonText}>Edit</Text>
+                      <Text style={styles.editButtonText}>{t('common.edit')}</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
                       style={[
@@ -702,7 +704,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
                       <Text style={[
                         styles.deleteButtonText,
                         isDefaultRoom(room) && !allowDefaultDeletion && styles.deleteButtonTextDisabled
-                      ]}>Delete</Text>
+                      ]}>{t('common.delete')}</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -714,7 +716,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
                 style={styles.resetButton}
                 onPress={handleResetToDefault}
               >
-                <Text style={styles.resetButtonText}>Reset to Default Folders</Text>
+                <Text style={styles.resetButtonText}>{t('roomEditor.resetToDefaultButton')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -727,13 +729,13 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
         <Modal visible={showNameModal} animationType="slide" transparent={true}>
           <View style={styles.modalOverlay}>
             <View style={styles.nameModal}>
-              <Text style={styles.modalTitle}>Edit Folder Name</Text>
+              <Text style={styles.modalTitle}>{t('roomEditor.editFolderNameTitle')}</Text>
               <TextInput
                 ref={nameInputRef}
                 style={styles.modalInput}
                 value={roomName}
                 onChangeText={setRoomName}
-                placeholder="Enter folder name"
+                placeholder={t('roomEditor.enterFolderName')}
                 placeholderTextColor={COLORS.GRAY}
                 maxLength={20}
                 autoFocus={true}
@@ -750,7 +752,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
                   style={styles.modalCancelButton}
                   onPress={() => setShowNameModal(false)}
                 >
-                  <Text style={styles.modalCancelText}>Done</Text>
+                  <Text style={styles.modalCancelText}>{t('common.done')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

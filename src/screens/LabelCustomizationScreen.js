@@ -18,11 +18,12 @@ import { useSettings } from '../context/SettingsContext';
 import { COLORS, getLabelPositions } from '../constants/rooms';
 import PhotoLabel from '../components/PhotoLabel';
 import { ColorPicker, fromHsv } from 'react-native-color-picker';
+import { useTranslation } from 'react-i18next';
 
-const LABEL_SIZE_OPTIONS = [
-  { key: 'small', label: 'Small' },
-  { key: 'medium', label: 'Medium' },
-  { key: 'large', label: 'Large' },
+const getLabelSizeOptions = (t) => [
+  { key: 'small', label: t('labelCustomization.small') },
+  { key: 'medium', label: t('labelCustomization.medium') },
+  { key: 'large', label: t('labelCustomization.large') },
 ];
 
 const LABEL_SIZE_STYLE_MAP = {
@@ -49,24 +50,25 @@ const LABEL_SIZE_STYLE_MAP = {
   },
 };
 
-const LABEL_CORNER_OPTIONS = [
-  { key: 'rounded', label: 'Rounded' },
-  { key: 'square', label: 'Straight' },
+const getLabelCornerOptions = (t) => [
+  { key: 'rounded', label: t('labelCustomization.cornerOptions.rounded') },
+  { key: 'square', label: t('labelCustomization.cornerOptions.straight') },
 ];
 
-const FONT_OPTIONS = [
-  { key: 'system', label: 'System Default', fontFamily: null },
-  { key: 'montserratBold', label: 'Montserrat Bold', fontFamily: 'Montserrat_700Bold' },
-  { key: 'robotoBold', label: 'Roboto Bold', fontFamily: 'Roboto_700Bold' },
-  { key: 'openSansBold', label: 'Open Sans Bold', fontFamily: 'OpenSans_700Bold' },
-  { key: 'latoBlack', label: 'Lato Black', fontFamily: 'Lato_900Black' },
-  { key: 'poppinsBold', label: 'Poppins Bold', fontFamily: 'Poppins_700Bold' },
-  { key: 'ralewayBold', label: 'Raleway Bold', fontFamily: 'Raleway_700Bold' },
-  { key: 'oswaldBold', label: 'Oswald Bold', fontFamily: 'Oswald_700Bold' },
-  { key: 'archivoBlack', label: 'Archivo Black', fontFamily: 'ArchivoBlack_400Regular' },
+const getFontOptions = (t) => [
+  { key: 'system', label: t('labelCustomization.fontModal.systemDefault'), fontFamily: null },
+  { key: 'montserratBold', label: t('labelCustomization.fontModal.montserratBold'), fontFamily: 'Montserrat_700Bold' },
+  { key: 'robotoBold', label: t('labelCustomization.fontModal.robotoBold'), fontFamily: 'Roboto_700Bold' },
+  { key: 'openSansBold', label: t('labelCustomization.fontModal.openSansBold'), fontFamily: 'OpenSans_700Bold' },
+  { key: 'latoBlack', label: t('labelCustomization.fontModal.latoBlack'), fontFamily: 'Lato_900Black' },
+  { key: 'poppinsBold', label: t('labelCustomization.fontModal.poppinsBold'), fontFamily: 'Poppins_700Bold' },
+  { key: 'ralewayBold', label: t('labelCustomization.fontModal.ralewayBold'), fontFamily: 'Raleway_700Bold' },
+  { key: 'oswaldBold', label: t('labelCustomization.fontModal.oswaldBold'), fontFamily: 'Oswald_700Bold' },
+  { key: 'archivoBlack', label: t('labelCustomization.fontModal.archivoBlack'), fontFamily: 'ArchivoBlack_400Regular' },
 ];
 
 export default function LabelCustomizationScreen({ navigation }) {
+  const { t } = useTranslation();
   const {
     labelBackgroundColor,
     labelTextColor,
@@ -99,12 +101,16 @@ export default function LabelCustomizationScreen({ navigation }) {
   const [hexModalError, setHexModalError] = useState(null);
   const [fontModalVisible, setFontModalVisible] = useState(false);
 
+  const LABEL_SIZE_OPTIONS = useMemo(() => getLabelSizeOptions(t), [t]);
+  const LABEL_CORNER_OPTIONS = useMemo(() => getLabelCornerOptions(t), [t]);
+  const FONT_OPTIONS = useMemo(() => getFontOptions(t), [t]);
+
   const currentFontOption = useMemo(() => {
     const normalized = labelFontFamily?.toLowerCase();
     return FONT_OPTIONS.find(
       (opt) => opt.key.toLowerCase() === normalized
     ) || FONT_OPTIONS[0];
-  }, [labelFontFamily]);
+  }, [labelFontFamily, FONT_OPTIONS]);
 
   const normalizeHex = (input) => {
     if (!input) return null;
@@ -265,21 +271,21 @@ export default function LabelCustomizationScreen({ navigation }) {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>← Back</Text>
+          <Text style={styles.backButtonText}>← {t('common.back')}</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Label Customization</Text>
+        <Text style={styles.headerTitle}>{t('labelCustomization.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.sectionDescription}>
-          Customize the appearance of BEFORE and AFTER labels
+          {t('labelCustomization.description')}
         </Text>
 
         {/* Background Color */}
         <View style={styles.settingRow}>
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Background Color</Text>
+            <Text style={styles.settingLabel}>{t('labelCustomization.backgroundColor')}</Text>
             <Text style={styles.settingDescription}>
               {labelBackgroundColor?.toUpperCase()}
             </Text>
@@ -294,14 +300,14 @@ export default function LabelCustomizationScreen({ navigation }) {
                 { backgroundColor: labelBackgroundColor },
               ]}
             />
-            <Text style={styles.customSelectorButtonText}>Pick color</Text>
+            <Text style={styles.customSelectorButtonText}>{t('labelCustomization.pickColor')}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Text Color */}
         <View style={styles.settingRow}>
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Text Color</Text>
+            <Text style={styles.settingLabel}>{t('labelCustomization.textColor')}</Text>
             <Text style={styles.settingDescription}>
               {labelTextColor?.toUpperCase()}
             </Text>
@@ -316,14 +322,14 @@ export default function LabelCustomizationScreen({ navigation }) {
                 { backgroundColor: labelTextColor },
               ]}
             />
-            <Text style={styles.customSelectorButtonText}>Pick color</Text>
+            <Text style={styles.customSelectorButtonText}>{t('labelCustomization.pickColor')}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Font Style */}
         <View style={styles.settingRow}>
           <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>Font Style</Text>
+            <Text style={styles.settingLabel}>{t('labelCustomization.fontStyle')}</Text>
             <Text style={styles.settingDescription}>
               {currentFontOption?.label}
             </Text>
@@ -332,14 +338,14 @@ export default function LabelCustomizationScreen({ navigation }) {
             style={styles.fontSelectorButton}
             onPress={() => setFontModalVisible(true)}
           >
-            <Text style={styles.fontSelectorButtonText}>Choose font</Text>
+            <Text style={styles.fontSelectorButtonText}>{t('labelCustomization.chooseFont')}</Text>
           </TouchableOpacity>
         </View>
 
         {/* Corner Style */}
         <View style={styles.settingRowStacked}>
           <View style={styles.cornerControlsRow}>
-            <Text style={styles.settingLabel}>Corner Style</Text>
+            <Text style={styles.settingLabel}>{t('labelCustomization.cornerStyle')}</Text>
             <View style={styles.cornerOptions}>
               {LABEL_CORNER_OPTIONS.map((option) => {
                 const isSelected = labelCornerStyle === option.key;
@@ -371,7 +377,7 @@ export default function LabelCustomizationScreen({ navigation }) {
         </View>
 
         {/* Label Size */}
-        <Text style={styles.settingLabel}>Label Size</Text>
+        <Text style={styles.settingLabel}>{t('labelCustomization.labelSize')}</Text>
         <View style={styles.labelPreviewContainer}>
           <View style={styles.labelPreview}>
             {LABEL_SIZE_OPTIONS.map((option) => {
@@ -430,15 +436,15 @@ export default function LabelCustomizationScreen({ navigation }) {
 
         {/* Label Margins */}
         <View style={styles.settingRowStacked}>
-          <Text style={styles.settingLabel}>Label Margins</Text>
+          <Text style={styles.settingLabel}>{t('labelCustomization.labelMargins')}</Text>
           <Text style={styles.settingDescription}>
-            Adjust the distance between labels and photo edges
+            {t('labelCustomization.marginsDescription')}
           </Text>
 
           {/* Vertical Margin Slider */}
           <View style={styles.marginSliderContainer}>
             <Text style={styles.marginSliderLabel}>
-              Vertical (Top/Bottom): {labelMarginVertical}px
+              {t('labelCustomization.verticalMargin', { value: labelMarginVertical })}
             </Text>
             <Slider
               style={styles.slider}
@@ -456,7 +462,7 @@ export default function LabelCustomizationScreen({ navigation }) {
           {/* Horizontal Margin Slider */}
           <View style={styles.marginSliderContainer}>
             <Text style={styles.marginSliderLabel}>
-              Horizontal (Left/Right): {labelMarginHorizontal}px
+              {t('labelCustomization.horizontalMargin', { value: labelMarginHorizontal })}
             </Text>
             <Slider
               style={styles.slider}
@@ -474,9 +480,9 @@ export default function LabelCustomizationScreen({ navigation }) {
 
         {/* Label Position */}
         <View style={styles.settingRowStacked}>
-          <Text style={styles.settingLabel}>Label Position</Text>
+          <Text style={styles.settingLabel}>{t('labelCustomization.labelPosition')}</Text>
           <Text style={styles.settingDescription}>
-            Tap a cell to select position. Left side = Before, Right side = After
+            {t('labelCustomization.positionDescription')}
           </Text>
 
           {/* Grid-Based Position Selector */}
@@ -637,10 +643,12 @@ export default function LabelCustomizationScreen({ navigation }) {
           <View style={styles.colorModalContainer}>
             <View style={styles.colorModalHeader}>
               <Text style={styles.colorModalTitle}>
-                Pick {colorModalType === 'background' ? 'Background' : 'Text'} Color
+                {colorModalType === 'background'
+                  ? t('labelCustomization.colorPicker.pickBackgroundColor')
+                  : t('labelCustomization.colorPicker.pickTextColor')}
               </Text>
               <TouchableOpacity onPress={openHexModal}>
-                <Text style={styles.hexInputLink}>Enter Hex</Text>
+                <Text style={styles.hexInputLink}>{t('labelCustomization.colorPicker.enterHex')}</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.colorPickerWrapper}>
@@ -664,13 +672,13 @@ export default function LabelCustomizationScreen({ navigation }) {
                 style={[styles.colorModalButton, styles.cancelButton]}
                 onPress={handleColorModalCancel}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.colorModalButton, styles.applyButton]}
                 onPress={handleColorModalApply}
               >
-                <Text style={styles.applyButtonText}>Apply</Text>
+                <Text style={styles.applyButtonText}>{t('common.apply')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -687,12 +695,12 @@ export default function LabelCustomizationScreen({ navigation }) {
             <View style={styles.modalBackdrop} />
           </TouchableWithoutFeedback>
           <View style={styles.hexModalContainer}>
-            <Text style={styles.hexModalTitle}>Enter Color</Text>
+            <Text style={styles.hexModalTitle}>{t('labelCustomization.colorPicker.enterColorTitle')}</Text>
             <TextInput
               style={styles.hexInput}
               value={hexModalValue}
               onChangeText={handleHexModalChange}
-              placeholder="#RRGGBB or rgb(r,g,b)"
+              placeholder={t('labelCustomization.colorPicker.colorPlaceholder')}
               placeholderTextColor="#999"
               autoCapitalize="characters"
               autoCorrect={false}
@@ -705,13 +713,13 @@ export default function LabelCustomizationScreen({ navigation }) {
                 style={[styles.hexModalButton, styles.cancelButton]}
                 onPress={handleHexModalCancel}
               >
-                <Text style={styles.cancelButtonText}>Cancel</Text>
+                <Text style={styles.cancelButtonText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.hexModalButton, styles.applyButton]}
                 onPress={handleHexModalApply}
               >
-                <Text style={styles.applyButtonText}>Apply</Text>
+                <Text style={styles.applyButtonText}>{t('common.apply')}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -725,7 +733,7 @@ export default function LabelCustomizationScreen({ navigation }) {
         </TouchableWithoutFeedback>
         <View style={styles.fontModalContainer}>
           <View style={styles.fontModalHeader}>
-            <Text style={styles.fontModalTitle}>Choose Font</Text>
+            <Text style={styles.fontModalTitle}>{t('labelCustomization.fontModal.title')}</Text>
             <TouchableOpacity onPress={() => setFontModalVisible(false)}>
               <Text style={styles.fontModalClose}>✕</Text>
             </TouchableOpacity>

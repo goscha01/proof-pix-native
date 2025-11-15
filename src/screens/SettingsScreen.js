@@ -84,6 +84,22 @@ const getLabelSizeOptions = (t) => [
   { key: 'large', label: t('labelCustomization.large') },
 ];
 
+const LANGUAGES = [
+  { code: 'en', name: 'English', flag: '🇺🇸' },
+  { code: 'es', name: 'Español', flag: '🇪🇸' },
+  { code: 'fr', name: 'Français', flag: '🇫🇷' },
+  { code: 'de', name: 'Deutsch', flag: '🇩🇪' },
+  { code: 'ru', name: 'Русский', flag: '🇷🇺' },
+  { code: 'be', name: 'Беларуская', flag: '🇧🇾' },
+  { code: 'uk', name: 'Українська', flag: '🇺🇦' },
+  { code: 'zh', name: '中文', flag: '🇨🇳' },
+  { code: 'tl', name: 'Tagalog', flag: '🇵🇭' },
+  { code: 'ar', name: 'العربية', flag: '🇸🇦' },
+  { code: 'ko', name: '한국어', flag: '🇰🇷' },
+  { code: 'pt', name: 'Português', flag: '🇵🇹' },
+  { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
+];
+
 const LABEL_SIZE_STYLE_MAP = {
   small: {
     fontSize: 12,
@@ -254,7 +270,7 @@ export default function SettingsScreen({ navigation }) {
     updateUserPlan
   } = useSettings();
 
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   // Memoize translated options
   const FONT_OPTIONS = useMemo(() => getFontOptions(t), [t]);
@@ -363,6 +379,7 @@ export default function SettingsScreen({ navigation }) {
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [editingTeamName, setEditingTeamName] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
+  const [languageModalVisible, setLanguageModalVisible] = useState(false);
 
   const isTeamMember = userMode === 'team_member';
   const [canSwitchBack, setCanSwitchBack] = useState(false);
@@ -799,6 +816,14 @@ export default function SettingsScreen({ navigation }) {
     setFontModalVisible(false);
   };
 
+  const changeLanguage = (languageCode) => {
+    i18n.changeLanguage(languageCode);
+    setLanguageModalVisible(false);
+  };
+
+  const getCurrentLanguage = () => {
+    return LANGUAGES.find(lang => lang.code === i18n.language) || LANGUAGES[0];
+  };
 
   const handleSignOut = async () => {
     // For Business/Enterprise users in admin mode with team setup, sign out from team only
@@ -878,6 +903,21 @@ export default function SettingsScreen({ navigation }) {
       </View>
 
       <ScrollView style={styles.content}>
+        {/* Language Selection */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
+          <TouchableOpacity
+            style={styles.languageSelector}
+            onPress={() => setLanguageModalVisible(true)}
+          >
+            <View style={styles.languageSelectorContent}>
+              <Text style={styles.languageFlag}>{getCurrentLanguage().flag}</Text>
+              <Text style={styles.languageName}>{getCurrentLanguage().name}</Text>
+            </View>
+            <Text style={styles.languageChangeText}>{t('settings.changeLanguage')}</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Admin Setup Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('settings.cloudTeamSync')}</Text>
@@ -1982,6 +2022,52 @@ export default function SettingsScreen({ navigation }) {
                   </TouchableOpacity>
                   <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
                 </View>
+              </ScrollView>
+            </View>
+          </View>
+        </RNModal>
+
+        {/* Language Selection Modal */}
+        <RNModal
+          visible={languageModalVisible}
+          transparent={true}
+          animationType="slide"
+          onRequestClose={() => setLanguageModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>{t('settings.language')}</Text>
+                <TouchableOpacity
+                  onPress={() => setLanguageModalVisible(false)}
+                  style={styles.modalCloseButton}
+                >
+                  <Text style={styles.modalCloseText}>×</Text>
+                </TouchableOpacity>
+              </View>
+
+              <ScrollView style={styles.modalScrollView}>
+                {LANGUAGES.map((language) => (
+                  <TouchableOpacity
+                    key={language.code}
+                    style={[
+                      styles.languageOption,
+                      i18n.language === language.code && styles.languageOptionSelected
+                    ]}
+                    onPress={() => changeLanguage(language.code)}
+                  >
+                    <Text style={styles.languageOptionFlag}>{language.flag}</Text>
+                    <Text style={[
+                      styles.languageOptionText,
+                      i18n.language === language.code && styles.languageOptionTextSelected
+                    ]}>
+                      {language.name}
+                    </Text>
+                    {i18n.language === language.code && (
+                      <Text style={styles.languageCheckmark}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
               </ScrollView>
             </View>
           </View>
@@ -3393,5 +3479,68 @@ const sliderStyles = StyleSheet.create({
       fontSize: 14,
       color: COLORS.TEXT,
       marginBottom: 8,
+    },
+    // Language selector styles
+    languageSelector: {
+      backgroundColor: '#f8f9fa',
+      borderRadius: 12,
+      padding: 16,
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+    },
+    languageSelectorContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    languageFlag: {
+      fontSize: 28,
+      marginRight: 12,
+    },
+    languageName: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: COLORS.TEXT,
+    },
+    languageChangeText: {
+      fontSize: 14,
+      color: COLORS.PRIMARY,
+      fontWeight: '600',
+    },
+    // Language modal styles
+    languageOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      borderRadius: 12,
+      marginBottom: 8,
+      backgroundColor: '#f8f9fa',
+      borderWidth: 1,
+      borderColor: COLORS.BORDER,
+    },
+    languageOptionSelected: {
+      backgroundColor: '#e3f2fd',
+      borderColor: COLORS.PRIMARY,
+    },
+    languageOptionFlag: {
+      fontSize: 24,
+      marginRight: 12,
+    },
+    languageOptionText: {
+      fontSize: 16,
+      color: COLORS.TEXT,
+      flex: 1,
+    },
+    languageOptionTextSelected: {
+      fontWeight: '600',
+      color: COLORS.PRIMARY,
+    },
+    languageCheckmark: {
+      fontSize: 20,
+      color: COLORS.PRIMARY,
+      fontWeight: 'bold',
     },
   });
