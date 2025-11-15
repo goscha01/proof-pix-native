@@ -98,7 +98,11 @@ export default {
         {
           "ios": {
             "useFrameworks": "static",
-            "deploymentTarget": "15.1"
+            "deploymentTarget": "15.1",
+            "forceStaticLinking": [
+              "RNFBApp",
+              "RNFBAnalytics"
+            ]
           },
           "android": {
             "compileSdkVersion": 34,
