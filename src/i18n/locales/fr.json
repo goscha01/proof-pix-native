@@ -67,7 +67,10 @@
     "deleteProjects": "Supprimer les Projets",
     "deleteProjectsConfirm": "Êtes-vous sûr de vouloir supprimer {{count}} projet(s) ? ({{names}})",
     "createError": "Échec de la création du projet",
-    "create": "Créer"
+    "create": "Créer",
+    "userNameRequiredTitle": "Nom d'utilisateur requis",
+    "userNameRequiredMessage": "Veuillez définir votre nom dans les paramètres avant de créer un nouveau projet.",
+    "goToSettings": "Aller aux paramètres"
   },
   "gallery": {
     "title": "Galerie",

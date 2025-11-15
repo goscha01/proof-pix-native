@@ -364,5 +364,10 @@
     "watermarkColor": "Wasserzeichenfarbe",
     "backgroundColor": "Hintergrundfarbe",
     "default": "Standard"
+  },
+  "userNameRequired": {
+    "title": "Benutzername erforderlich",
+    "message": "Bitte geben Sie Ihren Namen in den Einstellungen an, bevor Sie ein neues Projekt erstellen.",
+    "goToSettings": "Zu den Einstellungen"
   }
 }

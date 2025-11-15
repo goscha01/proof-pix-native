@@ -187,11 +187,13 @@
     "customFoldersCount": "{{count}} thư mục tùy chỉnh",
     "usingDefaultFolders": "Đang sử dụng thư mục mặc định",
     "uploadStructure": "Cấu Trúc Tải Lên",
-    "useFolderStructure": "Sử Dụng Cấu Trúc Thư Mục",
-    "useFolderStructureDescription": "Sắp xếp tải lên trong thư mục (TRƯỚC, SAU, KẾT HỢP)",
-    "beforeFolder": "Thư Mục Trước",
-    "beforeFolderDescription": "Tải ảnh trước lên thư mục này",
-    "afterFolder": "Thư Mục Sau",
+    "useFolderStructure": "Sử dụng cấu trúc thư mục 'Trước/Sau/Kết hợp'",
+    "useFolderStructureDescription": "Tự động tạo thư mục con cho các trạng thái ảnh khác nhau.",
+    "labelCustomization_short": "Nhãn",
+    "folderCustomization_short": "Thư mục",
+    "beforeFolder": "Thư mục 'Trước'",
+    "beforeFolderDescription": "Bật thư mục cho ảnh gốc.",
+    "afterFolder": "Thư mục 'Sau'",
     "afterFolderDescription": "Tải ảnh sau lên thư mục này",
     "combinedFolder": "Thư Mục Kết Hợp",
     "combinedFolderDescription": "Tải ảnh kết hợp lên thư mục này",
@@ -364,5 +366,10 @@
     "watermarkColor": "Màu Watermark",
     "backgroundColor": "Màu Nền",
     "default": "Mặc Định"
+  },
+  "userNameRequired": {
+    "title": "Yêu cầu Tên người dùng",
+    "message": "Vui lòng đặt tên của bạn trong cài đặt trước khi tạo một dự án mới.",
+    "goToSettings": "Đi tới Cài đặt"
   }
 }

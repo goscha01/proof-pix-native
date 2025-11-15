@@ -364,5 +364,10 @@
     "watermarkColor": "水印颜色",
     "backgroundColor": "背景颜色",
     "default": "默认"
+  },
+  "userNameRequired": {
+    "title": "需要用户名",
+    "message": "在创建新项目之前，请在设置中设置您的姓名。",
+    "button": "前往设置"
   }
 }

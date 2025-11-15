@@ -187,11 +187,13 @@
     "customFoldersCount": "{{count}} custom folders",
     "usingDefaultFolders": "Gumagamit ng default folders",
     "uploadStructure": "Istruktura ng Upload",
-    "useFolderStructure": "Gumamit ng Folder Structure",
-    "useFolderStructureDescription": "Ayusin ang mga upload sa mga folder (BAGO, PAGKATAPOS, PINAGSAMA)",
-    "beforeFolder": "Folder ng Bago",
-    "beforeFolderDescription": "I-upload ang mga larawan bago sa folder na ito",
-    "afterFolder": "Folder ng Pagkatapos",
+    "useFolderStructure": "Gamitin ang istraktura ng folder na 'Bago/Pagkatapos/Pinagsama'",
+    "useFolderStructureDescription": "Awtomatikong lumikha ng mga subfolder para sa iba't ibang estado ng larawan.",
+    "labelCustomization_short": "Mga Label",
+    "folderCustomization_short": "Mga Folder",
+    "beforeFolder": "Folder na 'Bago'",
+    "beforeFolderDescription": "Paganahin ang folder para sa mga orihinal na larawan.",
+    "afterFolder": "Folder na 'Pagkatapos'",
     "afterFolderDescription": "I-upload ang mga larawan pagkatapos sa folder na ito",
     "combinedFolder": "Folder ng Pinagsama",
     "combinedFolderDescription": "I-upload ang mga pinagsama na larawan sa folder na ito",
@@ -364,5 +366,10 @@
     "watermarkColor": "Kulay ng Watermark",
     "backgroundColor": "Kulay ng Background",
     "default": "Default"
+  },
+  "userNameRequired": {
+    "title": "Kailangan ng Pangalan ng Gumagamit",
+    "message": "Mangyaring itakda ang iyong pangalan sa mga setting bago lumikha ng isang bagong proyekto.",
+    "goToSettings": "Pumunta sa Mga Setting"
   }
 }

@@ -172,10 +172,12 @@
     "customFoldersCount": "{{count}}개의 사용자 지정 폴더",
     "usingDefaultFolders": "기본 폴더 사용 중",
     "uploadStructure": "업로드 구조",
-    "useFolderStructure": "폴더 구조 사용",
-    "useFolderStructureDescription": "폴더에서 업로드 정리 (이전, 이후, 결합)",
+    "useFolderStructure": "이전/이후/결합 폴더 구조 사용",
+    "useFolderStructureDescription": "다른 사진 상태에 대한 하위 폴더를 자동으로 생성합니다.",
+    "labelCustomization_short": "라벨",
+    "folderCustomization_short": "폴더",
     "beforeFolder": "이전 폴더",
-    "beforeFolderDescription": "이 폴더에 이전 사진 업로드",
+    "beforeFolderDescription": "원본 사진을 위한 폴더를 활성화합니다.",
     "afterFolder": "이후 폴더",
     "afterFolderDescription": "이 폴더에 이후 사진 업로드",
     "combinedFolder": "결합 폴더",
@@ -349,5 +351,8 @@
     "watermarkColor": "워터마크 색상",
     "backgroundColor": "배경색",
     "default": "기본값"
-  }
+  },
+  "userNameRequiredTitle": "사용자 이름 필요",
+  "userNameRequiredMessage": "새 프로젝트를 만들기 전에 설정에서 이름을 지정하십시오.",
+  "goToSettings": "설정으로 이동"
 }

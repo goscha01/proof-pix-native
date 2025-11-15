@@ -172,11 +172,13 @@
     "customFoldersCount": "{{count}} pastas personalizadas",
     "usingDefaultFolders": "Usando pastas padrão",
     "uploadStructure": "Estrutura de Upload",
-    "useFolderStructure": "Usar Estrutura de Pastas",
-    "useFolderStructureDescription": "Organizar uploads em pastas (ANTES, DEPOIS, COMBINADO)",
-    "beforeFolder": "Pasta Antes",
-    "beforeFolderDescription": "Enviar fotos de antes para esta pasta",
-    "afterFolder": "Pasta Depois",
+    "useFolderStructure": "Usar estrutura de pastas 'Antes/Depois/Combinado'",
+    "useFolderStructureDescription": "Criar subpastas automaticamente para diferentes estados de fotos.",
+    "labelCustomization_short": "Etiquetas",
+    "folderCustomization_short": "Pastas",
+    "beforeFolder": "Pasta 'Antes'",
+    "beforeFolderDescription": "Ativar pasta para fotos originais.",
+    "afterFolder": "Pasta 'Depois'",
     "afterFolderDescription": "Enviar fotos de depois para esta pasta",
     "combinedFolder": "Pasta Combinado",
     "combinedFolderDescription": "Enviar fotos combinadas para esta pasta",
@@ -349,5 +351,10 @@
     "watermarkColor": "Cor da Marca D'água",
     "backgroundColor": "Cor de Fundo",
     "default": "Padrão"
+  },
+  "userNameRequired": {
+    "title": "Nome de usuário obrigatório",
+    "message": "Por favor, defina seu nome nas configurações antes de criar um novo projeto.",
+    "goToSettings": "Ir para configurações"
   }
 }
