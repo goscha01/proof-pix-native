@@ -349,5 +349,10 @@
     "watermarkColor": "لون العلامة المائية",
     "backgroundColor": "لون الخلفية",
     "default": "افتراضي"
+  },
+  "userNameRequired": {
+    "title": "اسم المستخدم مطلوب",
+    "message": "يرجى تعيين اسمك في الإعدادات قبل إنشاء مشروع جديد.",
+    "goToSettings": "اذهب إلى الإعدادات"
   }
 }
