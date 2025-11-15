@@ -107,7 +107,12 @@ export default {
           }
         }
       ],
-      "@react-native-firebase/app",
+      [
+        "@react-native-firebase/app",
+        {
+          "enableFirebaseStaticFramework": true
+        }
+      ],
       "expo-font",
       "./plugins/withImageCompositor.js"
     ],
