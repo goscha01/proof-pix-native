@@ -4,8 +4,10 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAdmin } from '../context/AdminContext';
 import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
+import { useTranslation } from 'react-i18next';
 
 export default function GoogleSignUpScreen({ navigation, route }) {
+  const { t } = useTranslation();
   const { individualSignIn, adminSignIn } = useAdmin();
   const { plan } = route.params || {};
   const insets = useSafeAreaInsets();
@@ -21,7 +23,7 @@ export default function GoogleSignUpScreen({ navigation, route }) {
     if (result.success) {
       navigation.replace('Home');
     } else {
-      Alert.alert('Sign-In Error', result.error || 'An unexpected error occurred.');
+      Alert.alert(t('googleSignUp.signInError'), result.error || t('googleSignUp.unexpectedError'));
     }
   };
 
@@ -39,26 +41,26 @@ export default function GoogleSignUpScreen({ navigation, route }) {
         style={[styles.backButton, { top: insets.top, left: insets.left + 10 }]}
         onPress={handleGoBack}
       >
-        <Text style={styles.backButtonText}>&larr; Back</Text>
+        <Text style={styles.backButtonText}>← {t('common.back')}</Text>
       </TouchableOpacity>
       <View style={styles.content}>
-        <Text style={styles.title}>Connect Your Account</Text>
+        <Text style={styles.title}>{t('googleSignUp.title')}</Text>
         <Text style={styles.subtitle}>
-          Sign up with Google to enable cloud sync, bulk uploads, and team features for Pro and Business plans.
+          {t('googleSignUp.subtitle')}
         </Text>
 
         <TouchableOpacity
           style={[styles.button, styles.googleButton]}
           onPress={handleGoogleSignIn}
         >
-          <Text style={[styles.buttonText, styles.googleButtonText]}>Sign up with Google</Text>
+          <Text style={[styles.buttonText, styles.googleButtonText]}>{t('googleSignUp.signUpWithGoogle')}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.button, styles.skipButton]}
           onPress={handleSkip}
         >
-          <Text style={styles.buttonText}>Skip for Now</Text>
+          <Text style={styles.buttonText}>{t('googleSignUp.skipForNow')}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

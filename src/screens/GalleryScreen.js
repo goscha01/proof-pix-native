@@ -266,7 +266,7 @@ export default function GalleryScreen({ navigation, route }) {
         setShareOptionsVisible(false); // Close the modal immediately
         const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
         if (sourcePhotos.length === 0) {
-            Alert.alert('No Photos', 'There are no photos in this project to share.');
+            Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
             return;
         }
 
@@ -275,7 +275,7 @@ export default function GalleryScreen({ navigation, route }) {
             (selectedShareTypes.after && p.mode === PHOTO_MODES.AFTER)
         );
         if (itemsToShare.length === 0) {
-            Alert.alert('No Photos Selected', 'Please select at least one photo type to share.');
+            Alert.alert(t('gallery.noPhotosSelected'), t('gallery.selectAtLeastOne'));
             return;
         }
         
@@ -316,7 +316,7 @@ export default function GalleryScreen({ navigation, route }) {
   const handleShareProject = async () => {
     const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
     if (sourcePhotos.length === 0) {
-      Alert.alert('No Photos', 'There are no photos in the active project to share.');
+      Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
       return;
     }
     setShareOptionsVisible(true);
@@ -365,7 +365,7 @@ export default function GalleryScreen({ navigation, route }) {
 
       // Check if there are photos to upload
       if (photos.length === 0) {
-        Alert.alert('No Photos', 'There are no photos to upload.');
+        Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosToUpload'));
         return;
       }
 
@@ -426,7 +426,7 @@ export default function GalleryScreen({ navigation, route }) {
 
     // Check if there are photos to upload
     if (photos.length === 0) {
-      Alert.alert('No Photos', 'There are no photos to upload.');
+      Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosToUpload'));
       return;
     }
 
@@ -626,7 +626,7 @@ export default function GalleryScreen({ navigation, route }) {
         const itemsToUpload = [...items, ...combinedItems];
 
         if (itemsToUpload.length === 0) {
-          Alert.alert('No Photos Selected', 'Please select at least one photo type to upload.');
+          Alert.alert(t('gallery.noPhotosSelected'), t('gallery.selectAtLeastOneUpload'));
           return;
         }
 
@@ -1180,7 +1180,7 @@ export default function GalleryScreen({ navigation, route }) {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Text style={styles.backButtonText}>‹ Back</Text>
+          <Text style={styles.backButtonText}>‹ {t('common.back')}</Text>
         </TouchableOpacity>
         <Text style={styles.title}>{t('gallery.title')}</Text>
         <View style={{ width: 40 }} />
@@ -1189,7 +1189,7 @@ export default function GalleryScreen({ navigation, route }) {
       {/* Active project name under the title */}
       <View style={styles.projectNameContainer}>
         <Text style={styles.projectNameText}>
-          {(projects?.find?.(p => p.id === activeProjectId)?.name) || 'No project selected'}
+          {(projects?.find?.(p => p.id === activeProjectId)?.name) || t('gallery.noProjectSelected')}
         </Text>
         <UploadIndicatorLine 
           uploadStatus={uploadStatus}
@@ -1207,12 +1207,12 @@ export default function GalleryScreen({ navigation, route }) {
       {photos.length === 0 || !activeProjectId ? (
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateText}>
-            {!activeProjectId ? 'No project selected' : 'No photos yet'}
+            {!activeProjectId ? t('gallery.noProjectSelected') : t('gallery.noPhotosYet')}
           </Text>
           <Text style={styles.emptyStateSubtext}>
             {!activeProjectId 
-              ? 'Select a project to view photos' 
-              : 'Take some before/after photos to get started'
+              ? t('gallery.selectProjectToView')
+              : t('gallery.takePhotosToStart')
             }
           </Text>
         </View>

@@ -644,8 +644,8 @@ export default function LabelCustomizationScreen({ navigation }) {
             <View style={styles.colorModalHeader}>
               <Text style={styles.colorModalTitle}>
                 {colorModalType === 'background'
-                  ? t('labelCustomization.colorPicker.pickBackgroundColor')
-                  : t('labelCustomization.colorPicker.pickTextColor')}
+                  ? t('labelCustomization.colorPicker.backgroundTitle')
+                  : t('labelCustomization.colorPicker.textTitle')}
               </Text>
               <TouchableOpacity onPress={openHexModal}>
                 <Text style={styles.hexInputLink}>{t('labelCustomization.colorPicker.enterHex')}</Text>
@@ -695,12 +695,12 @@ export default function LabelCustomizationScreen({ navigation }) {
             <View style={styles.modalBackdrop} />
           </TouchableWithoutFeedback>
           <View style={styles.hexModalContainer}>
-            <Text style={styles.hexModalTitle}>{t('labelCustomization.colorPicker.enterColorTitle')}</Text>
+            <Text style={styles.hexModalTitle}>{t('labelCustomization.colorPicker.enterColor')}</Text>
             <TextInput
               style={styles.hexInput}
               value={hexModalValue}
               onChangeText={handleHexModalChange}
-              placeholder={t('labelCustomization.colorPicker.colorPlaceholder')}
+              placeholder={t('labelCustomization.colorPicker.hexPlaceholder')}
               placeholderTextColor="#999"
               autoCapitalize="characters"
               autoCorrect={false}
