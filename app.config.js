@@ -5,7 +5,7 @@ export default {
     name: process.env.APP_NAME || "ProofPix",
     slug: "proof-pix-native",
     owner: "goscha01",
-    version: process.env.VERSION || "1.0.7",
+    version: process.env.VERSION || "1.0.8",
     orientation: "default",
     icon: "./assets/PP_logo_app.png",
     userInterfaceStyle: "light",
@@ -26,7 +26,7 @@ export default {
     ios: {
       supportsTablet: true,
       bundleIdentifier: "com.proofpix.app",
-      buildNumber: "8",
+      buildNumber: "1",
       googleServicesFile: "./GoogleService-Info.plist",
       requireFullScreen: false,
       infoPlist: {
@@ -97,12 +97,27 @@ export default {
         "expo-build-properties",
         {
           "ios": {
-            "useFrameworks": "static"
+            "useFrameworks": "static",
+            "deploymentTarget": "15.1",
+            "forceStaticLinking": [
+              "RNFBApp",
+              "RNFBAnalytics"
+            ]
+          },
+          "android": {
+            "compileSdkVersion": 34,
+            "targetSdkVersion": 34,
+            "buildToolsVersion": "34.0.0"
           }
         }
       ],
+      [
+        "@react-native-firebase/app",
+        {
+          "enableFirebaseStaticFramework": true
+        }
+      ],
       "expo-font",
-      "./plugins/withUseModularHeaders.js",
       "./plugins/withImageCompositor.js"
     ],
     extra: {

@@ -23,7 +23,9 @@
       "Bash(done)",
       "Bash(for lang in ar de fr ru zh)",
       "Bash(do echo \"Checking $lang.json:\")",
-      "Bash(python:*)"
+      "Bash(python:*)",
+      "Bash(timeout:*)",
+      "Bash(nul)"
     ],
     "deny": [],
     "ask": []
