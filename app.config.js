@@ -97,7 +97,7 @@ export default {
         "expo-build-properties",
         {
           "ios": {
-            "useFrameworks": "static",
+            "useFrameworks": "dynamic",
             "deploymentTarget": "15.1"
           },
           "android": {
