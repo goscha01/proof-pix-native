@@ -101,7 +101,8 @@ export const SettingsProvider = ({ children }) => {
   const [isBusiness, setIsBusiness] = useState(false);
   const [useFolderStructure, setUseFolderStructure] = useState(true);
   const [enabledFolders, setEnabledFolders] = useState({ before: true, after: true, combined: true });
-  const [labelLanguage, setLabelLanguage] = useState('en'); // 'app' or 'en'
+  const [labelLanguage, setLabelLanguage] = useState('en');
+  const [sectionLanguage, setSectionLanguage] = useState('en');
   const [customRooms, setCustomRooms] = useState(null); // null means use default rooms
   const [userPlan, setUserPlan] = useState('starter'); // Add userPlan state
   const [cleaningServiceEnabled, setCleaningServiceEnabled] = useState(true);
@@ -155,7 +156,8 @@ export const SettingsProvider = ({ children }) => {
             setEnabledFolders(categories);
           }
         }
-        setLabelLanguage(settings.labelLanguage ?? 'app'); // Load labelLanguage
+        setLabelLanguage(settings.labelLanguage ?? 'en');
+        setSectionLanguage(settings.sectionLanguage ?? (settings.labelLanguage ?? 'en'));
         setUserPlan(settings.userPlan ?? 'starter'); // Load userPlan
         setCleaningServiceEnabled(
           typeof settings.cleaningServiceEnabled === 'boolean'
@@ -201,8 +203,9 @@ export const SettingsProvider = ({ children }) => {
         isBusiness,
         useFolderStructure,
         enabledFolders,
-        labelLanguage, // Add labelLanguage to saved settings
-        userPlan, // Add userPlan to saved settings
+        labelLanguage,
+        sectionLanguage,
+        userPlan,
         cleaningServiceEnabled,
         ...newSettings
       };
@@ -389,6 +392,10 @@ export const SettingsProvider = ({ children }) => {
     setLabelLanguage(language);
   };
 
+  const updateSectionLanguage = (language) => {
+    setSectionLanguage(language);
+  };
+
   // Custom rooms management (temporarily global for stability)
   const saveCustomRooms = async (rooms) => {
     try {
@@ -529,6 +536,8 @@ export const SettingsProvider = ({ children }) => {
     updateEnabledFolders,
     labelLanguage,
     updateLabelLanguage,
+    sectionLanguage,
+    updateSectionLanguage,
     resetUserData,
     loading,
     customRooms,

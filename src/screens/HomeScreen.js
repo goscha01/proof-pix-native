@@ -49,7 +49,7 @@ export default function HomeScreen({ navigation }) {
   const [selectedProjects, setSelectedProjects] = useState(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const { projects, getPhotosByProject, deleteProject, setActiveProject, activeProjectId, createProject, photos } = usePhotos();
-  const { userName, location, getRooms, userPlan, cleaningServiceEnabled } = useSettings();
+  const { userName, location, getRooms, userPlan, cleaningServiceEnabled, sectionLanguage } = useSettings();
   const { uploadStatus, cancelUpload, cancelAllUploads } = useBackgroundUpload();
   const [newProjectVisible, setNewProjectVisible] = useState(false);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
@@ -836,7 +836,9 @@ export default function HomeScreen({ navigation }) {
                   styles.roomTabTextActive
                 ]}
               >
-                {cleaningServiceEnabled ? room.name : `${t('settings.section')} ${index + 1}`}
+                {cleaningServiceEnabled
+                  ? room.name
+                  : `${t('settings.section', { lng: sectionLanguage })} ${index + 1}`}
               </Text>
             )}
           </TouchableOpacity>
