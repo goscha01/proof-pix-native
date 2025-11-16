@@ -27,6 +27,8 @@ import RoomEditor from '../components/RoomEditor';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
 import googleDriveService from '../services/googleDriveService';
+import dropboxAuthService from '../services/dropboxAuthService';
+import dropboxService from '../services/dropboxService';
 import InviteManager from '../components/InviteManager';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import proxyService from '../services/proxyService';
@@ -444,6 +446,27 @@ export default function SettingsScreen({ navigation }) {
     }
   }, [watermarkOpacity]);
 
+  // Load Dropbox tokens on mount and when screen is focused
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadDropboxTokens = async () => {
+        try {
+          await dropboxAuthService.loadStoredTokens();
+          const isAuth = dropboxAuthService.isAuthenticated();
+          const userInfo = dropboxAuthService.getUserInfo();
+          setIsDropboxAuthenticated(isAuth);
+          setDropboxUserInfo(userInfo);
+          if (isAuth && userInfo) {
+            console.log('[SETTINGS] Dropbox is authenticated:', userInfo.email);
+          }
+        } catch (error) {
+          console.error('[SETTINGS] Error loading Dropbox tokens:', error);
+        }
+      };
+      loadDropboxTokens();
+    }, [])
+  );
+
   const {
     isAuthenticated,
     userInfo: adminUserInfo,
@@ -514,6 +537,8 @@ export default function SettingsScreen({ navigation }) {
   }, [isTeamMember]);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isDropboxAuthenticated, setIsDropboxAuthenticated] = useState(false);
+  const [dropboxUserInfo, setDropboxUserInfo] = useState(null);
   const [adminInfo, setAdminInfo] = useState(null);
   const [loadingAdminInfo, setLoadingAdminInfo] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
@@ -1657,6 +1682,76 @@ export default function SettingsScreen({ navigation }) {
                           )}
                         </TouchableOpacity>
                         
+                        {/* Connect to Dropbox Button */}
+                        <TouchableOpacity
+                          style={[
+                            styles.featureButton,
+                            (!canConnectGoogle || isSigningIn) && styles.buttonDisabled
+                          ]}
+                          onPress={async () => {
+                            if (!canConnectGoogle) {
+                              Alert.alert(t('settings.featureUnavailable'), t('settings.dropboxAccountFeature'));
+                              return;
+                            }
+                            
+                            if (!dropboxAuthService.isConfigured()) {
+                              Alert.alert(
+                                t('settings.featureUnavailable'),
+                                t('settings.dropboxNotConfigured')
+                              );
+                              return;
+                            }
+
+                            setIsSigningIn(true);
+                            try {
+                              const result = await dropboxAuthService.signIn();
+                              
+                              // Find or create ProofPix folder
+                              try {
+                                const folderPath = await dropboxService.findOrCreateProofPixFolder();
+                                console.log('[DROPBOX] Folder ready:', folderPath);
+                              } catch (folderError) {
+                                console.error('[DROPBOX] Folder creation error:', folderError);
+                                // Don't fail the sign-in if folder creation fails
+                              }
+
+                              // Update state
+                              setIsDropboxAuthenticated(true);
+                              setDropboxUserInfo(result.userInfo);
+                              
+                              console.log('[DROPBOX] Sign-in successful!');
+                              console.log('[DROPBOX] User info:', result.userInfo);
+                              
+                              // Show success alert
+                              Alert.alert(
+                                t('settings.dropboxConnected'),
+                                t('settings.dropboxConnectedMessage', { email: result.userInfo?.email || '' }),
+                                [{ text: t('common.ok') }]
+                              );
+                            } catch (error) {
+                              console.error('[DROPBOX] Sign-in error:', error);
+                              Alert.alert(
+                                t('common.error'),
+                                error.message || t('settings.dropboxSignInError')
+                              );
+                            } finally {
+                              setIsSigningIn(false);
+                            }
+                          }}
+                          disabled={!canConnectGoogle || isSigningIn}
+                        >
+                          {isSigningIn ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Text style={[
+                              styles.featureButtonText,
+                              !canConnectGoogle && styles.buttonTextDisabled
+                            ]}>
+                              {t('settings.connectToDropbox')}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                        
                         {/* Set Up Team Button */}
                         <TouchableOpacity
                           style={[
@@ -1801,6 +1896,51 @@ export default function SettingsScreen({ navigation }) {
                   </View>
                 )}
               </View>
+
+              {/* Dropbox Account Info */}
+              {isDropboxAuthenticated && dropboxUserInfo && (
+                <View style={styles.adminInfoBox}>
+                  <View style={styles.adminInfoHeader}>
+                    <View style={styles.activeAccountContainer}>
+                      <Text style={styles.activeAccountLabel}>{t('settings.activeDropboxAccount')}</Text>
+                      <Text style={styles.activeAccountName}>
+                        {dropboxUserInfo.name || t('settings.unknownName')}
+                      </Text>
+                      <Text style={styles.activeAccountEmail}>
+                        {dropboxUserInfo.email || t('settings.unknownEmail')}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.disconnectButton}
+                      onPress={async () => {
+                        Alert.alert(
+                          t('settings.disconnectDropbox'),
+                          t('settings.disconnectDropboxMessage'),
+                          [
+                            { text: t('common.cancel'), style: 'cancel' },
+                            {
+                              text: t('settings.disconnect'),
+                              style: 'destructive',
+                              onPress: async () => {
+                                try {
+                                  await dropboxAuthService.signOut();
+                                  setIsDropboxAuthenticated(false);
+                                  setDropboxUserInfo(null);
+                                  Alert.alert(t('common.success'), t('settings.dropboxDisconnected'));
+                                } catch (error) {
+                                  Alert.alert(t('common.error'), t('settings.dropboxDisconnectError'));
+                                }
+                              }
+                            }
+                          ]
+                        );
+                      }}
+                    >
+                      <Text style={styles.disconnectButtonText}>{t('settings.disconnect')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
 
               {/* Show all buttons when authenticated, with enable/disable based on plan */}
               {(() => {
