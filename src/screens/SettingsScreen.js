@@ -25,6 +25,7 @@ import { useAdmin } from '../context/AdminContext';
 import { COLORS, getLabelPositions } from '../constants/rooms';
 import RoomEditor from '../components/RoomEditor';
 import PhotoLabel from '../components/PhotoLabel';
+import PhotoWatermark from '../components/PhotoWatermark';
 import googleDriveService from '../services/googleDriveService';
 import InviteManager from '../components/InviteManager';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -223,6 +224,7 @@ export default function SettingsScreen({ navigation }) {
   const {
     showLabels,
     toggleLabels,
+    showWatermark,
     customWatermarkEnabled,
     watermarkText,
     watermarkLink,
@@ -233,6 +235,7 @@ export default function SettingsScreen({ navigation }) {
     updateWatermarkLink,
     updateWatermarkColor,
     updateWatermarkOpacity,
+    shouldShowWatermark,
     labelBackgroundColor,
     labelTextColor,
     labelFontFamily,
@@ -1207,6 +1210,10 @@ export default function SettingsScreen({ navigation }) {
                       </View>
                     )}
                   </View>
+                  {/* Watermark Preview */}
+                  {shouldShowWatermark && (
+                    <PhotoWatermark />
+                  )}
                 </View>
               </View>
 

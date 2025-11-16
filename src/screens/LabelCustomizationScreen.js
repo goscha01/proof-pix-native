@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
 import { COLORS, getLabelPositions } from '../constants/rooms';
 import PhotoLabel from '../components/PhotoLabel';
+import PhotoWatermark from '../components/PhotoWatermark';
 import { ColorPicker, fromHsv } from 'react-native-color-picker';
 import { useTranslation } from 'react-i18next';
 
@@ -90,6 +91,7 @@ export default function LabelCustomizationScreen({ navigation }) {
     updateCombinedLabelPosition,
     updateLabelMarginVertical,
     updateLabelMarginHorizontal,
+    shouldShowWatermark,
   } = useSettings();
 
   const [colorModalVisible, setColorModalVisible] = useState(false);
@@ -462,6 +464,10 @@ export default function LabelCustomizationScreen({ navigation }) {
                   />
                 </View>
               </View>
+              {/* Watermark Preview */}
+              {shouldShowWatermark && (
+                <PhotoWatermark />
+              )}
             </View>
           </View>
 
