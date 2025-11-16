@@ -412,8 +412,8 @@ export default function PhotoEditorScreen({ route, navigation }) {
           {/* Show labels overlay on original images if showLabels is true */}
           {showLabels && (
             <>
-              <PhotoLabel label="BEFORE" position={beforeLabelPosition} />
-              <PhotoLabel label="AFTER" position={afterLabelPosition} />
+              <PhotoLabel label="common.before" position={beforeLabelPosition} />
+              <PhotoLabel label="common.after" position={afterLabelPosition} />
             </>
           )}
           {/* Show watermark if enabled */}
@@ -446,7 +446,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
           />
           {/* Show BEFORE label only if showLabels is true */}
           {showLabels && (
-            <PhotoLabel label="BEFORE" position={combinedLabelPosition} />
+            <PhotoLabel label="common.before" position={combinedLabelPosition} />
           )}
         </View>
 
@@ -462,7 +462,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
           />
           {/* Show AFTER label only if showLabels is true */}
           {showLabels && (
-            <PhotoLabel label="AFTER" position={combinedLabelPosition} />
+            <PhotoLabel label="common.after" position={combinedLabelPosition} />
           )}
         </View>
         {/* Show watermark if enabled */}

@@ -5,8 +5,8 @@ const DRIVE_API_URL = 'https://www.googleapis.com/drive/v3/files';
 
 class GoogleDriveService {
   /**
-   * Finds or creates a "ProofPix-Uploads" folder in the user's Google Drive.
-   * @returns {Promise<string|null>} The ID of the folder, or null if an error occurs.
+   * Finds or creates a "ProofPix-Uploads" category in the user's Google Drive.
+   * @returns {Promise<string|null>} The ID of the category, or null if an error occurs.
    */
   async findOrCreateProofPixFolder() {
     try {
@@ -17,6 +17,7 @@ class GoogleDriveService {
       } else {
         console.log('ProofPix folder not found, creating a new one...');
         const newFolderId = await this.createFolder();
+        console.log('Created new ProofPix folder with ID:', newFolderId);
         return newFolderId;
       }
     } catch (error) {

@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -267,7 +267,9 @@ export default function SettingsScreen({ navigation }) {
     getRooms,
     resetCustomRooms,
     userPlan,
-    updateUserPlan
+    updateUserPlan,
+    labelLanguage,
+    updateLabelLanguage,
   } = useSettings();
 
   const { t, i18n } = useTranslation();
@@ -380,6 +382,12 @@ export default function SettingsScreen({ navigation }) {
   const [editingTeamName, setEditingTeamName] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  const [labelLanguageModalVisible, setLabelLanguageModalVisible] = useState(false);
+
+  const appLanguageScrollViewRef = useRef(null);
+  const appLanguageLayouts = useRef({});
+  const labelLanguageScrollViewRef = useRef(null);
+  const labelLanguageLayouts = useRef({});
 
   const isTeamMember = userMode === 'team_member';
   const [canSwitchBack, setCanSwitchBack] = useState(false);
@@ -889,6 +897,39 @@ export default function SettingsScreen({ navigation }) {
     }
   }, [teamName]);
 
+  const getLabelLanguage = () => {
+    const current = LANGUAGES.find((lang) => lang.code === labelLanguage);
+    if (current) return current;
+    // Fallback to English if the saved language code is invalid
+    const english = LANGUAGES.find(lang => lang.code === 'en');
+    if (english) return english;
+    return LANGUAGES[0]; // Absolute fallback
+  };
+
+  useEffect(() => {
+    if (languageModalVisible) {
+      const currentLanguageCode = i18n.language;
+      const yOffset = appLanguageLayouts.current[currentLanguageCode];
+      if (yOffset !== undefined && appLanguageScrollViewRef.current) {
+        setTimeout(() => {
+          appLanguageScrollViewRef.current.scrollTo({ y: yOffset, animated: false });
+        }, 100);
+      }
+    }
+  }, [languageModalVisible]);
+
+  useEffect(() => {
+    if (labelLanguageModalVisible) {
+      const currentLanguageCode = labelLanguage;
+      const yOffset = labelLanguageLayouts.current[currentLanguageCode];
+      if (yOffset !== undefined && labelLanguageScrollViewRef.current) {
+        setTimeout(() => {
+          labelLanguageScrollViewRef.current.scrollTo({ y: yOffset, animated: false });
+        }, 100);
+      }
+    }
+  }, [labelLanguageModalVisible]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -906,15 +947,31 @@ export default function SettingsScreen({ navigation }) {
         {/* Language Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
+
+          {/* App Language */}
           <TouchableOpacity
-            style={styles.languageSelector}
+            style={[styles.settingButton, { marginBottom: 8 }]}
             onPress={() => setLanguageModalVisible(true)}
           >
-            <View style={styles.languageSelectorContent}>
+            <Text style={styles.settingText}>{t('settings.appLanguage')}</Text>
+            <View style={styles.languageSelector}>
               <Text style={styles.languageFlag}>{getCurrentLanguage().flag}</Text>
               <Text style={styles.languageName}>{getCurrentLanguage().name}</Text>
+              <Text style={styles.languageChangeText}>›</Text>
             </View>
-            <Text style={styles.languageChangeText}>{t('settings.changeLanguage')}</Text>
+          </TouchableOpacity>
+
+          {/* Label Language */}
+          <TouchableOpacity
+            style={styles.settingButton}
+            onPress={() => setLabelLanguageModalVisible(true)}
+          >
+            <Text style={styles.settingText}>{t('settings.labelLanguage')}</Text>
+            <View style={styles.languageSelector}>
+              <Text style={styles.languageFlag}>{getLabelLanguage().flag}</Text>
+              <Text style={styles.languageName}>{getLabelLanguage().name}</Text>
+              <Text style={styles.languageChangeText}>›</Text>
+            </View>
           </TouchableOpacity>
         </View>
 
@@ -1582,7 +1639,7 @@ export default function SettingsScreen({ navigation }) {
                       ]}
                     >
                       <PhotoLabel
-                        label="BEFORE"
+                        label="common.before"
                         position="left-top"
                         style={{ position: 'relative', top: 0, left: 0 }}
                       />
@@ -1598,7 +1655,7 @@ export default function SettingsScreen({ navigation }) {
                       ]}
                     >
                       <PhotoLabel
-                        label="AFTER"
+                        label="common.after"
                         position="left-top"
                         style={{ position: 'relative', top: 0, left: 0 }}
                       />
@@ -2031,44 +2088,108 @@ export default function SettingsScreen({ navigation }) {
         <RNModal
           visible={languageModalVisible}
           transparent={true}
-          animationType="slide"
+          animationType="fade"
           onRequestClose={() => setLanguageModalVisible(false)}
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-              <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>{t('settings.language')}</Text>
-                <TouchableOpacity
-                  onPress={() => setLanguageModalVisible(false)}
-                  style={styles.modalCloseButton}
-                >
-                  <Text style={styles.modalCloseText}>×</Text>
-                </TouchableOpacity>
-              </View>
+              <Text style={styles.modalTitle}>{t('settings.language')}</Text>
 
-              <ScrollView style={styles.modalScrollView}>
+              <ScrollView 
+                ref={appLanguageScrollViewRef}
+                style={styles.languageScrollView} 
+                showsVerticalScrollIndicator={true}
+              >
                 {LANGUAGES.map((language) => (
                   <TouchableOpacity
                     key={language.code}
+                    onLayout={(event) => {
+                      const layout = event.nativeEvent.layout;
+                      appLanguageLayouts.current[language.code] = layout.y;
+                    }}
                     style={[
                       styles.languageOption,
-                      i18n.language === language.code && styles.languageOptionSelected
+                      i18n.language === language.code && styles.languageOptionActive
                     ]}
-                    onPress={() => changeLanguage(language.code)}
+                    onPress={() => {
+                      i18n.changeLanguage(language.code);
+                      setLanguageModalVisible(false);
+                    }}
                   >
-                    <Text style={styles.languageOptionFlag}>{language.flag}</Text>
+                    <Text style={styles.languageFlag}>{language.flag}</Text>
                     <Text style={[
                       styles.languageOptionText,
-                      i18n.language === language.code && styles.languageOptionTextSelected
+                      i18n.language === language.code && styles.languageOptionTextActive
                     ]}>
                       {language.name}
                     </Text>
                     {i18n.language === language.code && (
-                      <Text style={styles.languageCheckmark}>✓</Text>
+                      <Text style={styles.checkmark}>✓</Text>
                     )}
                   </TouchableOpacity>
                 ))}
               </ScrollView>
+
+              <TouchableOpacity
+                style={styles.closeModalButton}
+                onPress={() => setLanguageModalVisible(false)}
+              >
+                <Text style={styles.closeModalButtonText}>{t('common.close')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </RNModal>
+
+        {/* Label Language Modal */}
+        <RNModal
+          visible={labelLanguageModalVisible}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setLabelLanguageModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{t('settings.labelLanguage')}</Text>
+              <ScrollView 
+                ref={labelLanguageScrollViewRef}
+                style={styles.languageScrollView} 
+                showsVerticalScrollIndicator={true}
+              >
+                {LANGUAGES.map((language) => (
+                  <TouchableOpacity
+                    key={language.code}
+                    onLayout={(event) => {
+                      const layout = event.nativeEvent.layout;
+                      labelLanguageLayouts.current[language.code] = layout.y;
+                    }}
+                    style={[
+                      styles.languageOption,
+                      labelLanguage === language.code && styles.languageOptionActive
+                    ]}
+                    onPress={() => {
+                      updateLabelLanguage(language.code);
+                      setLabelLanguageModalVisible(false);
+                    }}
+                  >
+                    <Text style={styles.languageFlag}>{language.flag}</Text>
+                    <Text style={[
+                      styles.languageOptionText,
+                      labelLanguage === language.code && styles.languageOptionTextActive
+                    ]}>
+                      {language.name}
+                    </Text>
+                    {labelLanguage === language.code && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+              <TouchableOpacity
+                style={styles.closeModalButton}
+                onPress={() => setLabelLanguageModalVisible(false)}
+              >
+                <Text style={styles.closeModalButtonText}>{t('common.close')}</Text>
+              </TouchableOpacity>
             </View>
           </View>
         </RNModal>
@@ -3483,65 +3604,96 @@ const sliderStyles = StyleSheet.create({
     },
     // Language selector styles
     languageSelector: {
-      backgroundColor: '#f8f9fa',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    languageFlag: {
+      fontSize: 20,
+    },
+    languageName: {
+      fontSize: 16,
+      color: COLORS.TEXT_MUTED,
+    },
+    languageChangeText: {
+      fontSize: 20,
+      color: COLORS.TEXT_MUTED,
+    },
+    // Language modal styles
+    modalOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0, 0, 0, 0.5)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    modalContent: {
+      backgroundColor: 'white',
+      borderRadius: 16,
+      padding: 24,
+      width: '85%',
+      maxWidth: 400,
+      maxHeight: '70%',
+    },
+    modalTitle: {
+      fontSize: 20,
+      fontWeight: '700',
+      color: '#000',
+      textAlign: 'center',
+      marginBottom: 20,
+    },
+    languageScrollView: {
+      maxHeight: Dimensions.get('window').height * 0.45,
+    },
+    languageOption: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 14,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+      marginBottom: 8,
+      backgroundColor: '#F5F5F5',
+    },
+    languageOptionActive: {
+      backgroundColor: '#F2C31B',
+    },
+    languageOptionText: {
+      flex: 1,
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#333',
+    },
+    languageOptionTextActive: {
+      color: '#000',
+    },
+    checkmark: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: '#000',
+    },
+    closeModalButton: {
+      marginTop: 16,
+      backgroundColor: '#F2F2F2',
+      paddingVertical: 14,
+      borderRadius: 12,
+      alignItems: 'center',
+    },
+    closeModalButtonText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#333',
+    },
+    settingButton: {
+      backgroundColor: '#FFFFFF',
       borderRadius: 12,
       padding: 16,
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
       borderWidth: 1,
-      borderColor: COLORS.BORDER,
+      borderColor: '#E5E5E5',
     },
-    languageSelectorContent: {
-      flexDirection: 'row',
-      alignItems: 'center',
-    },
-    languageFlag: {
-      fontSize: 28,
-      marginRight: 12,
-    },
-    languageName: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: COLORS.TEXT,
-    },
-    languageChangeText: {
-      fontSize: 14,
-      color: COLORS.PRIMARY,
-      fontWeight: '600',
-    },
-    // Language modal styles
-    languageOption: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 16,
-      paddingHorizontal: 20,
-      borderRadius: 12,
-      marginBottom: 8,
-      backgroundColor: '#f8f9fa',
-      borderWidth: 1,
-      borderColor: COLORS.BORDER,
-    },
-    languageOptionSelected: {
-      backgroundColor: '#e3f2fd',
-      borderColor: COLORS.PRIMARY,
-    },
-    languageOptionFlag: {
-      fontSize: 24,
-      marginRight: 12,
-    },
-    languageOptionText: {
+    settingText: {
       fontSize: 16,
       color: COLORS.TEXT,
-      flex: 1,
-    },
-    languageOptionTextSelected: {
-      fontWeight: '600',
-      color: COLORS.PRIMARY,
-    },
-    languageCheckmark: {
-      fontSize: 20,
-      color: COLORS.PRIMARY,
-      fontWeight: 'bold',
     },
   });

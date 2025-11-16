@@ -718,9 +718,7 @@ export default function HomeScreen({ navigation }) {
 
   const handleCreateProject = async () => {
     try {
-      const originalName = newProjectName || 'Project';
-      const safeName = originalName.replace(/[^\p{L}\p{N}_\- ]/gu, '_');
-      console.log(`--- [Sanitization] Original: "${originalName}", Sanitized: "${safeName}"`);
+      const safeName = (newProjectName || 'Project').replace(/[^\p{L}\p{N}_\- ]/gu, '_');
       const proj = await createProject(safeName);
       await setActiveProject(proj.id);
       setNewProjectVisible(false);

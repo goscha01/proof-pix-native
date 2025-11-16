@@ -1,0 +1,13 @@
+{
+  "labelCustomization": {
+    "chooseFont": "اختر الخط",
+    "cornerStyle": "نمط الزاوية",
+    "cornerOptions": {
+      "rounded": "دائري",
+      "straight": "مستقيم"
+    },
+    "labelSize": "حجم الملصق",
+    "small": "صغير",
+    "medium": "متوسط"
+  }
+}

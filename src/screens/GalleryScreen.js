@@ -1243,7 +1243,15 @@ export default function GalleryScreen({ navigation, route }) {
             />
             {/* Show label for individual before/after photos if showLabels is true */}
             {showLabels && fullScreenPhoto.mode && (
-              <PhotoLabel label={fullScreenPhoto.mode.toUpperCase()} />
+              <PhotoLabel
+                label={
+                  fullScreenPhoto.mode === 'before'
+                    ? 'common.before'
+                    : fullScreenPhoto.mode === 'after'
+                    ? 'common.after'
+                    : fullScreenPhoto.mode.toUpperCase()
+                }
+              />
             )}
             <TouchableOpacity
               style={styles.shareButton}
@@ -1291,7 +1299,7 @@ export default function GalleryScreen({ navigation, route }) {
                 />
                 {/* Show BEFORE label only if showLabels is true */}
                 {showLabels && (
-                  <PhotoLabel label="BEFORE" />
+                  <PhotoLabel label="common.before" />
                 )}
               </View>
               <View style={styles.fullScreenHalf}>
@@ -1306,7 +1314,7 @@ export default function GalleryScreen({ navigation, route }) {
                 />
                 {/* Show AFTER label only if showLabels is true */}
                 {showLabels && (
-                  <PhotoLabel label="AFTER" />
+                  <PhotoLabel label="common.after" />
                 )}
               </View>
             </View>
@@ -1364,7 +1372,7 @@ export default function GalleryScreen({ navigation, route }) {
                       resizeMode="cover"
                     />
                     {showLabels && (
-                      <PhotoLabel label="BEFORE" />
+                      <PhotoLabel label="common.before" />
                     )}
                   </View>
                   <View style={styles.renderHalf}>
@@ -1374,7 +1382,7 @@ export default function GalleryScreen({ navigation, route }) {
                       resizeMode="cover"
                     />
                     {showLabels && (
-                      <PhotoLabel label="AFTER" />
+                      <PhotoLabel label="common.after" />
                     )}
                   </View>
                 </View>

@@ -101,6 +101,7 @@ export const SettingsProvider = ({ children }) => {
   const [isBusiness, setIsBusiness] = useState(false);
   const [useFolderStructure, setUseFolderStructure] = useState(true);
   const [enabledFolders, setEnabledFolders] = useState({ before: true, after: true, combined: true });
+  const [labelLanguage, setLabelLanguage] = useState('en'); // 'app' or 'en'
   const [customRooms, setCustomRooms] = useState(null); // null means use default rooms
   const [userPlan, setUserPlan] = useState('starter'); // Add userPlan state
   const [loading, setLoading] = useState(true);
@@ -147,7 +148,13 @@ export const SettingsProvider = ({ children }) => {
         setLocation(settings.location ?? 'tampa');
         setIsBusiness(settings.isBusiness ?? false);
         setUseFolderStructure(settings.useFolderStructure ?? true);
-        setEnabledFolders(settings.enabledFolders ?? { before: true, after: true, combined: true });
+        if (settings.enabledFolders) {
+          const categories = settings.enabledFolders;
+          if (typeof categories.before === 'boolean' && typeof categories.after === 'boolean' && typeof categories.combined === 'boolean') {
+            setEnabledFolders(categories);
+          }
+        }
+        setLabelLanguage(settings.labelLanguage ?? 'app'); // Load labelLanguage
         setUserPlan(settings.userPlan ?? 'starter'); // Load userPlan
       }
       
@@ -188,6 +195,7 @@ export const SettingsProvider = ({ children }) => {
         isBusiness,
         useFolderStructure,
         enabledFolders,
+        labelLanguage, // Add labelLanguage to saved settings
         userPlan, // Add userPlan to saved settings
         ...newSettings
       };
@@ -357,11 +365,15 @@ export const SettingsProvider = ({ children }) => {
     setUseFolderStructure(newValue);
     await saveSettings({ useFolderStructure: newValue });
   };
-
+  
   const updateEnabledFolders = async (updates) => {
-    const next = { ...enabledFolders, ...updates };
-    setEnabledFolders(next);
-    await saveSettings({ enabledFolders: next });
+    const newCategories = { ...enabledFolders, ...updates };
+    setEnabledFolders(newCategories);
+    await saveSettings({ enabledFolders: newCategories });
+  };
+
+  const updateLabelLanguage = (language) => {
+    setLabelLanguage(language);
   };
 
   // Custom rooms management (temporarily global for stability)
@@ -420,8 +432,35 @@ export const SettingsProvider = ({ children }) => {
       setIsBusiness(false);
       setUseFolderStructure(true);
       setEnabledFolders({ before: true, after: true, combined: true });
+      setLabelLanguage('en'); // Reset labelLanguage on user data reset
       setCustomRooms(null);
       setUserPlan('starter'); // Reset plan on user data reset
+      await saveSettings({ 
+        showLabels: true,
+        showWatermark: true,
+        customWatermarkEnabled: false,
+        watermarkText: DEFAULT_WATERMARK_TEXT,
+        watermarkLink: DEFAULT_WATERMARK_LINK,
+        watermarkColor: DEFAULT_LABEL_BACKGROUND,
+        watermarkOpacity: DEFAULT_WATERMARK_OPACITY,
+        labelBackgroundColor: DEFAULT_LABEL_BACKGROUND,
+        labelTextColor: DEFAULT_LABEL_TEXT,
+        labelFontFamily: 'system',
+        labelSize: DEFAULT_LABEL_SIZE,
+        labelCornerStyle: DEFAULT_LABEL_CORNER_STYLE,
+        beforeLabelPosition: DEFAULT_LABEL_POSITION,
+        afterLabelPosition: DEFAULT_LABEL_POSITION,
+        combinedLabelPosition: DEFAULT_LABEL_POSITION,
+        labelMarginVertical: 10,
+        labelMarginHorizontal: 10,
+        userName: '',
+        location: 'tampa',
+        isBusiness: false,
+        useFolderStructure: true,
+        enabledFolders: { before: true, after: true, combined: true },
+        labelLanguage: 'en',
+        userPlan: 'starter',
+      });
     } catch (error) {
 
     }
@@ -473,6 +512,8 @@ export const SettingsProvider = ({ children }) => {
     toggleUseFolderStructure,
     enabledFolders,
     updateEnabledFolders,
+    labelLanguage,
+    updateLabelLanguage,
     resetUserData,
     loading,
     customRooms,

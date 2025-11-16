@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useSettings } from '../context/SettingsContext';
 import { LABEL_POSITIONS, getLabelPositions } from '../constants/rooms';
 
@@ -50,7 +51,7 @@ const LABEL_SIZE_MAP = {
  * @param {object} style - Additional custom styles to override
  * @param {object} textStyle - Additional custom text styles
  */
-export default function PhotoLabel({ label, position = 'left-top', style = {}, textStyle = {} }) {
+export default function PhotoLabel({ label, position = 'left-top', style = {}, textStyle = {}, backgroundColor, textColor, size }) {
   const {
     labelBackgroundColor,
     labelTextColor,
@@ -59,7 +60,22 @@ export default function PhotoLabel({ label, position = 'left-top', style = {}, t
     labelCornerStyle,
     labelMarginVertical,
     labelMarginHorizontal,
+    labelLanguage,
   } = useSettings();
+  const { t, i18n } = useTranslation();
+
+  const getLabelText = () => {
+    const targetLng = labelLanguage;
+    // Check if a translation key exists for the label, otherwise use the label as is.
+    if (i18n.exists(label, { lng: targetLng })) {
+      return t(label, { lng: targetLng });
+    }
+    // Fallback for hardcoded labels like "BEFORE", "AFTER", "LABEL"
+    return label;
+  };
+
+  const renderedLabel = getLabelText();
+
   const canonicalKey = labelFontFamily || 'system';
   const normalizedKey = canonicalKey.toLowerCase();
   const selectedFontFamily =
@@ -68,7 +84,7 @@ export default function PhotoLabel({ label, position = 'left-top', style = {}, t
     FONT_FAMILY_MAP[`${normalizedKey}legacy`] ||
     null;
 
-  const sizeKey = labelSize && LABEL_SIZE_MAP[labelSize] ? labelSize : 'medium';
+  const sizeKey = (size && LABEL_SIZE_MAP[size]) ? size : (labelSize && LABEL_SIZE_MAP[labelSize] ? labelSize : 'medium');
   const sizeStyle = LABEL_SIZE_MAP[sizeKey];
   const cornerRadius = labelCornerStyle === 'square' ? 0 : sizeStyle.borderRadius;
 
@@ -83,7 +99,7 @@ export default function PhotoLabel({ label, position = 'left-top', style = {}, t
         styles.label,
         positionCoordinates,
         {
-          backgroundColor: labelBackgroundColor,
+          backgroundColor: backgroundColor || labelBackgroundColor,
           paddingHorizontal: sizeStyle.paddingHorizontal,
           paddingVertical: sizeStyle.paddingVertical,
           borderRadius: cornerRadius,
@@ -95,12 +111,12 @@ export default function PhotoLabel({ label, position = 'left-top', style = {}, t
       <Text
         style={[
           styles.labelText,
-          { color: labelTextColor, fontSize: sizeStyle.fontSize },
+          { color: textColor || labelTextColor, fontSize: sizeStyle.fontSize },
           selectedFontFamily ? { fontFamily: selectedFontFamily } : null,
           textStyle,
         ]}
       >
-        {label}
+        {renderedLabel}
       </Text>
     </View>
   );

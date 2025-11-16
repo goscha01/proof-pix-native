@@ -395,86 +395,29 @@ export default function LabelCustomizationScreen({ navigation }) {
                   onPress={() => updateLabelSize(option.key)}
                   activeOpacity={0.85}
                 >
-                  <View
-                    style={[
-                      styles.previewLabel,
-                      {
-                        backgroundColor: swatchBackground,
-                        paddingHorizontal: sizeStyle.paddingHorizontal,
-                        paddingVertical: sizeStyle.paddingVertical,
-                        borderRadius: cornerRadius,
-                        borderWidth: 1,
-                        borderColor: isSelected ? 'transparent' : '#D0D0D0',
-                        minWidth: sizeStyle.minWidth,
-                        maxWidth: sizeStyle.minWidth,
-                      },
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.previewLabelText,
-                        {
-                          color: swatchTextColor,
-                          fontSize: sizeStyle.fontSize,
-                        },
-                        currentFontOption?.fontFamily && {
-                          fontFamily: currentFontOption.fontFamily,
-                        },
-                      ]}
-                      numberOfLines={1}
-                      adjustsFontSizeToFit
-                      minimumFontScale={0.85}
-                    >
-                      BEFORE
-                    </Text>
-                  </View>
+                  <PhotoLabel
+                    label="common.before"
+                    position="left-top"
+                    style={{
+                      position: 'relative',
+                      top: 0,
+                      left: 0,
+                      paddingHorizontal: sizeStyle.paddingHorizontal,
+                      paddingVertical: sizeStyle.paddingVertical,
+                      minWidth: sizeStyle.minWidth,
+                      borderRadius: cornerRadius,
+                      borderWidth: 1,
+                      borderColor: isSelected ? 'transparent' : '#D0D0D0',
+                    }}
+                    textStyle={{
+                      fontSize: sizeStyle.fontSize,
+                    }}
+                    backgroundColor={swatchBackground}
+                    textColor={swatchTextColor}
+                  />
                 </TouchableOpacity>
               );
             })}
-          </View>
-        </View>
-
-        {/* Label Margins */}
-        <View style={styles.settingRowStacked}>
-          <Text style={styles.settingLabel}>{t('labelCustomization.labelMargins')}</Text>
-          <Text style={styles.settingDescription}>
-            {t('labelCustomization.marginsDescription')}
-          </Text>
-
-          {/* Vertical Margin Slider */}
-          <View style={styles.marginSliderContainer}>
-            <Text style={styles.marginSliderLabel}>
-              {t('labelCustomization.verticalMargin', { value: labelMarginVertical })}
-            </Text>
-            <Slider
-              style={styles.slider}
-              minimumValue={0}
-              maximumValue={50}
-              step={1}
-              value={labelMarginVertical}
-              onValueChange={updateLabelMarginVertical}
-              minimumTrackTintColor={COLORS.PRIMARY}
-              maximumTrackTintColor="#d3d3d3"
-              thumbTintColor={COLORS.PRIMARY}
-            />
-          </View>
-
-          {/* Horizontal Margin Slider */}
-          <View style={styles.marginSliderContainer}>
-            <Text style={styles.marginSliderLabel}>
-              {t('labelCustomization.horizontalMargin', { value: labelMarginHorizontal })}
-            </Text>
-            <Slider
-              style={styles.slider}
-              minimumValue={0}
-              maximumValue={50}
-              step={1}
-              value={labelMarginHorizontal}
-              onValueChange={updateLabelMarginHorizontal}
-              minimumTrackTintColor={COLORS.PRIMARY}
-              maximumTrackTintColor="#d3d3d3"
-              thumbTintColor={COLORS.PRIMARY}
-            />
           </View>
         </View>
 
@@ -484,6 +427,43 @@ export default function LabelCustomizationScreen({ navigation }) {
           <Text style={styles.settingDescription}>
             {t('labelCustomization.positionDescription')}
           </Text>
+
+          {/* Dummy Photo Preview */}
+          <View style={styles.positionPreviewContainer}>
+            <View style={styles.positionPreviewBox}>
+              {/* Left half - BEFORE */}
+              <View style={styles.previewHalfBefore}>
+                <View
+                  style={[
+                    styles.previewLabelPosition,
+                    getLabelPositions(labelMarginVertical, labelMarginHorizontal)[beforeLabelPosition]
+                  ]}
+                >
+                  <PhotoLabel
+                    label="common.before"
+                    position="left-top"
+                    style={{ position: 'relative', top: 0, left: 0 }}
+                  />
+                </View>
+              </View>
+
+              {/* Right half - AFTER */}
+              <View style={styles.previewHalfAfter}>
+                <View
+                  style={[
+                    styles.previewLabelPosition,
+                    getLabelPositions(labelMarginVertical, labelMarginHorizontal)[afterLabelPosition]
+                  ]}
+                >
+                  <PhotoLabel
+                    label="common.after"
+                    position="left-top"
+                    style={{ position: 'relative', top: 0, left: 0 }}
+                  />
+                </View>
+              </View>
+            </View>
+          </View>
 
           {/* Grid-Based Position Selector */}
           <View style={styles.positionGridContainer}>
@@ -591,41 +571,54 @@ export default function LabelCustomizationScreen({ navigation }) {
               </View>
             </View>
           </View>
+        </View>
 
-          {/* Dummy Photo Preview */}
-          <View style={styles.positionPreviewContainer}>
-            <View style={styles.positionPreviewBox}>
-              {/* Left half - BEFORE */}
-              <View style={styles.previewHalfBefore}>
-                <View
-                  style={[
-                    styles.previewLabelPosition,
-                    getLabelPositions(labelMarginVertical, labelMarginHorizontal)[beforeLabelPosition]
-                  ]}
-                >
-                  <PhotoLabel
-                    label="BEFORE"
-                    position="left-top"
-                    style={{ position: 'relative', top: 0, left: 0 }}
-                  />
-                </View>
-              </View>
+        {/* Label Margins */}
+        <View style={styles.settingRowStacked}>
+          <Text style={styles.settingLabel}>{t('labelCustomization.labelMargins')}</Text>
+          <Text style={styles.settingDescription}>
+            {t('labelCustomization.marginsDescription')}
+          </Text>
 
-              {/* Right half - AFTER */}
-              <View style={styles.previewHalfAfter}>
-                <View
-                  style={[
-                    styles.previewLabelPosition,
-                    getLabelPositions(labelMarginVertical, labelMarginHorizontal)[afterLabelPosition]
-                  ]}
-                >
-                  <PhotoLabel
-                    label="AFTER"
-                    position="left-top"
-                    style={{ position: 'relative', top: 0, left: 0 }}
-                  />
-                </View>
-              </View>
+          {/* Vertical Margin Slider */}
+          <View style={styles.marginSliderContainer}>
+            <Text style={styles.marginSliderLabel}>
+              {t('labelCustomization.verticalMargin', { value: labelMarginVertical })}
+            </Text>
+            <View style={styles.sliderWrapper}>
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={50}
+                step={1}
+                value={labelMarginVertical}
+                onValueChange={updateLabelMarginVertical}
+                minimumTrackTintColor={COLORS.PRIMARY}
+                maximumTrackTintColor="#d3d3d3"
+                thumbTintColor={COLORS.PRIMARY}
+              />
+              <View style={styles.sliderDefaultMark} />
+            </View>
+          </View>
+
+          {/* Horizontal Margin Slider */}
+          <View style={styles.marginSliderContainer}>
+            <Text style={styles.marginSliderLabel}>
+              {t('labelCustomization.horizontalMargin', { value: labelMarginHorizontal })}
+            </Text>
+            <View style={styles.sliderWrapper}>
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={50}
+                step={1}
+                value={labelMarginHorizontal}
+                onValueChange={updateLabelMarginHorizontal}
+                minimumTrackTintColor={COLORS.PRIMARY}
+                maximumTrackTintColor="#d3d3d3"
+                thumbTintColor={COLORS.PRIMARY}
+              />
+              <View style={styles.sliderDefaultMark} />
             </View>
           </View>
         </View>
@@ -934,9 +927,24 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT,
     marginBottom: 8,
   },
+  sliderWrapper: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
   slider: {
     width: '100%',
     height: 40,
+  },
+  sliderDefaultMark: {
+    position: 'absolute',
+    left: '22.5%', // Corresponds to 10px, visually adjusted for track padding
+    top: '50%',
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#E0E0E0',
+    transform: [{ translateX: -12 }, { translateY: -12 }],
+    zIndex: -1,
   },
   positionGridContainer: {
     flexDirection: 'row',

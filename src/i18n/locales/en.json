@@ -1,19 +1,32 @@
 {
   "common": {
-    "close": "Close",
-    "cancel": "Cancel",
+    "before": "Before",
+    "after": "After",
+    "combined": "Combined",
+    "back": "Back",
     "save": "Save",
+    "saved": "Saved",
+    "saving": "Saving...",
+    "error": "Error",
+    "success": "Success",
+    "ok": "OK",
+    "cancel": "Cancel",
+    "yes": "Yes",
+    "no": "No",
+    "close": "Close",
+    "loading": "Loading...",
+    "search": "Search",
+    "settings": "Settings",
+    "details": "Details",
     "delete": "Delete",
     "confirm": "Confirm",
-    "loading": "Loading...",
-    "error": "Error",
-    "back": "Back",
-    "apply": "Apply",
-    "ok": "OK",
-    "success": "Success",
-    "selected": "Selected",
-    "edit": "Edit",
-    "done": "Done"
+    "confirmation": "Confirmation",
+    "areYouSure": "Are you sure?",
+    "actionCantBeUndone": "This action cannot be undone.",
+    "tryAgain": "Try Again",
+    "somethingWentWrong": "Something went wrong.",
+    "requiredField": "This field is required.",
+    "invalidValue": "Invalid value."
   },
   "firstLoad": {
     "title": "Welcome to ProofPix",
@@ -123,6 +136,7 @@
   },
   "settings": {
     "title": "Settings",
+    "appLanguage": "App Language",
     "labelCustomization": "Label Customization",
     "labelCustomizationDescription": "Customize the appearance of before/after labels on your photos.",
     "customize": "Customize",
@@ -213,7 +227,11 @@
     "usingDefaultFolders": "Using default folders",
     "uploadStructure": "Upload Structure",
     "useFolderStructure": "Use 'Before/After/Combined' folder structure",
-    "useFolderStructureDescription": "Automatically create subfolders for different states of photos.",
+    "useFolderStructureDescription": "Automatically create subfolders for different photo states.",
+    "labelLanguage": "Labels Language",
+    "appLanguage": "App Language",
+    "labelCustomization_short": "Labels",
+    "folderCustomization_short": "Folders",
     "beforeFolder": "'Before' Folder",
     "beforeFolderDescription": "Enable the folder for original photos.",
     "afterFolder": "'After' Folder",
@@ -296,6 +314,10 @@
     "fontStyle": "Font Style",
     "chooseFont": "Choose font",
     "cornerStyle": "Corner Style",
+    "cornerOptions": {
+      "rounded": "Rounded",
+      "straight": "Straight"
+    },
     "labelSize": "Label Size",
     "small": "Small",
     "medium": "Medium",
@@ -340,10 +362,6 @@
       "playfairDisplayDescription": "Elegant serif",
       "robotoMono": "Roboto Mono",
       "robotoMonoDescription": "Monospaced tech feel"
-    },
-    "cornerOptions": {
-      "rounded": "Rounded",
-      "straight": "Straight"
     }
   },
   "folderCustomization": {
@@ -407,7 +425,5 @@
     "watermarkColor": "Watermark Color",
     "backgroundColor": "Background Color",
     "default": "Default"
-  },
-  "labelCustomization_short": "Labels",
-  "folderCustomization_short": "Folders"
+  }
 }
