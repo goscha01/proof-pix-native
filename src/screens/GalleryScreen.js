@@ -69,6 +69,7 @@ export default function GalleryScreen({ navigation, route }) {
     userPlan,
     labelLanguage,
     sectionLanguage,
+    cleaningServiceEnabled,
   } = useSettings();
   const { userMode, teamInfo, isAuthenticated, folderId, proxySessionId, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
