@@ -104,6 +104,7 @@ export const SettingsProvider = ({ children }) => {
   const [labelLanguage, setLabelLanguage] = useState('en'); // 'app' or 'en'
   const [customRooms, setCustomRooms] = useState(null); // null means use default rooms
   const [userPlan, setUserPlan] = useState('starter'); // Add userPlan state
+  const [cleaningServiceEnabled, setCleaningServiceEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
 
   // Load settings on mount
@@ -156,6 +157,11 @@ export const SettingsProvider = ({ children }) => {
         }
         setLabelLanguage(settings.labelLanguage ?? 'app'); // Load labelLanguage
         setUserPlan(settings.userPlan ?? 'starter'); // Load userPlan
+        setCleaningServiceEnabled(
+          typeof settings.cleaningServiceEnabled === 'boolean'
+            ? settings.cleaningServiceEnabled
+            : true
+        );
       }
       
       // EMERGENCY: Clear all corrupted custom rooms data
@@ -197,6 +203,7 @@ export const SettingsProvider = ({ children }) => {
         enabledFolders,
         labelLanguage, // Add labelLanguage to saved settings
         userPlan, // Add userPlan to saved settings
+        cleaningServiceEnabled,
         ...newSettings
       };
       await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -354,6 +361,12 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ userPlan: plan });
   };
 
+  const toggleCleaningServiceEnabled = async () => {
+    const newValue = !cleaningServiceEnabled;
+    setCleaningServiceEnabled(newValue);
+    await saveSettings({ cleaningServiceEnabled: newValue });
+  };
+
   const toggleBusiness = async () => {
     const newValue = !isBusiness;
     setIsBusiness(newValue);
@@ -435,6 +448,7 @@ export const SettingsProvider = ({ children }) => {
       setLabelLanguage('en'); // Reset labelLanguage on user data reset
       setCustomRooms(null);
       setUserPlan('starter'); // Reset plan on user data reset
+      setCleaningServiceEnabled(true);
       await saveSettings({ 
         showLabels: true,
         showWatermark: true,
@@ -460,6 +474,7 @@ export const SettingsProvider = ({ children }) => {
         enabledFolders: { before: true, after: true, combined: true },
         labelLanguage: 'en',
         userPlan: 'starter',
+        cleaningServiceEnabled: true,
       });
     } catch (error) {
 
@@ -522,6 +537,8 @@ export const SettingsProvider = ({ children }) => {
     resetCustomRooms,
     userPlan, // Expose userPlan
     updateUserPlan, // Expose updateUserPlan
+    cleaningServiceEnabled,
+    toggleCleaningServiceEnabled,
     reloadSettings, // Expose reloadSettings
   };
 

@@ -271,6 +271,8 @@ export default function SettingsScreen({ navigation }) {
     updateUserPlan,
     labelLanguage,
     updateLabelLanguage,
+    cleaningServiceEnabled,
+    toggleCleaningServiceEnabled,
   } = useSettings();
 
   const { t, i18n } = useTranslation();
@@ -415,7 +417,7 @@ export default function SettingsScreen({ navigation }) {
                   styles.roomTabTextActive
                 ]}
               >
-                {room.name}
+                {cleaningServiceEnabled ? room.name : `${t('settings.section')} ${index + 1}`}
               </Text>
             )}
           </TouchableOpacity>
@@ -1815,6 +1817,21 @@ export default function SettingsScreen({ navigation }) {
                 <View style={styles.settingInfo}>
                   <Text style={styles.settingLabel}>{t('settings.customFolders')}</Text>
                 </View>
+              </View>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>{t('settings.cleaningService')}</Text>
+                  <Text style={styles.settingDescription}>
+                    {t('settings.cleaningServiceDescription')}
+                  </Text>
+                </View>
+                <Switch
+                  value={cleaningServiceEnabled}
+                  onValueChange={toggleCleaningServiceEnabled}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
               </View>
 
               {renderRoomTabs()}
