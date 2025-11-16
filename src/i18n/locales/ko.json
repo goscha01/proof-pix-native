@@ -190,7 +190,7 @@
     "labelLanguage": "라벨 언어",
     "appLanguage": "앱 언어",
     "labelCustomization_short": "라벨",
-    "folderCustomization_short": "폴더",
+    "folderCustomization_short": "섹션",
     "beforeFolder": "'이전' 폴더",
     "beforeFolderDescription": "원본 사진 폴더를 활성화합니다.",
     "afterFolder": "'이후' 폴더",
@@ -231,7 +231,10 @@
     "disconnectTeam": "팀 연결 해제",
     "disconnectTeamMessage": "정말 팀과의 연결을 해제하시겠습니까?",
     "teamDisconnectedSuccess": "팀 연결이 성공적으로 해제되었습니다",
-    "teamDisconnectedError": "팀 연결 해제 실패"
+    "teamDisconnectedError": "팀 연결 해제 실패",
+    "cleaningService": "청소 서비스",
+    "cleaningServiceDescription": "일반적인 섹션 대신 실제 방 이름(주방, 욕실 등)을 표시합니다.",
+    "section": "섹션"
   },
   "labels": {
     "position": "위치",

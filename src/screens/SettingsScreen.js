@@ -1813,12 +1813,6 @@ export default function SettingsScreen({ navigation }) {
                 {t('settings.folderCustomizationDescription')}
               </Text>
 
-              <View style={styles.settingRowStacked}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>{t('settings.customFolders')}</Text>
-                </View>
-              </View>
-
               <View style={styles.settingRow}>
                 <View style={styles.settingInfo}>
                   <Text style={styles.settingLabel}>{t('settings.cleaningService')}</Text>

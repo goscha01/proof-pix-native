@@ -190,7 +190,7 @@
     "labelLanguage": "لغة الملصقات",
     "appLanguage": "لغة التطبيق",
     "labelCustomization_short": "الملصقات",
-    "folderCustomization_short": "المجلدات",
+    "folderCustomization_short": "الأقسام",
     "beforeFolder": "مجلد 'قبل'",
     "beforeFolderDescription": "تمكين المجلد للصور الأصلية.",
     "afterFolder": "مجلد 'بعد'",
@@ -231,7 +231,10 @@
     "disconnectTeam": "قطع اتصال الفريق",
     "disconnectTeamMessage": "هل أنت متأكد من قطع الاتصال بالفريق؟",
     "teamDisconnectedSuccess": "تم قطع الاتصال بالفريق بنجاح",
-    "teamDisconnectedError": "فشل قطع الاتصال بالفريق"
+    "teamDisconnectedError": "فشل قطع الاتصال بالفريق",
+    "cleaningService": "خدمة التنظيف",
+    "cleaningServiceDescription": "إظهار أسماء الغرف الحقيقية (المطبخ، الحمام، إلخ) بدلاً من الأقسام العامة.",
+    "section": "قسم"
   },
   "labels": {
     "position": "الموضع",

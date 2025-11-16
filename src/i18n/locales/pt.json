@@ -190,7 +190,7 @@
     "labelLanguage": "Idioma dos Rótulos",
     "appLanguage": "Idioma do Aplicativo",
     "labelCustomization_short": "Rótulos",
-    "folderCustomization_short": "Pastas",
+    "folderCustomization_short": "Seções",
     "beforeFolder": "Pasta 'Antes'",
     "beforeFolderDescription": "Habilite a pasta para fotos originais.",
     "afterFolder": "Pasta 'Depois'",
@@ -231,7 +231,10 @@
     "disconnectTeam": "Desconectar Equipe",
     "disconnectTeamMessage": "Tem certeza de que deseja se desconectar da equipe?",
     "teamDisconnectedSuccess": "Desconectado da equipe com sucesso",
-    "teamDisconnectedError": "Falha ao desconectar da equipe"
+    "teamDisconnectedError": "Falha ao desconectar da equipe",
+    "cleaningService": "Serviço de limpeza",
+    "cleaningServiceDescription": "Mostrar nomes reais de cômodos (Cozinha, Banheiro, etc.) em vez de seções genéricas.",
+    "section": "Seção"
   },
   "labels": {
     "position": "Posição",
