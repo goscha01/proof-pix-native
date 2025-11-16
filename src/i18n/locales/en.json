@@ -27,7 +27,11 @@
     "tryAgain": "Try Again",
     "somethingWentWrong": "Something went wrong.",
     "requiredField": "This field is required.",
-    "invalidValue": "Invalid value."
+    "invalidValue": "Invalid value.",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All",
+    "selected": "selected",
+    "all": "All"
   },
   "firstLoad": {
     "title": "Welcome to ProofPix",
@@ -93,6 +97,10 @@
     "uploadAll": "Upload All",
     "shareAll": "Share All",
     "deleteAll": "Delete All",
+    "uploadSelected": "Upload Selected",
+    "shareSelected": "Share Selected",
+    "deleteSelected": "Delete Selected",
+    "deselectAll": "Deselect All",
     "noPhotos": "No photos in this project",
     "noPhotosTitle": "No Photos",
     "noPhotosInProject": "There are no photos in this project to share.",
@@ -105,6 +113,9 @@
     "selectProjectToView": "Select a project to view photos",
     "takePhotosToStart": "Take some before/after photos to get started",
     "share": "Share",
+    "upload": "Upload",
+    "uploadSuccess": "Photos uploaded successfully!",
+    "uploadStarted": "Upload started in the background!",
     "before": "BEFORE",
     "after": "AFTER",
     "combined": "COMBINED",

@@ -1700,7 +1700,7 @@ export default function GalleryScreen({ navigation, route }) {
                   style={[styles.actionBtn, styles.actionWide, { backgroundColor: '#22A45D' }]}
                   onPress={() => {
                     setManageVisible(false);
-                    // TODO: Add select photos functionality
+                    navigation.navigate('PhotoSelection');
                   }}
                 >
                   <Text style={[styles.actionBtnText, { color: 'white' }]}>
