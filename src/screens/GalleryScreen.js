@@ -28,6 +28,9 @@ import { uploadPhotoBatch, createAlbumName } from '../services/uploadService';
 import { getLocationConfig } from '../config/locations';
 import googleDriveService from '../services/googleDriveService';
 import googleAuthService from '../services/googleAuthService';
+import dropboxAuthService from '../services/dropboxAuthService';
+import dropboxService from '../services/dropboxService';
+import { uploadPhotoBatchToDropbox } from '../services/dropboxUploadService';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
@@ -87,6 +90,8 @@ export default function GalleryScreen({ navigation, route }) {
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
   const [selectedShareTypes, setSelectedShareTypes] = useState({ before: true, after: true, combined: true });
+  const [uploadDestinations, setUploadDestinations] = useState({ google: true, dropbox: false }); // Default: Google only
+  const [isDropboxConnected, setIsDropboxConnected] = useState(false);
   const [selectedFormats, setSelectedFormats] = useState(() => {
     // Default: only square formats enabled by default
     const initial = {};
@@ -129,6 +134,30 @@ export default function GalleryScreen({ navigation, route }) {
       setShowCompletionModal(true);
     }
   }, [uploadStatus.completedUploads]);
+
+  // Load Dropbox tokens when options modal opens and set default destinations based on connected accounts
+  useEffect(() => {
+    if (optionsVisible) {
+      dropboxAuthService.loadStoredTokens().then(() => {
+        const isDropboxAuth = dropboxAuthService.isAuthenticated();
+        setIsDropboxConnected(isDropboxAuth);
+        
+        // Set default destinations: check all connected accounts
+        setUploadDestinations({
+          google: isAuthenticated, // Check Google if connected
+          dropbox: isDropboxAuth   // Check Dropbox if connected
+        });
+      }).catch(err => {
+        console.error('[GALLERY] Error loading Dropbox tokens:', err);
+        setIsDropboxConnected(false);
+        // Set defaults based on what we know
+        setUploadDestinations({
+          google: isAuthenticated,
+          dropbox: false
+        });
+      });
+    }
+  }, [optionsVisible, isAuthenticated]);
 
   const FREE_FORMATS = new Set([]);
   const handleFormatToggle = (key) => {
@@ -340,63 +369,101 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const handleUploadPhotos = async () => {
+    // Check if there are photos to upload (always check this first)
+    if (photos.length === 0) {
+      Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosToUpload'));
+      return;
+    }
+
+    // Load Dropbox tokens before checking authentication
+    await dropboxAuthService.loadStoredTokens();
+
+    // Check if at least one upload service is available (Google Drive or Dropbox)
+    const hasGoogle = isAuthenticated;
+    const hasDropbox = dropboxAuthService.isAuthenticated();
+    
+    if (!hasGoogle && !hasDropbox) {
+      Alert.alert(
+        t('gallery.noUploadServiceTitle'),
+        t('gallery.noUploadServiceMessage'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('gallery.goToSettings'), onPress: () => navigation.navigate('Settings') }
+        ]
+      );
+      return;
+    }
+
+    // Check if user info is configured (required for uploads)
+    if (!userName) {
+      Alert.alert(
+        t('gallery.setupRequiredTitle'),
+        t('gallery.setupNameMessage'),
+        [
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('gallery.goToSettings'), onPress: () => navigation.navigate('Settings') }
+        ]
+      );
+      return;
+    }
+
     // Handle team member upload
     if (userMode === 'team_member') {
       if (teamInfo && teamInfo.sessionId && teamInfo.token) {
-        setOptionsVisible(true); // Open options modal for team member
+        // Set default destinations based on available services
+        setUploadDestinations({
+          google: hasGoogle,
+          dropbox: hasDropbox && !hasGoogle // Default to Dropbox if Google not available
+        });
+        setOptionsVisible(true);
       } else {
         Alert.alert(t('common.error'), t('gallery.teamInfoMissing'));
       }
       return;
     }
 
-    // For Pro/Business/Enterprise users (individual mode or authenticated without team) - use authenticated Google Drive
+    // For Pro/Business/Enterprise users (individual mode or authenticated without team)
     const shouldUseDirectDrive = userMode === 'individual' || 
       (isAuthenticated && (userPlan === 'pro' || userPlan === 'business' || userPlan === 'enterprise') && !teamInfo);
     
     if (shouldUseDirectDrive) {
-      if (!isAuthenticated) {
-        Alert.alert(
-          t('gallery.signInRequiredTitle'),
-          t('gallery.signInRequiredMessage'),
-          [
-            { text: t('common.cancel'), style: 'cancel' },
-            { text: t('gallery.goToSettings'), onPress: () => navigation.navigate('Settings') }
-          ]
-        );
-        return;
-      }
-
-      // Check if user info is configured
-      if (!userName) {
-        Alert.alert(
-          t('gallery.setupRequiredTitle'),
-          t('gallery.setupNameMessage'),
-          [
-            { text: t('common.cancel'), style: 'cancel' },
-            { text: t('gallery.goToSettings'), onPress: () => navigation.navigate('Settings') }
-          ]
-        );
-        return;
-      }
-
-      // Check if there are photos to upload
-      if (photos.length === 0) {
-        Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosToUpload'));
-        return;
-      }
-
-      // Ensure Google Drive folder exists
-      try {
-        const userFolderId = await googleDriveService.findOrCreateProofPixFolder();
-        if (!userFolderId) {
-          Alert.alert(t('common.error'), t('gallery.driveFolderError'));
+      // If Google is authenticated, try to ensure Google Drive folder exists
+      if (hasGoogle) {
+        try {
+          const userFolderId = await googleDriveService.findOrCreateProofPixFolder();
+          if (!userFolderId) {
+            // If Google folder creation fails, but Dropbox is available, allow Dropbox only
+            if (hasDropbox) {
+              setUploadDestinations({
+                google: false,
+                dropbox: true
+              });
+              setOptionsVisible(true);
+              return;
+            }
+            Alert.alert(t('common.error'), t('gallery.driveFolderError'));
+            return;
+          }
+        } catch (error) {
+          // If Google Drive access fails, but Dropbox is available, allow Dropbox only
+          if (hasDropbox) {
+            setUploadDestinations({
+              google: false,
+              dropbox: true
+            });
+            setOptionsVisible(true);
+            return;
+          }
+          Alert.alert(t('common.error'), t('gallery.driveAccessError'));
           return;
         }
-      } catch (error) {
-        Alert.alert(t('common.error'), t('gallery.driveAccessError'));
-        return;
       }
+
+      // Set default destinations based on available services
+      setUploadDestinations({
+        google: hasGoogle,
+        dropbox: hasDropbox && !hasGoogle // Default to Dropbox if Google not available
+      });
 
       // Open options modal
       setOptionsVisible(true);
@@ -417,7 +484,20 @@ export default function GalleryScreen({ navigation, route }) {
     // Check if Google Drive is configured
     // For proxy server uploads, we need folderId and sessionId
     // For location-based uploads, we need folderId (legacy support)
-    if (!config || !config.folderId || (config.useDirectDrive && !config.sessionId)) {
+    const hasGoogleConfig = config && config.folderId && (!config.useDirectDrive || config.sessionId);
+
+    // If Google is not configured but Dropbox is available, allow Dropbox only
+    if (!hasGoogleConfig && hasDropbox) {
+      setUploadDestinations({
+        google: false,
+        dropbox: true
+      });
+      setOptionsVisible(true);
+      return;
+    }
+
+    // If neither Google nor Dropbox is available, show error
+    if (!hasGoogleConfig && !hasDropbox) {
       Alert.alert(
         t('gallery.setupRequiredTitle'),
         t('gallery.driveConfigMissing'),
@@ -428,24 +508,11 @@ export default function GalleryScreen({ navigation, route }) {
       return;
     }
 
-    // Check if user info is configured
-    if (!userName) {
-      Alert.alert(
-        t('gallery.setupRequiredTitle'),
-        t('gallery.setupNameMessage'),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('gallery.goToSettings'), onPress: () => navigation.navigate('Settings') }
-        ]
-      );
-      return;
-    }
-
-    // Check if there are photos to upload
-    if (photos.length === 0) {
-      Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosToUpload'));
-      return;
-    }
+    // Set default destinations based on available services
+    setUploadDestinations({
+      google: hasGoogleConfig,
+      dropbox: hasDropbox && !hasGoogleConfig // Default to Dropbox if Google not configured
+    });
 
     // Open options modal
     setOptionsVisible(true);
@@ -453,6 +520,35 @@ export default function GalleryScreen({ navigation, route }) {
 
   const startUploadWithOptions = async () => {
     try {
+      // Check if at least one destination is selected
+      if (!uploadDestinations.google && !uploadDestinations.dropbox) {
+        Alert.alert(
+          t('gallery.noDestinationSelected'),
+          t('gallery.selectAtLeastOneDestination')
+        );
+        return;
+      }
+
+      // Check authentication for selected destinations
+      if (uploadDestinations.google && !isAuthenticated) {
+        Alert.alert(
+          t('gallery.googleNotConnected'),
+          t('gallery.googleNotConnectedMessage')
+        );
+        return;
+      }
+
+      // Load Dropbox tokens before checking authentication
+      await dropboxAuthService.loadStoredTokens();
+      
+      if (uploadDestinations.dropbox && !dropboxAuthService.isAuthenticated()) {
+        Alert.alert(
+          t('gallery.dropboxNotConnected'),
+          t('gallery.dropboxNotConnectedMessage')
+        );
+        return;
+      }
+
       if (userMode === 'team_member') {
         // Team Member Upload Logic (same as Pro/Business/Enterprise)
         const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
@@ -993,28 +1089,101 @@ export default function GalleryScreen({ navigation, route }) {
 
   const proceedWithUpload = async (items, albumName, configOverride = null) => {
     try {
-      // Use provided config or fallback to location config (for backward compatibility)
-      const config = configOverride || getLocationConfig(location);
-
       // Close upload options and any upgrade overlay before starting background upload
       setOptionsVisible(false);
       setUpgradeVisible(false);
 
-      // Start background upload
-      const uploadId = startBackgroundUpload({
-        items,
-        config,
-        albumName,
-        location,
-        userName,
-        flat: !useFolderStructure,
-        uploadType: 'standard',
-        useDirectDrive: config?.useDirectDrive || false, // Pass the flag for proxy server upload
-        sessionId: config?.sessionId || null, // Pass the proxy session ID
-      });
+      const uploadPromises = [];
 
-      // Show upload modal immediately
-      setShowUploadDetails(true);
+      // Upload to Google Drive if selected
+      if (uploadDestinations.google) {
+        // Use provided config or fallback to location config (for backward compatibility)
+        const config = configOverride || getLocationConfig(location);
+
+        // Check if Google Drive is configured
+        if (!config || !config.folderId || (config.useDirectDrive && !config.sessionId)) {
+          Alert.alert(
+            t('gallery.setupRequiredTitle'),
+            t('gallery.driveConfigMissing')
+          );
+          return;
+        }
+
+        // Start background upload to Google Drive
+        const googleUploadId = startBackgroundUpload({
+          items,
+          config,
+          albumName,
+          location,
+          userName,
+          flat: !useFolderStructure,
+          uploadType: 'standard',
+          useDirectDrive: config?.useDirectDrive || false, // Pass the flag for proxy server upload
+          sessionId: config?.sessionId || null, // Pass the proxy session ID
+        });
+        uploadPromises.push({ type: 'google', uploadId: googleUploadId });
+      }
+
+      // Upload to Dropbox if selected
+      if (uploadDestinations.dropbox) {
+        // Load Dropbox tokens before checking authentication
+        await dropboxAuthService.loadStoredTokens();
+        
+        // Check if Dropbox is authenticated
+        if (!dropboxAuthService.isAuthenticated()) {
+          Alert.alert(
+            t('gallery.dropboxNotConnected'),
+            t('gallery.dropboxNotConnectedMessage')
+          );
+          return;
+        }
+
+        // Upload to Dropbox directly (without background service for now)
+        // We'll do this in parallel with Google Drive upload
+        const dropboxUploadPromise = uploadPhotoBatchToDropbox(items, {
+          albumName,
+          location,
+          cleanerName: userName,
+          flat: !useFolderStructure,
+          batchSize: items.length,
+          onProgress: (current, total) => {
+            // Update progress for Dropbox upload
+            console.log(`[DROPBOX] Upload progress: ${current}/${total}`);
+          },
+        });
+
+        uploadPromises.push({ type: 'dropbox', promise: dropboxUploadPromise });
+      }
+
+      // Show upload modal immediately (if Google Drive upload is in progress)
+      if (uploadDestinations.google) {
+        setShowUploadDetails(true);
+      }
+
+      // Wait for all uploads to complete
+      if (uploadDestinations.dropbox) {
+        try {
+          const dropboxResult = await uploadPromises.find(p => p.type === 'dropbox')?.promise;
+          if (dropboxResult) {
+            console.log('[DROPBOX] Upload completed:', dropboxResult);
+            if (dropboxResult.failed && dropboxResult.failed.length > 0) {
+              Alert.alert(
+                t('gallery.dropboxUploadPartial'),
+                t('gallery.dropboxUploadPartialMessage', {
+                  success: dropboxResult.successCount,
+                  failed: dropboxResult.failureCount,
+                })
+              );
+            }
+          }
+        } catch (error) {
+          console.error('[DROPBOX] Upload error:', error);
+          Alert.alert(
+            t('gallery.dropboxUploadError'),
+            error.message || t('gallery.dropboxUploadErrorMessage')
+          );
+        }
+      }
     } catch (error) {
       Alert.alert('Upload Failed', error.message || 'An error occurred while preparing upload');
     }
@@ -1522,7 +1691,100 @@ export default function GalleryScreen({ navigation, route }) {
           <View style={styles.optionsModalContent}>
             <Text style={styles.optionsTitle}>{t('gallery.whatToUpload')}</Text>
 
-            <Text style={styles.optionsSectionLabel}>{t('gallery.photoTypes')}</Text>
+            {/* Upload Destination Selection */}
+            <Text style={styles.optionsSectionLabel}>{t('gallery.uploadDestination')}</Text>
+            
+            {/* Google Drive Checkbox */}
+            <View style={styles.checkboxRow}>
+              <TouchableOpacity
+                style={styles.checkboxContainer}
+                onPress={() => {
+                  if (isAuthenticated) {
+                    setUploadDestinations(prev => ({ ...prev, google: !prev.google }));
+                  } else {
+                    Alert.alert(
+                      t('gallery.googleNotConnected'),
+                      t('gallery.googleNotConnectedMessage')
+                    );
+                  }
+                }}
+                disabled={!isAuthenticated}
+              >
+                <View style={[
+                  styles.checkbox,
+                  uploadDestinations.google && styles.checkboxChecked,
+                  !isAuthenticated && styles.checkboxDisabled
+                ]}>
+                  {uploadDestinations.google && (
+                    <Text style={styles.checkmark}>✓</Text>
+                  )}
+                </View>
+                <View style={styles.checkboxLabelContainer}>
+                  <Text style={[
+                    styles.checkboxLabelText,
+                    !isAuthenticated && styles.checkboxLabelDisabled
+                  ]}>
+                    {t('gallery.googleDrive')}
+                  </Text>
+                  {isAuthenticated && (
+                    <View style={styles.connectedIndicatorInline}>
+                      <Text style={styles.connectedCheckmarkInline}>✓</Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Dropbox Checkbox */}
+            <View style={styles.checkboxRow}>
+              <TouchableOpacity
+                style={styles.checkboxContainer}
+                onPress={async () => {
+                  await dropboxAuthService.loadStoredTokens();
+                  const connected = dropboxAuthService.isAuthenticated();
+                  setIsDropboxConnected(connected);
+                  if (connected) {
+                    setUploadDestinations(prev => ({ ...prev, dropbox: !prev.dropbox }));
+                  } else {
+                    Alert.alert(
+                      t('gallery.dropboxNotConnected'),
+                      t('gallery.dropboxNotConnectedMessage')
+                    );
+                  }
+                }}
+                disabled={!isDropboxConnected}
+              >
+                <View style={[
+                  styles.checkbox,
+                  uploadDestinations.dropbox && styles.checkboxCheckedDropbox,
+                  !isDropboxConnected && styles.checkboxDisabled
+                ]}>
+                  {uploadDestinations.dropbox && (
+                    <Text style={styles.checkmark}>✓</Text>
+                  )}
+                </View>
+                <View style={styles.checkboxLabelContainer}>
+                  <Text style={[
+                    styles.checkboxLabelText,
+                    !isDropboxConnected && styles.checkboxLabelDisabled
+                  ]}>
+                    {t('gallery.dropbox')}
+                  </Text>
+                  {isDropboxConnected && (
+                    <View style={styles.connectedIndicatorInlineDropbox}>
+                      <Text style={styles.connectedCheckmarkInline}>✓</Text>
+                    </View>
+                  )}
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            {/* Warning if no destination selected */}
+            {!uploadDestinations.google && !uploadDestinations.dropbox && (
+              <Text style={styles.warningText}>{t('gallery.selectAtLeastOneDestination')}</Text>
+            )}
+
+            <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>{t('gallery.photoTypes')}</Text>
             <View style={styles.optionsChipsRow}>
               <TouchableOpacity
                 style={[styles.chip, selectedTypes.before && styles.chipActive]}
@@ -2248,6 +2510,11 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.PRIMARY
   },
+  chipActiveDropbox: {
+    backgroundColor: '#E6F0FF',
+    borderWidth: 1,
+    borderColor: '#0061FF'
+  },
   chipText: {
     color: COLORS.TEXT,
     fontSize: 14,
@@ -2255,6 +2522,135 @@ const styles = StyleSheet.create({
   },
   chipTextActive: {
     color: COLORS.PRIMARY
+  },
+  chipTextActiveDropbox: {
+    color: '#0061FF',
+    fontWeight: '600'
+  },
+  chipContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  connectedIndicator: {
+    marginLeft: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#0061FF',
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  connectedIndicatorGoogle: {
+    marginLeft: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center'
+  },
+  connectedCheckmark: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold'
+  },
+  connectedAccountText: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 2,
+    textAlign: 'center'
+  },
+  chipDisabled: {
+    backgroundColor: COLORS.BORDER,
+    borderColor: COLORS.BORDER,
+    opacity: 0.5
+  },
+  chipTextDisabled: {
+    color: COLORS.GRAY
+  },
+  warningText: {
+    fontSize: 12,
+    color: '#FF6B6B',
+    marginTop: 4,
+    textAlign: 'center'
+  },
+  checkboxRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    paddingVertical: 8
+  },
+  checkboxContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: COLORS.BORDER,
+    backgroundColor: 'white',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  checkboxCheckedDropbox: {
+    backgroundColor: '#0061FF',
+    borderColor: '#0061FF'
+  },
+  checkboxDisabled: {
+    opacity: 0.5,
+    backgroundColor: COLORS.BORDER
+  },
+  checkmark: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold'
+  },
+  checkboxLabelContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1
+  },
+  checkboxLabelText: {
+    fontSize: 16,
+    color: COLORS.TEXT,
+    fontWeight: '500',
+    flex: 1
+  },
+  checkboxLabelDisabled: {
+    color: COLORS.GRAY,
+    opacity: 0.5
+  },
+  connectedIndicatorInline: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: COLORS.PRIMARY,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8
+  },
+  connectedIndicatorInlineDropbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: '#0061FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8
+  },
+  connectedCheckmarkInline: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: 'bold'
   },
   optionsActionsRow: {
     flexDirection: 'row',

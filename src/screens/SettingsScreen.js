@@ -537,6 +537,7 @@ export default function SettingsScreen({ navigation }) {
   }, [isTeamMember]);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [isSigningInDropbox, setIsSigningInDropbox] = useState(false);
   const [isDropboxAuthenticated, setIsDropboxAuthenticated] = useState(false);
   const [dropboxUserInfo, setDropboxUserInfo] = useState(null);
   const [adminInfo, setAdminInfo] = useState(null);
@@ -1555,6 +1556,11 @@ export default function SettingsScreen({ navigation }) {
                 <ActivityIndicator size="large" color="#0000ff" />
                 <Text style={styles.loadingText}>{t('settings.connectingToGoogle')}</Text>
              </View>
+          ) : isSigningInDropbox ? (
+             <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#0061FF" />
+                <Text style={styles.loadingText}>{t('settings.connectingToDropbox')}</Text>
+             </View>
           ) : !isAuthenticated ? (
             <>
               {showPlanSelection ? (
@@ -1686,6 +1692,7 @@ export default function SettingsScreen({ navigation }) {
                         <TouchableOpacity
                           style={[
                             styles.featureButton,
+                            styles.dropboxButton,
                             (!canConnectGoogle || isSigningIn) && styles.buttonDisabled
                           ]}
                           onPress={async () => {
@@ -1702,7 +1709,7 @@ export default function SettingsScreen({ navigation }) {
                               return;
                             }
 
-                            setIsSigningIn(true);
+                            setIsSigningInDropbox(true);
                             try {
                               const result = await dropboxAuthService.signIn();
                               
@@ -1715,17 +1722,22 @@ export default function SettingsScreen({ navigation }) {
                                 // Don't fail the sign-in if folder creation fails
                               }
 
-                              // Update state
-                              setIsDropboxAuthenticated(true);
-                              setDropboxUserInfo(result.userInfo);
+                              // Update state - reload tokens to ensure state is accurate
+                              await dropboxAuthService.loadStoredTokens();
+                              const isAuth = dropboxAuthService.isAuthenticated();
+                              const userInfo = dropboxAuthService.getUserInfo();
+                              
+                              setIsDropboxAuthenticated(isAuth);
+                              setDropboxUserInfo(userInfo);
                               
                               console.log('[DROPBOX] Sign-in successful!');
-                              console.log('[DROPBOX] User info:', result.userInfo);
+                              console.log('[DROPBOX] User info:', userInfo);
+                              console.log('[DROPBOX] Is authenticated:', isAuth);
                               
                               // Show success alert
                               Alert.alert(
                                 t('settings.dropboxConnected'),
-                                t('settings.dropboxConnectedMessage', { email: result.userInfo?.email || '' }),
+                                t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
                                 [{ text: t('common.ok') }]
                               );
                             } catch (error) {
@@ -1735,16 +1747,17 @@ export default function SettingsScreen({ navigation }) {
                                 error.message || t('settings.dropboxSignInError')
                               );
                             } finally {
-                              setIsSigningIn(false);
+                              setIsSigningInDropbox(false);
                             }
                           }}
-                          disabled={!canConnectGoogle || isSigningIn}
+                          disabled={!canConnectGoogle || isSigningInDropbox}
                         >
-                          {isSigningIn ? (
+                          {isSigningInDropbox ? (
                             <ActivityIndicator size="small" color="#fff" />
                           ) : (
                             <Text style={[
                               styles.featureButtonText,
+                              styles.dropboxButtonText,
                               !canConnectGoogle && styles.buttonTextDisabled
                             ]}>
                               {t('settings.connectToDropbox')}
@@ -1822,7 +1835,12 @@ export default function SettingsScreen({ navigation }) {
               <View style={styles.adminInfoBox}>
                 <View style={styles.adminInfoHeader}>
                   <View style={styles.activeAccountContainer}>
-                    <Text style={styles.activeAccountLabel}>{t('settings.activeGoogleAccount')}</Text>
+                    <View style={styles.accountLabelRow}>
+                      <Text style={styles.activeAccountLabel}>{t('settings.activeGoogleAccount')}</Text>
+                      <View style={styles.connectedIndicatorGoogle}>
+                        <Text style={styles.connectedCheckmarkGoogle}>✓</Text>
+                      </View>
+                    </View>
                     <Text style={styles.activeAccountName}>
                       {displayedActiveAccount?.name || t('settings.unknownName')}
                     </Text>
@@ -1899,10 +1917,15 @@ export default function SettingsScreen({ navigation }) {
 
               {/* Dropbox Account Info */}
               {isDropboxAuthenticated && dropboxUserInfo && (
-                <View style={styles.adminInfoBox}>
+                <View style={[styles.adminInfoBox, styles.dropboxInfoBox]}>
                   <View style={styles.adminInfoHeader}>
-                    <View style={styles.activeAccountContainer}>
-                      <Text style={styles.activeAccountLabel}>{t('settings.activeDropboxAccount')}</Text>
+                    <View style={[styles.activeAccountContainer, styles.dropboxAccountContainer]}>
+                      <View style={styles.accountLabelRow}>
+                        <Text style={styles.activeAccountLabel}>{t('settings.activeDropboxAccount')}</Text>
+                        <View style={styles.connectedIndicatorDropbox}>
+                          <Text style={styles.connectedCheckmarkDropbox}>✓</Text>
+                        </View>
+                      </View>
                       <Text style={styles.activeAccountName}>
                         {dropboxUserInfo.name || t('settings.unknownName')}
                       </Text>
@@ -1948,6 +1971,7 @@ export default function SettingsScreen({ navigation }) {
                 const isBusiness = userPlan === 'business';
                 const isEnterprise = userPlan === 'enterprise';
                 
+                const canConnectGoogle = isPro || isBusiness || isEnterprise;
                 const canSetupTeam = isBusiness || isEnterprise;
                 const isAdmin = userMode === 'admin';
                 const connectButtonDisabled = !isEnterprise || !isGoogleSignInAvailable || isSigningIn;
@@ -1990,6 +2014,86 @@ export default function SettingsScreen({ navigation }) {
                         </Text>
                       )}
                     </TouchableOpacity>
+                    
+                    {/* Connect to Dropbox Button - always shown when authenticated */}
+                    {!isDropboxAuthenticated && (
+                      <TouchableOpacity
+                        style={[
+                          styles.featureButton,
+                          styles.dropboxButton,
+                          (!canConnectGoogle || isSigningInDropbox) && styles.buttonDisabled
+                        ]}
+                        onPress={async () => {
+                          if (!canConnectGoogle) {
+                            Alert.alert(t('settings.featureUnavailable'), t('settings.dropboxAccountFeature'));
+                            return;
+                          }
+                          
+                          if (!dropboxAuthService.isConfigured()) {
+                            Alert.alert(
+                              t('settings.featureUnavailable'),
+                              t('settings.dropboxNotConfigured')
+                            );
+                            return;
+                          }
+
+                          setIsSigningInDropbox(true);
+                          try {
+                            const result = await dropboxAuthService.signIn();
+                            
+                            // Find or create ProofPix folder
+                            try {
+                              const folderPath = await dropboxService.findOrCreateProofPixFolder();
+                              console.log('[DROPBOX] Folder ready:', folderPath);
+                            } catch (folderError) {
+                              console.error('[DROPBOX] Folder creation error:', folderError);
+                              // Don't fail the sign-in if folder creation fails
+                            }
+
+                            // Update state - reload tokens to ensure state is accurate
+                            await dropboxAuthService.loadStoredTokens();
+                            const isAuth = dropboxAuthService.isAuthenticated();
+                            const userInfo = dropboxAuthService.getUserInfo();
+                            
+                            setIsDropboxAuthenticated(isAuth);
+                            setDropboxUserInfo(userInfo);
+                            
+                            console.log('[DROPBOX] Sign-in successful!');
+                            console.log('[DROPBOX] User info:', userInfo);
+                            console.log('[DROPBOX] Is authenticated:', isAuth);
+                            
+                            // Show success alert
+                            Alert.alert(
+                              t('settings.dropboxConnected'),
+                              t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
+                              [{ text: t('common.ok') }]
+                            );
+                          } catch (error) {
+                            console.error('[DROPBOX] Sign-in error:', error);
+                            Alert.alert(
+                              t('common.error'),
+                              error.message || t('settings.dropboxSignInError')
+                            );
+                          } finally {
+                            setIsSigningInDropbox(false);
+                          }
+                        }}
+                        disabled={!canConnectGoogle || isSigningInDropbox}
+                      >
+                        {isSigningInDropbox ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <Text style={[
+                            styles.featureButtonText,
+                            styles.dropboxButtonText,
+                            !canConnectGoogle && styles.buttonTextDisabled
+                          ]}>
+                            {t('settings.connectToDropbox')}
+                          </Text>
+                        )}
+                      </TouchableOpacity>
+                    )}
+                    
                     {/* Set Up Team Button - shown for authenticated Business/Enterprise admins who haven't set up yet */}
                     {isAdmin && !isSetupComplete() && canSetupTeam && (
                       <TouchableOpacity
@@ -3335,10 +3439,61 @@ const sliderStyles = StyleSheet.create({
       marginTop: 12,
       marginBottom: 8
     },
+    dropboxButton: {
+      backgroundColor: '#0061FF',
+    },
     featureButtonText: {
       color: COLORS.TEXT,
       fontSize: 16,
       fontWeight: '600'
+    },
+    dropboxButtonText: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '600'
+    },
+    accountLabelRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 4
+    },
+    connectedIndicatorDropbox: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: '#0061FF',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 8
+    },
+    connectedCheckmarkDropbox: {
+      color: 'white',
+      fontSize: 12,
+      fontWeight: 'bold'
+    },
+    connectedIndicatorGoogle: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: COLORS.PRIMARY,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginLeft: 8
+    },
+    connectedCheckmarkGoogle: {
+      color: 'white',
+      fontSize: 12,
+      fontWeight: 'bold'
+    },
+    dropboxInfoBox: {
+      backgroundColor: '#E6F0FF',
+      borderWidth: 1,
+      borderColor: '#0061FF',
+      borderStyle: 'solid'
+    },
+    dropboxAccountContainer: {
+      backgroundColor: '#F0F7FF'
     },
     setupTeamButton: {
       backgroundColor: COLORS.PRIMARY,
