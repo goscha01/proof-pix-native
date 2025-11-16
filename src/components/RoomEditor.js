@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/rooms';
 import { ROOMS } from '../constants/rooms';
+import { useSettings } from '../context/SettingsContext';
 import { useTranslation } from 'react-i18next';
 
 const ROOM_ICONS = [
@@ -322,6 +323,7 @@ const ROOM_ICONS = [
 
 export default function RoomEditor({ visible, onClose, onSave, initialRooms = null, mode = 'customize', editRoom = null }) {
   const { t } = useTranslation();
+  const { sectionLanguage, cleaningServiceEnabled } = useSettings();
   const [rooms, setRooms] = useState([]);
   const [editingRoom, setEditingRoom] = useState(null);
   const [roomName, setRoomName] = useState('');
@@ -551,6 +553,14 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
     );
   };
 
+  const getDisplayRoomName = (room) => {
+    if (cleaningServiceEnabled && room.id) {
+      // Use translated room name when cleaning service is enabled
+      return t(`rooms.${room.id}`, { lng: sectionLanguage, defaultValue: room.name });
+    }
+    return room.name;
+  };
+
   const renderRoomEditor = () => {
     // 
     if (!editingRoom) return null;
@@ -681,7 +691,7 @@ export default function RoomEditor({ visible, onClose, onSave, initialRooms = nu
                   <View style={styles.roomInfo}>
                     <Text style={styles.roomIcon}>{room.icon}</Text>
                     <View style={styles.roomNameContainer}>
-                      <Text style={styles.roomName}>{room.name}</Text>
+                          <Text style={styles.roomName}>{getDisplayRoomName(room)}</Text>
                       {isDefaultRoom(room) && (
                         <Text style={styles.defaultBadge} numberOfLines={1} adjustsFontSizeToFit>{t('roomEditor.defaultBadge')}</Text>
                       )}
