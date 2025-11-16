@@ -1174,34 +1174,38 @@ export default function SettingsScreen({ navigation }) {
                 <View style={styles.positionPreviewBox}>
                   {/* Left half - BEFORE */}
                   <View style={styles.previewHalfBefore}>
-                    <View
-                      style={[
-                        styles.previewLabel,
-                        getLabelPositions(labelMarginVertical, labelMarginHorizontal)[beforeLabelPosition]
-                      ]}
-                    >
-                      <PhotoLabel
-                        label="common.before"
-                        position="left-top"
-                        style={{ position: 'relative', top: 0, left: 0 }}
-                      />
-                    </View>
+                    {showLabels && (
+                      <View
+                        style={[
+                          styles.previewLabel,
+                          getLabelPositions(labelMarginVertical, labelMarginHorizontal)[beforeLabelPosition]
+                        ]}
+                      >
+                        <PhotoLabel
+                          label="common.before"
+                          position="left-top"
+                          style={{ position: 'relative', top: 0, left: 0 }}
+                        />
+                      </View>
+                    )}
                   </View>
 
                   {/* Right half - AFTER */}
                   <View style={styles.previewHalfAfter}>
-                    <View
-                      style={[
-                        styles.previewLabel,
-                        getLabelPositions(labelMarginVertical, labelMarginHorizontal)[afterLabelPosition]
-                      ]}
-                    >
-                      <PhotoLabel
-                        label="common.after"
-                        position="left-top"
-                        style={{ position: 'relative', top: 0, left: 0 }}
-                      />
-                    </View>
+                    {showLabels && (
+                      <View
+                        style={[
+                          styles.previewLabel,
+                          getLabelPositions(labelMarginVertical, labelMarginHorizontal)[afterLabelPosition]
+                        ]}
+                      >
+                        <PhotoLabel
+                          label="common.after"
+                          position="left-top"
+                          style={{ position: 'relative', top: 0, left: 0 }}
+                        />
+                      </View>
+                    )}
                   </View>
                 </View>
               </View>
@@ -1288,10 +1292,17 @@ export default function SettingsScreen({ navigation }) {
 
               {/* Customize Button */}
               <TouchableOpacity
-                style={styles.customizeButton}
+                style={[
+                  styles.customizeButton,
+                  !showLabels && styles.customizeButtonDisabled
+                ]}
                 onPress={() => navigation.navigate('LabelCustomization')}
+                disabled={!showLabels}
               >
-                <Text style={styles.customizeButtonText}>{t('settings.customize')}</Text>
+                <Text style={[
+                  styles.customizeButtonText,
+                  !showLabels && styles.customizeButtonTextDisabled
+                ]}>{t('settings.customize')}</Text>
               </TouchableOpacity>
             </View>
 
@@ -3803,10 +3814,18 @@ const sliderStyles = StyleSheet.create({
       alignItems: 'center',
       marginTop: 16,
     },
+    customizeButtonDisabled: {
+      backgroundColor: COLORS.BORDER,
+      opacity: 0.5,
+    },
     customizeButtonText: {
       fontSize: 16,
       fontWeight: '700',
       color: '#000000',
+    },
+    customizeButtonTextDisabled: {
+      color: COLORS.GRAY,
+      opacity: 0.6,
     },
     // Margin slider styles
     marginSliderContainer: {
