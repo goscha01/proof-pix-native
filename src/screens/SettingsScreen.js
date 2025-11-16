@@ -16,6 +16,7 @@ import {
   Pressable,
   TouchableWithoutFeedback,
   Dimensions,
+  PanResponder,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -291,6 +292,136 @@ export default function SettingsScreen({ navigation }) {
   const [colorPickerKey, setColorPickerKey] = useState(0);
   const [watermarkOpacityPreview, setWatermarkOpacityPreview] = useState(
     typeof watermarkOpacity === 'number' ? watermarkOpacity : 0.5
+  );
+
+  const [rooms, setRooms] = useState(() => getRooms());
+  const [currentRoom, setCurrentRoom] = useState(rooms.length > 0 ? rooms[0].id : null);
+
+  useEffect(() => {
+    const newRooms = getRooms();
+    setRooms(newRooms);
+    if (!currentRoom || !newRooms.some(r => r.id === currentRoom)) {
+      setCurrentRoom(newRooms.length > 0 ? newRooms[0].id : null);
+    }
+  }, [customRooms]);
+
+  // Get circular room order with current room in center
+  const getCircularRooms = () => {
+    if (!currentRoom) return [];
+    const currentIndex = rooms.findIndex(r => r.id === currentRoom);
+    if (currentIndex === -1) return [];
+
+    const result = [];
+    
+    // Show 3 items before, current, and 3 items after (total 7 visible)
+    for (let i = -3; i <= 3; i++) {
+      let index = (currentIndex + i + rooms.length) % rooms.length;
+      result.push({ ...rooms[index], offset: i });
+    }
+    
+    return result;
+  };
+
+  const circularRooms = getCircularRooms();
+
+  // Keep a ref of the current room so the pan responder always has fresh state
+  const currentRoomRef = useRef(currentRoom);
+
+  useEffect(() => {
+    currentRoomRef.current = currentRoom;
+  }, [currentRoom]);
+
+  // Horizontal swipe between rooms, similar to HomeScreen
+  const roomPanResponder = useMemo(
+    () =>
+      PanResponder.create({
+        // Always capture touches that start on the tabs; we decide later if swipe is big enough
+        onStartShouldSetPanResponder: () => {
+          console.log('[SettingsScroller] onStartShouldSetPanResponder: true');
+          return true;
+        },
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderRelease: (evt, gestureState) => {
+          const swipeThreshold = 20;
+          console.log('[SettingsScroller] onPanResponderRelease', {
+            dx: gestureState.dx,
+            dy: gestureState.dy,
+            swipeThreshold,
+          });
+
+          if (!rooms || rooms.length === 0) return;
+
+          const currentIndex = rooms.findIndex(r => r.id === currentRoomRef.current);
+          if (currentIndex === -1) return;
+
+          if (gestureState.dx > swipeThreshold) {
+            // Swipe right -> previous room
+            const newIndex = currentIndex > 0 ? currentIndex - 1 : rooms.length - 1;
+            console.log('[SettingsScroller] swipe right -> previous room', {
+              currentIndex,
+              newIndex,
+              currentRoomId: currentRoomRef.current,
+              newRoomId: rooms[newIndex]?.id,
+            });
+            setCurrentRoom(rooms[newIndex].id);
+          } else if (gestureState.dx < -swipeThreshold) {
+            // Swipe left -> next room
+            const newIndex = currentIndex < rooms.length - 1 ? currentIndex + 1 : 0;
+            console.log('[SettingsScroller] swipe left -> next room', {
+              currentIndex,
+              newIndex,
+              currentRoomId: currentRoomRef.current,
+              newRoomId: rooms[newIndex]?.id,
+            });
+            setCurrentRoom(rooms[newIndex].id);
+          } else {
+            console.log('[SettingsScroller] swipe too small, no room change', {
+              currentIndex,
+              currentRoomId: currentRoomRef.current,
+            });
+          }
+        },
+      }),
+    [rooms]
+  );
+
+  const renderRoomTabs = () => (
+    <View style={styles.roomTabsContainer} {...roomPanResponder.panHandlers}>
+      {circularRooms.map((room, index) => {
+        const isActive = room.offset === 0; // Center item is active
+        const distance = Math.abs(room.offset);
+        const scale = isActive ? 1 : Math.max(0.65, 1 - (distance * 0.15));
+        const opacity = isActive ? 1 : Math.max(0.4, 1 - (distance * 0.2));
+        
+        return (
+          <TouchableOpacity
+            key={`${room.id}-${index}`}
+            style={[
+              styles.roomTab,
+              isActive && styles.roomTabActive,
+              {
+                transform: [{ scale }],
+                opacity
+              }
+            ]}
+            hitSlop={{ top: 10, bottom: 10, left: 20, right: 20 }}
+            onPress={() => setCurrentRoom(room.id)}
+          >
+            <Text style={[styles.roomIcon, { fontSize: isActive ? 28 : 22 }]}>{room.icon}</Text>
+            {isActive && (
+              <Text
+                style={[
+                  styles.roomTabText,
+                  styles.roomTabTextActive
+                ]}
+              >
+                {room.name}
+              </Text>
+            )}
+          </TouchableOpacity>
+        );
+      })}
+    </View>
   );
 
   const watermarkSwatchColor = useMemo(() => {
@@ -1683,11 +1814,10 @@ export default function SettingsScreen({ navigation }) {
               <View style={styles.settingRowStacked}>
                 <View style={styles.settingInfo}>
                   <Text style={styles.settingLabel}>{t('settings.customFolders')}</Text>
-                  <Text style={styles.settingDescription}>
-                    {customRooms ? t('settings.customFoldersCount', { count: customRooms.length }) : t('settings.usingDefaultFolders')}
-                  </Text>
                 </View>
               </View>
+
+              {renderRoomTabs()}
 
               {/* Customize Button */}
               <TouchableOpacity
@@ -3695,5 +3825,39 @@ const sliderStyles = StyleSheet.create({
     settingText: {
       fontSize: 16,
       color: COLORS.TEXT,
+    },
+    roomTabsContainer: {
+      flexDirection: 'row',
+      justifyContent: 'center',
+      alignItems: 'center',
+      paddingVertical: 12,
+      paddingHorizontal: 8,
+      maxHeight: 80,
+      marginBottom: 10,
+    },
+    roomTab: {
+      alignItems: 'center',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      marginHorizontal: 4,
+      borderRadius: 12,
+      backgroundColor: 'white',
+      minWidth: 60,
+      minHeight: 60,
+    },
+    roomTabActive: {
+      backgroundColor: COLORS.PRIMARY,
+    },
+    roomIcon: {
+      fontSize: 24,
+      marginBottom: 4,
+    },
+    roomTabText: {
+      fontSize: 12,
+      color: COLORS.GRAY,
+    },
+    roomTabTextActive: {
+      color: COLORS.TEXT,
+      fontWeight: '600',
     },
   });
