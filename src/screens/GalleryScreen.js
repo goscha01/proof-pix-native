@@ -15,7 +15,7 @@ import {
   ActivityIndicator,
   Switch,
   TextInput,
-  Share
+  Share as RNShare
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
@@ -38,6 +38,7 @@ import { UploadDetailsModal } from '../components/BackgroundUploadStatus';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import UploadCompletionModal from '../components/UploadCompletionModal';
 import { filterNewPhotos, markPhotosAsUploaded } from '../services/uploadTracker';
+import Share from 'react-native-share';
 import JSZip from 'jszip';
 import { useTranslation } from 'react-i18next';
 
@@ -241,10 +242,10 @@ export default function GalleryScreen({ navigation, route }) {
         type: 'image/jpeg'
       };
 
-      const result = await Share.share(shareOptions);
+      const result = await RNShare.share(shareOptions);
       
-      if (result.action === Share.sharedAction) {
-      } else if (result.action === Share.dismissedAction) {
+      if (result.action === RNShare.sharedAction) {
+      } else if (result.action === RNShare.dismissedAction) {
       }
       
       // Clean up temporary file after sharing
@@ -286,10 +287,10 @@ export default function GalleryScreen({ navigation, route }) {
         type: 'image/jpeg'
       };
 
-      const result = await Share.share(shareOptions);
+      const result = await RNShare.share(shareOptions);
       
-      if (result.action === Share.sharedAction) {
-      } else if (result.action === Share.dismissedAction) {
+      if (result.action === RNShare.sharedAction) {
+      } else if (result.action === RNShare.dismissedAction) {
       }
       
       // Clean up temporary file after sharing
@@ -359,36 +360,35 @@ export default function GalleryScreen({ navigation, route }) {
                 });
                 tempFiles.push(zipPath);
                 
-                await Share.share({
+                // Use react-native-share for ZIP file as well for better compatibility
+                await Share.open({
                     url: zipPath,
                     title: `Share ${projectName} Photos`,
                     message: `Here are the photos from the project: ${projectName}`,
                     type: 'application/zip',
                 });
             } else {
-                // Share individual photos - copy each to temp location first
+                // Share multiple photos as individual files using react-native-share
+                // Copy all photos to temp locations first
+                const urls = [];
                 for (let i = 0; i < itemsToShare.length; i++) {
                     const item = itemsToShare[i];
-                    const photoNumber = itemsToShare.length > 1 ? ` (${i + 1}/${itemsToShare.length})` : '';
-                    
                     // Copy photo to temp location to ensure it's accessible
                     const tempFileName = `temp_${Date.now()}_${i}_${Math.random().toString(36).substring(7)}.jpg`;
                     const tempUri = FileSystem.cacheDirectory + tempFileName;
                     await FileSystem.copyAsync({ from: item.uri, to: tempUri });
                     tempFiles.push(tempUri);
-                    
-                    await Share.share({
-                        url: tempUri,
-                        title: `Share ${projectName} Photo${photoNumber}`,
-                        message: `Photo${photoNumber} from the project: ${projectName}`,
-                        type: 'image/jpeg',
-                    });
-                    
-                    // Small delay between shares to avoid overwhelming the system
-                    if (i < itemsToShare.length - 1) {
-                        await new Promise(resolve => setTimeout(resolve, 300));
-                    }
+                    urls.push(tempUri);
                 }
+                
+                // Share all photos at once using react-native-share
+                // Note: This requires native code - rebuild with: npx expo run:ios or npx expo run:android
+                await Share.open({
+                    urls: urls, // Array of file URIs for multiple files
+                    title: `Share ${projectName} Photos`,
+                    message: `${itemsToShare.length} photos from the project: ${projectName}`,
+                    type: 'image/jpeg', // Type applies to all files in the array
+                });
             }
             
             // analyticsService.logEvent('Project_Shared', { 
