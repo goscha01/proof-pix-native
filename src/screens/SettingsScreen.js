@@ -256,8 +256,6 @@ export default function SettingsScreen({ navigation }) {
     userName,
     location,
     updateUserInfo,
-    isBusiness,
-    toggleBusiness,
     useFolderStructure,
     toggleUseFolderStructure,
     enabledFolders,
@@ -1149,24 +1147,6 @@ export default function SettingsScreen({ navigation }) {
 
         {userMode !== 'team_member' && (
           <>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('settings.displaySettings')}</Text>
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>{t('settings.business')}</Text>
-                  <Text style={styles.settingDescription}>
-                    {t('settings.businessDescription')}
-                  </Text>
-                </View>
-                <Switch
-                  value={isBusiness}
-                  onValueChange={toggleBusiness}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
-            </View>
-
             {/* Label Customization */}
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>{t('settings.labelCustomization_short')}</Text>

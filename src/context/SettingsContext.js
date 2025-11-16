@@ -98,7 +98,6 @@ export const SettingsProvider = ({ children }) => {
   const [labelMarginHorizontal, setLabelMarginHorizontal] = useState(10); // Left/right margin
   const [userName, setUserName] = useState('');
   const [location, setLocation] = useState('tampa'); // Default to Tampa
-  const [isBusiness, setIsBusiness] = useState(false);
   const [useFolderStructure, setUseFolderStructure] = useState(true);
   const [enabledFolders, setEnabledFolders] = useState({ before: true, after: true, combined: true });
   const [labelLanguage, setLabelLanguage] = useState('en');
@@ -148,7 +147,6 @@ export const SettingsProvider = ({ children }) => {
         setLabelMarginHorizontal(settings.labelMarginHorizontal ?? 10);
         setUserName(settings.userName ?? '');
         setLocation(settings.location ?? 'tampa');
-        setIsBusiness(settings.isBusiness ?? false);
         setUseFolderStructure(settings.useFolderStructure ?? true);
         if (settings.enabledFolders) {
           const categories = settings.enabledFolders;
@@ -200,7 +198,6 @@ export const SettingsProvider = ({ children }) => {
         labelMarginHorizontal,
         userName,
         location,
-        isBusiness,
         useFolderStructure,
         enabledFolders,
         labelLanguage,
@@ -370,12 +367,6 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ cleaningServiceEnabled: newValue });
   };
 
-  const toggleBusiness = async () => {
-    const newValue = !isBusiness;
-    setIsBusiness(newValue);
-    await saveSettings({ isBusiness: newValue });
-  };
-
   const toggleUseFolderStructure = async () => {
     const newValue = !useFolderStructure;
     setUseFolderStructure(newValue);
@@ -449,7 +440,6 @@ export const SettingsProvider = ({ children }) => {
       setCombinedLabelPosition(DEFAULT_LABEL_POSITION);
       setLabelMarginVertical(10);
       setLabelMarginHorizontal(10);
-      setIsBusiness(false);
       setUseFolderStructure(true);
       setEnabledFolders({ before: true, after: true, combined: true });
       setLabelLanguage('en'); // Reset labelLanguage on user data reset
@@ -476,7 +466,6 @@ export const SettingsProvider = ({ children }) => {
         labelMarginHorizontal: 10,
         userName: '',
         location: 'tampa',
-        isBusiness: false,
         useFolderStructure: true,
         enabledFolders: { before: true, after: true, combined: true },
         labelLanguage: 'en',
@@ -528,8 +517,6 @@ export const SettingsProvider = ({ children }) => {
     userName,
     location,
     updateUserInfo,
-    isBusiness,
-    toggleBusiness,
     useFolderStructure,
     toggleUseFolderStructure,
     enabledFolders,

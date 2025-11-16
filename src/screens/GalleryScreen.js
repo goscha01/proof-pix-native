@@ -63,7 +63,6 @@ export default function GalleryScreen({ navigation, route }) {
   const {
     userName,
     location,
-    isBusiness,
     useFolderStructure,
     enabledFolders,
     showLabels,
@@ -133,11 +132,6 @@ export default function GalleryScreen({ navigation, route }) {
   const FREE_FORMATS = new Set([]);
   const handleFormatToggle = (key) => {
     try {
-      // Gate advanced formats by business flag
-      if (!isBusiness) {
-        setUpgradeVisible(true);
-        return;
-      }
       setSelectedFormats(prev => ({ ...prev, [key]: !prev[key] }));
     } catch (e) {
     }
