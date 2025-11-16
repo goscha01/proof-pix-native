@@ -48,7 +48,10 @@ export const PhotoProvider = ({ children }) => {
   }, []);
 
   // Reassign photo names sequentially per project and room
-  const reassignPhotoNames = (photoList) => {
+  const reassignPhotoNames = (photoList, getRoomDisplayName = (roomId) => {
+    const room = ROOMS.find(r => r.id === roomId);
+    return room ? room.name : (roomId || 'Room');
+  }) => {
     const groups = {};
 
     // Group ONLY before photos by projectId + room and sort by timestamp
@@ -71,8 +74,8 @@ export const PhotoProvider = ({ children }) => {
     const nameMap = {};
     Object.keys(groups).forEach(key => {
       groups[key].forEach((photo, index) => {
-        const roomName = photo.room.charAt(0).toUpperCase() + photo.room.slice(1);
-        const sequentialName = `${roomName} ${index + 1}`;
+        const roomDisplayName = getRoomDisplayName(photo.room);
+        const sequentialName = `${roomDisplayName} ${index + 1}`;
         nameMap[photo.id] = sequentialName;
       });
     });

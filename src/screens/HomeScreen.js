@@ -883,7 +883,7 @@ export default function HomeScreen({ navigation }) {
     }
 
     // Add before photos
-    beforePhotos.forEach((beforePhoto) => {
+    beforePhotos.forEach((beforePhoto, index) => {
       const afterPhoto = afterPhotos.find(
         (p) => p.beforePhotoId === beforePhoto.id
       );
@@ -943,7 +943,11 @@ export default function HomeScreen({ navigation }) {
                 size={PHOTO_SIZE}
               />
               <View style={styles.photoOverlay}>
-                <Text style={styles.photoName}>{beforePhoto.name}</Text>
+                <Text style={styles.photoName}>
+                  {cleaningServiceEnabled
+                    ? `${t(`rooms.${currentRoom}`, { lng: sectionLanguage, defaultValue: currentRoom })} ${index + 1}`
+                    : `${t('settings.section', { lng: sectionLanguage })} ${index + 1}`}
+                </Text>
               </View>
             </TouchableOpacity>
           );
@@ -1001,7 +1005,11 @@ export default function HomeScreen({ navigation }) {
                 <Image source={{ uri: afterPhoto.uri }} style={styles.halfPreviewImage} resizeMode="cover" />
               </View>
               <View style={styles.photoOverlay}>
-                <Text style={styles.photoName}>{beforePhoto.name}</Text>
+                <Text style={styles.photoName}>
+                  {cleaningServiceEnabled
+                    ? `${t(`rooms.${currentRoom}`, { lng: sectionLanguage, defaultValue: currentRoom })} ${index + 1}`
+                    : `${t('settings.section', { lng: sectionLanguage })} ${index + 1}`}
+                </Text>
               </View>
             </TouchableOpacity>
           );
@@ -1050,7 +1058,11 @@ export default function HomeScreen({ navigation }) {
               size={PHOTO_SIZE}
             />
             <View style={styles.photoOverlay}>
-              <Text style={styles.photoName}>{beforePhoto.name}</Text>
+              <Text style={styles.photoName}>
+                {cleaningServiceEnabled
+                  ? `${t(`rooms.${currentRoom}`, { lng: sectionLanguage, defaultValue: currentRoom })} ${index + 1}`
+                  : `${t('settings.section', { lng: sectionLanguage })} ${index + 1}`}
+              </Text>
             </View>
           </TouchableOpacity>
         );

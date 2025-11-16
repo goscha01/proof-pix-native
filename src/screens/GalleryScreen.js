@@ -47,8 +47,30 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function GalleryScreen({ navigation, route }) {
   const { t } = useTranslation();
-  const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
-  const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels, userPlan, labelLanguage } = useSettings();
+  const {
+    photos,
+    getBeforePhotos,
+    getAfterPhotos,
+    getCombinedPhotos,
+    deleteAllPhotos,
+    createProject,
+    assignPhotosToProject,
+    activeProjectId,
+    deleteProject,
+    setActiveProject,
+    projects,
+  } = usePhotos();
+  const {
+    userName,
+    location,
+    isBusiness,
+    useFolderStructure,
+    enabledFolders,
+    showLabels,
+    userPlan,
+    labelLanguage,
+    sectionLanguage,
+  } = useSettings();
   const { userMode, teamInfo, isAuthenticated, folderId, proxySessionId, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
@@ -1124,18 +1146,29 @@ export default function GalleryScreen({ navigation, route }) {
     );
   };
 
-  const renderPhotoSet = (set, index) => (
-    <View key={index} style={styles.photoSetRow}>
-      <View style={styles.setNameContainer}>
-        <Text style={styles.setName}>{set.name}</Text>
+  const renderPhotoSet = (set, index, roomId) => {
+    const roomDisplayName = t(`rooms.${roomId}`, {
+      lng: sectionLanguage,
+      defaultValue: roomId,
+    });
+
+    return (
+      <View key={index} style={styles.photoSetRow}>
+        <View style={styles.setNameContainer}>
+          <Text style={styles.setName}>
+            {cleaningServiceEnabled
+              ? `${roomDisplayName} ${index + 1}`
+              : `${t('settings.section', { lng: sectionLanguage })} ${index + 1}`}
+          </Text>
+        </View>
+        <View style={styles.threeColumnRow}>
+          {renderPhotoCard(set.before, '#4CAF50', 'before', set, false)}
+          {renderPhotoCard(set.after, '#2196F3', 'after', set, false)}
+          {renderPhotoCard(set.combined, '#FFC107', 'combined', set, true)}
+        </View>
       </View>
-      <View style={styles.threeColumnRow}>
-        {renderPhotoCard(set.before, '#4CAF50', 'before', set, false)}
-        {renderPhotoCard(set.after, '#2196F3', 'after', set, false)}
-        {renderPhotoCard(set.combined, '#FFC107', 'combined', set, true)}
-      </View>
-    </View>
-  );
+    );
+  };
 
   const renderRoomSection = (room) => {
     const sets = getPhotoSets(room.id);
@@ -1145,9 +1178,11 @@ export default function GalleryScreen({ navigation, route }) {
       <View key={room.id} style={styles.roomSection}>
         <View style={styles.roomHeader}>
           <Text style={styles.roomIcon}>{room.icon}</Text>
-          <Text style={styles.roomName}>{room.name}</Text>
+          <Text style={styles.roomName}>
+            {t(`rooms.${room.id}`, { lng: sectionLanguage, defaultValue: room.name })}
+          </Text>
         </View>
-        {sets.map((set, index) => renderPhotoSet(set, index))}
+        {sets.map((set, index) => renderPhotoSet(set, index, room.id))}
       </View>
     );
   };
