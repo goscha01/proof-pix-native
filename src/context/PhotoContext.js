@@ -28,7 +28,20 @@ export const PhotoProvider = ({ children }) => {
       await loadPhotos();
       await loadProjectsList();
       const savedActive = await loadActiveProjectId();
-      if (savedActive) setActiveProjectId(savedActive);
+      
+      // Validate that savedActive project actually exists
+      if (savedActive) {
+        const projectsList = await loadProjects();
+        const projectExists = projectsList.some(p => p.id === savedActive);
+        if (projectExists) {
+          setActiveProjectId(savedActive);
+          console.log(`[PhotoContext] Set active project to: ${savedActive}`);
+        } else {
+          console.log(`[PhotoContext] Active project ${savedActive} not found, clearing activeProjectId`);
+          setActiveProjectId(null);
+          await saveActiveProjectId(null);
+        }
+      }
     })();
   }, []);
 
@@ -127,10 +140,12 @@ export const PhotoProvider = ({ children }) => {
     try {
       setLoading(true);
       const metadata = await loadPhotosMetadata();
+      console.log(`[PhotoContext] Loaded ${metadata.length} photos from persistent storage`);
 
       // Filter out any photos with ph:// URIs (old data)
       const validPhotos = metadata.filter(photo => {
         if (photo.uri && photo.uri.startsWith('ph://')) {
+          console.log(`[PhotoContext] Filtered out photo with ph:// URI: ${photo.id}`);
           return false;
         }
         return true;
@@ -138,6 +153,7 @@ export const PhotoProvider = ({ children }) => {
 
       // If we filtered out any photos, save the cleaned data
       if (validPhotos.length !== metadata.length) {
+        console.log(`[PhotoContext] Filtered ${metadata.length - validPhotos.length} invalid photos, saving cleaned data`);
         await savePhotosMetadata(validPhotos);
       }
 
@@ -147,11 +163,14 @@ export const PhotoProvider = ({ children }) => {
       // Save if names changed
       const namesChanged = renamedPhotos.some((photo, idx) => photo.name !== validPhotos[idx]?.name);
       if (namesChanged) {
+        console.log(`[PhotoContext] Photo names changed, saving updated names`);
         await savePhotosMetadata(renamedPhotos);
       }
 
       setPhotos(renamedPhotos);
+      console.log(`[PhotoContext] Loaded ${renamedPhotos.length} photos into state`);
     } catch (error) {
+      console.error('[PhotoContext] Error loading photos:', error);
     } finally {
       setLoading(false);
     }
@@ -160,8 +179,11 @@ export const PhotoProvider = ({ children }) => {
   const loadProjectsList = async () => {
     try {
       const list = await loadProjects();
+      console.log(`[PhotoContext] Loaded ${list.length} projects from persistent storage`);
       setProjects(list);
+      console.log(`[PhotoContext] Loaded ${list.length} projects into state`);
     } catch (e) {
+      console.error('[PhotoContext] Error loading projects:', e);
     }
   };
 
@@ -171,13 +193,28 @@ export const PhotoProvider = ({ children }) => {
       const renamedPhotos = reassignPhotoNames(newPhotos);
       setPhotos(renamedPhotos);
       await savePhotosMetadata(renamedPhotos);
+      console.log(`[PhotoContext] Saved ${renamedPhotos.length} photos to persistent storage`);
     } catch (error) {
+      console.error('[PhotoContext] Error saving photos:', error);
     }
   };
 
   const addPhoto = async (photo) => {
-    const newPhotos = [...photos, { ...photo, projectId: photo.projectId ?? activeProjectId ?? null }];
-    await savePhotos(newPhotos);
+    try {
+      console.log(`[PhotoContext] Adding new photo:`, {
+        id: photo.id,
+        room: photo.room,
+        mode: photo.mode,
+        name: photo.name,
+        projectId: photo.projectId ?? activeProjectId ?? null
+      });
+      const newPhotos = [...photos, { ...photo, projectId: photo.projectId ?? activeProjectId ?? null }];
+      await savePhotos(newPhotos);
+      console.log(`[PhotoContext] ✅ Successfully added photo ${photo.id} to storage`);
+    } catch (error) {
+      console.error(`[PhotoContext] ❌ Failed to add photo ${photo.id}:`, error);
+      throw error; // Re-throw so caller knows it failed
+    }
   };
 
   const updatePhoto = async (photoId, updates) => {
@@ -259,21 +296,32 @@ export const PhotoProvider = ({ children }) => {
 
   // ===== Project operations =====
   const createProject = async (name) => {
-    const newProject = {
-      id: `proj_${Date.now()}`,
-      name: name,
-      createdAt: new Date().toISOString(),
-    };
-    setProjects(prev => [newProject, ...prev]);
-    
-    // Reset custom rooms to default when new project is created
-    // Auto-assign only unassigned photos to the new project
-    const unassigned = photos.filter(p => !p.projectId);
-    if (unassigned.length > 0) {
-      const updated = photos.map(p => (!p.projectId ? { ...p, projectId: newProject.id } : p));
-      await savePhotos(updated);
+    try {
+      console.log(`[PhotoContext] Creating new project: ${name}`);
+      const newProject = {
+        id: `proj_${Date.now()}`,
+        name: name,
+        createdAt: new Date().toISOString(),
+      };
+      const updatedProjects = [newProject, ...projects];
+      setProjects(updatedProjects);
+      
+      // Save projects to persistent storage
+      await saveProjects(updatedProjects);
+      console.log(`[PhotoContext] ✅ Saved project ${newProject.id} to persistent storage`);
+      
+      // Reset custom rooms to default when new project is created
+      // Auto-assign only unassigned photos to the new project
+      const unassigned = photos.filter(p => !p.projectId);
+      if (unassigned.length > 0) {
+        const updated = photos.map(p => (!p.projectId ? { ...p, projectId: newProject.id } : p));
+        await savePhotos(updated);
+      }
+      return newProject;
+    } catch (error) {
+      console.error(`[PhotoContext] ❌ Error creating project:`, error);
+      throw error;
     }
-    return newProject;
   };
 
   const assignPhotosToProject = async (projectId) => {

@@ -32,6 +32,8 @@ export const loadPhotosMetadata = async () => {
  */
 export const savePhotosMetadata = async (photos) => {
   try {
+    console.log(`[Storage] Preparing to save ${photos.length} photos to AsyncStorage`);
+    
     // Only save metadata, not full images
     const metadata = photos.map(p => ({
       id: p.id,
@@ -51,8 +53,25 @@ export const savePhotosMetadata = async (photos) => {
       projectId: p.projectId || null
     }));
 
-    await AsyncStorage.setItem(PHOTOS_METADATA_KEY, JSON.stringify(metadata));
+    const jsonString = JSON.stringify(metadata);
+    console.log(`[Storage] Serialized ${metadata.length} photos, JSON size: ${jsonString.length} bytes`);
+    
+    await AsyncStorage.setItem(PHOTOS_METADATA_KEY, jsonString);
+    
+    // Verify the save worked by reading it back
+    const verify = await AsyncStorage.getItem(PHOTOS_METADATA_KEY);
+    const verifyCount = verify ? JSON.parse(verify).length : 0;
+    console.log(`[Storage] ✅ Saved ${metadata.length} photo metadata entries to AsyncStorage (verified: ${verifyCount} photos in storage)`);
+    
+    return true;
   } catch (error) {
+    console.error('[Storage] ❌ Error saving photos metadata to AsyncStorage:', error);
+    console.error('[Storage] Error details:', {
+      message: error?.message,
+      stack: error?.stack,
+      photosCount: photos?.length
+    });
+    throw error; // Re-throw to let caller know save failed
   }
 };
 
@@ -608,8 +627,17 @@ export const loadProjects = async () => {
  */
 export const saveProjects = async (projects) => {
   try {
-    await AsyncStorage.setItem(PROJECTS_KEY, JSON.stringify(projects));
+    console.log(`[Storage] Preparing to save ${projects.length} projects to AsyncStorage`);
+    const jsonString = JSON.stringify(projects);
+    await AsyncStorage.setItem(PROJECTS_KEY, jsonString);
+    
+    // Verify the save worked by reading it back
+    const verify = await AsyncStorage.getItem(PROJECTS_KEY);
+    const verifyCount = verify ? JSON.parse(verify).length : 0;
+    console.log(`[Storage] ✅ Saved ${projects.length} projects to AsyncStorage (verified: ${verifyCount} projects in storage)`);
   } catch (e) {
+    console.error('[Storage] ❌ Error saving projects to AsyncStorage:', e);
+    throw e;
   }
 };
 
