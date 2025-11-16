@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -66,6 +66,8 @@ export default function PhotoSelectionScreen({ navigation, route }) {
   const [deleting, setDeleting] = useState(false);
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined photos
+  const [fullScreenIndex, setFullScreenIndex] = useState(0);
+  const [fullScreenPhotos, setFullScreenPhotos] = useState([]); // All photos for navigation
   const combinedCaptureRefs = useRef({}); // Store refs for combined photo captures
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
@@ -75,9 +77,18 @@ export default function PhotoSelectionScreen({ navigation, route }) {
   const fullScreenImageRef = useRef(null);
   const [fullScreenImageSize, setFullScreenImageSize] = useState(null);
   const [fullScreenContainerLayout, setFullScreenContainerLayout] = useState(null);
+  const fullScreenScrollRef = useRef(null);
+  
+  // Track image bounds per photo ID to handle positioning correctly when swiping
+  const photoBoundsMap = useRef({});
 
   // Calculate image display bounds for label positioning
-  const getFullScreenImageDisplayBounds = () => {
+  const getFullScreenImageDisplayBounds = (photoId = null) => {
+    // If we have a specific photo ID, try to use its cached bounds
+    if (photoId && photoBoundsMap.current[photoId]) {
+      return photoBoundsMap.current[photoId];
+    }
+    
     if (!fullScreenContainerLayout || !fullScreenImageSize) {
       return null;
     }
@@ -103,12 +114,19 @@ export default function PhotoSelectionScreen({ navigation, route }) {
     const offsetX = (containerWidth - displayWidth) / 2;
     const offsetY = (containerHeight - displayHeight) / 2;
 
-    return {
+    const bounds = {
       width: displayWidth,
       height: displayHeight,
       offsetX,
       offsetY
     };
+    
+    // Cache bounds for this photo
+    if (photoId) {
+      photoBoundsMap.current[photoId] = bounds;
+    }
+    
+    return bounds;
   };
 
   // Get photos from active project or all photos
@@ -177,17 +195,57 @@ export default function PhotoSelectionScreen({ navigation, route }) {
     return [...sourcePhotos, ...combinedPhotos];
   }, [sourcePhotos, combinedPhotos]);
 
+  // Prepare all photos for full-screen navigation
+  const prepareFullScreenPhotos = (initialPhoto, initialPhotoSet = null) => {
+    const allPhotos = [];
+    
+    // Add all available photos in order
+    allAvailableItems.forEach(item => {
+      if (item.mode === PHOTO_MODES.COMBINED && item.before && item.after) {
+        allPhotos.push({
+          id: item.id,
+          type: 'combined',
+          photoSet: { before: item.before, after: item.after, name: item.name, room: item.room }
+        });
+      } else {
+        allPhotos.push({
+          id: item.id,
+          type: 'single',
+          photo: item
+        });
+      }
+    });
+    
+    // Find initial index
+    let initialIndex = 0;
+    if (initialPhoto) {
+      initialIndex = allPhotos.findIndex(p => p.type === 'single' && p.photo.id === initialPhoto.id);
+    } else if (initialPhotoSet && initialPhotoSet.before) {
+      const combinedId = `combined_${initialPhotoSet.before.id}`;
+      initialIndex = allPhotos.findIndex(p => p.type === 'combined' && p.id === combinedId);
+    }
+    
+    if (initialIndex < 0) initialIndex = 0;
+    
+    setFullScreenPhotos(allPhotos);
+    setFullScreenIndex(initialIndex);
+  };
+
   // Long press handlers for full-screen photo
   const handleLongPressStart = (photo, photoSet = null) => {
     longPressTriggered.current = false;
     longPressTimer.current = setTimeout(() => {
       longPressTriggered.current = true;
+      // Prepare photos - the useEffect will sync the photo state with the index
+      // But we need to set at least one photo state to show the ScrollView
+      prepareFullScreenPhotos(photo, photoSet);
+      // Set photo state immediately for the condition to pass
       if (photoSet) {
-        // Show combined preview with both photos
         setFullScreenPhotoSet(photoSet);
+        setFullScreenPhoto(null);
       } else if (photo) {
-        // Show single photo
         setFullScreenPhoto(photo);
+        setFullScreenPhotoSet(null);
       }
     }, 300);
   };
@@ -200,6 +258,8 @@ export default function PhotoSelectionScreen({ navigation, route }) {
     }
     setFullScreenPhoto(null);
     setFullScreenPhotoSet(null);
+    setFullScreenPhotos([]);
+    setFullScreenIndex(0);
     
     // Only delay reset if it was actually a long press
     if (wasLongPress) {
@@ -216,14 +276,323 @@ export default function PhotoSelectionScreen({ navigation, route }) {
   const handleDoubleTap = (photo, photoSet = null) => {
     tapCount.current = 0;
     lastTap.current = null;
+    
+    // Prepare photos and set initial photo state
+    prepareFullScreenPhotos(photo, photoSet);
+    // Set photo state immediately for the ScrollView to show
+    // The useEffect will then sync with the correct index and scroll
     if (photoSet) {
       setFullScreenPhotoSet(photoSet);
+      setFullScreenPhoto(null);
     } else if (photo) {
       setFullScreenPhoto(photo);
+      setFullScreenPhotoSet(null);
     }
   };
 
-  const togglePhotoSelection = (photoId) => {
+  // Scroll to initial index when full-screen opens
+  useEffect(() => {
+    if (fullScreenScrollRef.current && fullScreenPhotos.length > 0 && fullScreenIndex >= 0) {
+      // Scroll to the correct position immediately - no delay to prevent showing wrong photo
+      const scrollTimeout = setTimeout(() => {
+        fullScreenScrollRef.current?.scrollTo({
+          x: fullScreenIndex * Dimensions.get('window').width,
+          animated: false
+        });
+      }, 0);
+      
+      return () => clearTimeout(scrollTimeout);
+    }
+  }, [fullScreenPhotos.length]); // Only run when photos list changes, not on index change
+
+  // Handle scroll - only update index when scroll ends (momentum end) to prevent re-renders during scroll
+  const handleFullScreenScroll = useCallback((event) => {
+    const { contentOffset, layoutMeasurement } = event.nativeEvent;
+    const pageWidth = layoutMeasurement.width;
+    const pageIndex = Math.round(contentOffset.x / pageWidth);
+    
+    // Only update index when scroll ends, not during scrolling
+    // This prevents re-renders while swiping
+    if (pageIndex >= 0 && pageIndex < fullScreenPhotos.length && pageIndex !== fullScreenIndex) {
+      setFullScreenIndex(pageIndex);
+      // Update photo state only for legacy compatibility (when photos list is empty)
+      if (fullScreenPhotos.length === 0) {
+        const currentItem = fullScreenPhotos[pageIndex];
+        if (currentItem) {
+          if (currentItem.type === 'combined' && currentItem.photoSet) {
+            setFullScreenPhotoSet(currentItem.photoSet);
+            setFullScreenPhoto(null);
+          } else if (currentItem.type === 'single' && currentItem.photo) {
+            setFullScreenPhoto(currentItem.photo);
+            setFullScreenPhotoSet(null);
+          }
+        }
+      }
+    }
+  }, [fullScreenPhotos.length, fullScreenIndex]);
+
+  // Component for single photo full screen with its own state
+  const FullScreenSinglePhotoItem = React.memo(({ photo, photoBoundsMapRef, showLabels, beforeLabelPosition, afterLabelPosition, labelMarginVertical, labelMarginHorizontal, selectedPhotos, onToggleSelection, t }) => {
+    const [imageSize, setImageSize] = useState(null);
+    const [containerLayout, setContainerLayout] = useState(null);
+    const imageContainerRef = useRef(null);
+    const imageRef = useRef(null);
+    
+    const currentLabelPosition = photo.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
+    const positions = getLabelPositions(labelMarginVertical, labelMarginHorizontal);
+    const positionConfig = positions[currentLabelPosition] || positions['left-top'];
+
+    // Calculate bounds for this specific photo
+    const calculateBounds = useMemo(() => {
+      if (!containerLayout || !imageSize) {
+        return null;
+      }
+
+      const containerWidth = containerLayout.width;
+      const containerHeight = containerLayout.height;
+      const imageWidth = imageSize.width;
+      const imageHeight = imageSize.height;
+
+      if (!imageWidth || !imageHeight) {
+        return null;
+      }
+
+      const scaleX = containerWidth / imageWidth;
+      const scaleY = containerHeight / imageHeight;
+      const scale = Math.min(scaleX, scaleY);
+
+      const displayWidth = imageWidth * scale;
+      const displayHeight = imageHeight * scale;
+      const offsetX = (containerWidth - displayWidth) / 2;
+      const offsetY = (containerHeight - displayHeight) / 2;
+
+      const bounds = {
+        width: displayWidth,
+        height: displayHeight,
+        offsetX,
+        offsetY
+      };
+      
+      // Cache bounds for this photo
+      photoBoundsMapRef.current[photo.id] = bounds;
+      
+      return bounds;
+    }, [containerLayout, imageSize, photo.id, photoBoundsMapRef]);
+
+    const getLabelStyle = useMemo(() => {
+      if (!calculateBounds) {
+        const { name, horizontalAlign, verticalAlign, ...coordinates } = positionConfig;
+        return coordinates;
+      }
+
+      const style = {};
+      if (positionConfig.top !== undefined) {
+        if (typeof positionConfig.top === 'string' && positionConfig.top.includes('%')) {
+          style.top = calculateBounds.offsetY + (calculateBounds.height * parseFloat(positionConfig.top) / 100);
+        } else {
+          style.top = calculateBounds.offsetY + positionConfig.top;
+        }
+      }
+      if (positionConfig.bottom !== undefined) {
+        style.bottom = calculateBounds.offsetY + positionConfig.bottom;
+      }
+      if (positionConfig.left !== undefined) {
+        if (typeof positionConfig.left === 'string' && positionConfig.left.includes('%')) {
+          style.left = calculateBounds.offsetX + (calculateBounds.width * parseFloat(positionConfig.left) / 100);
+        } else {
+          style.left = calculateBounds.offsetX + positionConfig.left;
+        }
+      }
+      if (positionConfig.right !== undefined) {
+        style.right = calculateBounds.offsetX + positionConfig.right;
+      }
+      if (positionConfig.transform) {
+        style.transform = positionConfig.transform;
+      }
+      return style;
+    }, [calculateBounds, positionConfig]);
+
+    const checkboxStyle = calculateBounds ? {
+      position: 'absolute',
+      top: calculateBounds.offsetY + 8,
+      right: calculateBounds.offsetX + 8,
+      zIndex: 10
+    } : { position: 'absolute', top: 20, right: 20 };
+
+    return (
+      <View style={styles.fullScreenImageContainer} collapsable={false}>
+        <View
+          ref={imageContainerRef}
+          style={styles.fullScreenImageContainer}
+          collapsable={false}
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            setContainerLayout({ width, height });
+          }}
+        >
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => onToggleSelection(photo.id)}
+            style={StyleSheet.absoluteFill}
+          >
+            <Image
+              ref={imageRef}
+              source={{ uri: photo.uri }}
+              style={styles.fullScreenPhoto}
+              resizeMode="contain"
+              onLoad={(event) => {
+                const { width, height } = event.nativeEvent.source;
+                setImageSize({ width, height });
+              }}
+            />
+          </TouchableOpacity>
+          {showLabels && photo.mode && calculateBounds && (
+            <PhotoLabel
+              label={
+                photo.mode === 'before'
+                  ? 'common.before'
+                  : photo.mode === 'after'
+                  ? 'common.after'
+                  : photo.mode.toUpperCase()
+              }
+              position={currentLabelPosition}
+              style={getLabelStyle}
+            />
+          )}
+          
+          <View style={checkboxStyle} pointerEvents="box-none">
+            <TouchableOpacity
+              style={[styles.checkboxContainer, selectedPhotos.has(photo.id) && styles.checkboxSelected]}
+              onPress={() => onToggleSelection(photo.id)}
+            >
+              {selectedPhotos.has(photo.id) && (
+                <Text style={styles.checkmark}>✓</Text>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.checkboxLabel}>{t('common.select')}</Text>
+          </View>
+        </View>
+      </View>
+    );
+  }, (prevProps, nextProps) => {
+    // Return true to skip re-render only if photo ID AND selection status are the same
+    const photoIdSame = prevProps.photo.id === nextProps.photo.id;
+    if (!photoIdSame) return false; // Different photo, must re-render
+    
+    // Check if selection status changed
+    const prevSelected = prevProps.selectedPhotos.has(prevProps.photo.id);
+    const nextSelected = nextProps.selectedPhotos.has(nextProps.photo.id);
+    const selectionSame = prevSelected === nextSelected;
+    
+    // Also check if other props that affect rendering changed
+    const otherPropsSame = 
+      prevProps.showLabels === nextProps.showLabels &&
+      prevProps.beforeLabelPosition === nextProps.beforeLabelPosition &&
+      prevProps.afterLabelPosition === nextProps.afterLabelPosition &&
+      prevProps.labelMarginVertical === nextProps.labelMarginVertical &&
+      prevProps.labelMarginHorizontal === nextProps.labelMarginHorizontal &&
+      prevProps.onToggleSelection === nextProps.onToggleSelection;
+    
+    return selectionSame && otherPropsSame;
+  });
+
+  // Memoize render function to prevent recreating it on every render
+  const renderFullScreenSinglePhoto = useCallback((photo) => {
+    return (
+      <FullScreenSinglePhotoItem
+        photo={photo}
+        photoBoundsMapRef={photoBoundsMap}
+        showLabels={showLabels}
+        beforeLabelPosition={beforeLabelPosition}
+        afterLabelPosition={afterLabelPosition}
+        labelMarginVertical={labelMarginVertical}
+        labelMarginHorizontal={labelMarginHorizontal}
+        selectedPhotos={selectedPhotos}
+        onToggleSelection={togglePhotoSelection}
+        t={t}
+      />
+    );
+  }, [showLabels, beforeLabelPosition, afterLabelPosition, labelMarginVertical, labelMarginHorizontal, selectedPhotos, togglePhotoSelection, t]);
+
+  // Render combined photo full screen
+  const renderFullScreenCombinedPhoto = (photoSet) => {
+    const combinedPhotoId = `combined_${photoSet.before.id}`;
+    const isSelected = selectedPhotos.has(combinedPhotoId);
+
+    return (
+      <View style={styles.fullScreenPhotoContainer}>
+        <View 
+          ref={ref => {
+            if (ref && photoSet.before) {
+              combinedCaptureRefs.current[combinedPhotoId] = ref;
+            }
+          }}
+          collapsable={false}
+          style={[
+            styles.fullScreenCombinedPreview,
+            (() => {
+              const phoneOrientation = photoSet.before.orientation || 'portrait';
+              const cameraViewMode = photoSet.before.cameraViewMode || 'portrait';
+              const isLetterbox = photoSet.before.templateType === 'letterbox' || (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
+              return isLetterbox ? styles.fullScreenStacked : styles.fullScreenSideBySide;
+            })()
+          ]}
+        >
+          <TouchableOpacity
+            activeOpacity={0.9}
+            onPress={() => togglePhotoSelection(combinedPhotoId)}
+            style={StyleSheet.absoluteFill}
+          >
+            <View style={styles.fullScreenHalf}>
+              <Image
+                source={{ uri: photoSet.before.uri }}
+                style={styles.fullScreenHalfImage}
+                resizeMode="cover"
+              />
+              {showLabels && (
+                <PhotoLabel label="common.before" position={combinedLabelPosition} />
+              )}
+            </View>
+            <View style={styles.fullScreenHalf}>
+              <Image
+                source={{ uri: photoSet.after.uri }}
+                style={styles.fullScreenHalfImage}
+                resizeMode="cover"
+              />
+              {showLabels && (
+                <PhotoLabel label="common.after" position={combinedLabelPosition} />
+              )}
+            </View>
+          </TouchableOpacity>
+          
+          <View style={styles.fullScreenCheckboxWrapper} pointerEvents="box-none">
+            <TouchableOpacity
+              style={[styles.checkboxContainer, isSelected && styles.checkboxSelected]}
+              onPress={() => togglePhotoSelection(combinedPhotoId)}
+            >
+              {isSelected && (
+                <Text style={styles.checkmark}>✓</Text>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.checkboxLabel}>{t('common.select')}</Text>
+          </View>
+        </View>
+        <TouchableOpacity
+          style={styles.shareButton}
+          onPress={() => shareCombinedPhoto(photoSet)}
+          disabled={sharing}
+        >
+          {sharing ? (
+            <ActivityIndicator />
+          ) : (
+            <Text style={styles.shareButtonText}>{t('gallery.share')}</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const togglePhotoSelection = useCallback((photoId) => {
     // Don't toggle if long press was triggered
     if (longPressTriggered.current) return;
     
@@ -236,24 +605,28 @@ export default function PhotoSelectionScreen({ navigation, route }) {
       }
       return newSet;
     });
-  };
+  }, []);
 
-  // PanResponder for swipe down to close full screen view
+  // PanResponder for swipe down to close full screen view (only for vertical swipes)
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
-        const { dy } = gestureState;
-        // Detect swipe down
-        return dy > 10;
+        const { dy, dx } = gestureState;
+        // Only activate for vertical swipes (down), not horizontal swipes for navigation
+        // Require more vertical movement than horizontal to avoid interfering with ScrollView
+        return Math.abs(dy) > Math.abs(dx) * 2 && Math.abs(dy) > 30;
+      },
+      onPanResponderGrant: () => {
+        // When we start a vertical swipe, disable horizontal scrolling temporarily
       },
       onPanResponderRelease: (evt, gestureState) => {
-        const { dy } = gestureState;
+        const { dy, dx } = gestureState;
         const threshold = 100; // Swipe down at least 100px
         
-        if (dy > threshold) {
-          setFullScreenPhoto(null);
-          setFullScreenPhotoSet(null);
+        // Only close if it's a vertical swipe down, not horizontal
+        if (Math.abs(dy) > Math.abs(dx) * 2 && dy > threshold) {
+          handleLongPressEnd();
         }
       }
     })
@@ -1026,215 +1399,72 @@ export default function PhotoSelectionScreen({ navigation, route }) {
         </View>
       </Modal>
 
-      {/* Full-screen photo view - single photo */}
-      {fullScreenPhoto && (() => {
-        // Get the appropriate label position based on photo mode
-        const currentLabelPosition = fullScreenPhoto.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
-        const positions = getLabelPositions(labelMarginVertical, labelMarginHorizontal);
-        const positionConfig = positions[currentLabelPosition] || positions['left-top'];
-
-        // Calculate label position based on actual image display area
-        const getLabelStyle = () => {
-          const bounds = getFullScreenImageDisplayBounds();
-          if (!bounds) {
-            // Fallback to default position coordinates if bounds not available
-            const { name, horizontalAlign, verticalAlign, ...coordinates } = positionConfig;
-            return coordinates;
-          }
-
-          // Apply position offset based on image display bounds
-          const style = {};
-
-          // Handle vertical positioning
-          if (positionConfig.top !== undefined) {
-            if (typeof positionConfig.top === 'string' && positionConfig.top.includes('%')) {
-              style.top = bounds.offsetY + (bounds.height * parseFloat(positionConfig.top) / 100);
-            } else {
-              style.top = bounds.offsetY + positionConfig.top;
-            }
-          }
-          if (positionConfig.bottom !== undefined) {
-            style.bottom = bounds.offsetY + positionConfig.bottom;
-          }
-
-          // Handle horizontal positioning
-          if (positionConfig.left !== undefined) {
-            if (typeof positionConfig.left === 'string' && positionConfig.left.includes('%')) {
-              style.left = bounds.offsetX + (bounds.width * parseFloat(positionConfig.left) / 100);
-            } else {
-              style.left = bounds.offsetX + positionConfig.left;
-            }
-          }
-          if (positionConfig.right !== undefined) {
-            style.right = bounds.offsetX + positionConfig.right;
-          }
-
-          // Handle transform
-          if (positionConfig.transform) {
-            style.transform = positionConfig.transform;
-          }
-
-          return style;
-        };
-
-        return (
-          <TouchableWithoutFeedback onPress={handleLongPressEnd}>
-            <View style={styles.fullScreenPhotoContainer} {...panResponder.panHandlers}>
-              <View
-                ref={fullScreenImageContainerRef}
-                style={styles.fullScreenImageContainer}
-                collapsable={false}
-                onLayout={(event) => {
-                  const { width, height } = event.nativeEvent.layout;
-                  setFullScreenContainerLayout({ width, height });
-                }}
-              >
-                <Image
-                  ref={fullScreenImageRef}
-                  source={{ uri: fullScreenPhoto.uri }}
-                  style={styles.fullScreenPhoto}
-                  resizeMode="contain"
-                  onLoad={(event) => {
-                    const { width, height } = event.nativeEvent.source;
-                    setFullScreenImageSize({ width, height });
-                  }}
-                />
-                {/* Show label for individual before/after photos if showLabels is true */}
-                {showLabels && fullScreenPhoto.mode && (
-                  <PhotoLabel
-                    label={
-                      fullScreenPhoto.mode === 'before'
-                        ? 'common.before'
-                        : fullScreenPhoto.mode === 'after'
-                        ? 'common.after'
-                        : fullScreenPhoto.mode.toUpperCase()
-                    }
-                    position={currentLabelPosition}
-                    style={getLabelStyle()}
-                  />
-                )}
-                
-                {/* Checkbox overlay - positioned on the image */}
-                {(() => {
-                  const bounds = getFullScreenImageDisplayBounds();
-                  const checkboxStyle = bounds ? {
-                    position: 'absolute',
-                    top: bounds.offsetY + 8,
-                    right: bounds.offsetX + 8,
-                    zIndex: 10
-                  } : styles.checkboxContainer;
-                  
-                  return (
-                    <View style={checkboxStyle}>
-                      <TouchableOpacity
-                        style={[styles.checkboxContainer, selectedPhotos.has(fullScreenPhoto.id) && styles.checkboxSelected]}
-                        onPress={() => togglePhotoSelection(fullScreenPhoto.id)}
-                      >
-                        {selectedPhotos.has(fullScreenPhoto.id) && (
-                          <Text style={styles.checkmark}>✓</Text>
-                        )}
-                      </TouchableOpacity>
-                      <Text style={styles.checkboxLabel}>{t('common.select')}</Text>
-                    </View>
-                  );
-                })()}
+      {/* Full-screen photo view with swipe navigation */}
+      {(fullScreenPhoto || fullScreenPhotoSet) && fullScreenPhotos.length > 0 && (
+        <View style={styles.fullScreenPhotoContainer} {...panResponder.panHandlers}>
+          <ScrollView
+            ref={fullScreenScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            snapToInterval={Dimensions.get('window').width}
+            decelerationRate="fast"
+            scrollEventThrottle={16}
+            onMomentumScrollEnd={handleFullScreenScroll}
+            directionalLockEnabled={true}
+            bounces={false}
+            scrollEnabled={true}
+          >
+            {fullScreenPhotos.map((item, index) => (
+              <View key={item.id} style={{ width: Dimensions.get('window').width, height: Dimensions.get('window').height }}>
+                {item.type === 'single' && item.photo ? (
+                  renderFullScreenSinglePhoto(item.photo)
+                ) : item.type === 'combined' && item.photoSet ? (
+                  renderFullScreenCombinedPhoto(item.photoSet)
+                ) : null}
               </View>
-              <TouchableOpacity
-                style={styles.shareButton}
-                onPress={() => shareIndividualPhoto(fullScreenPhoto)}
-                disabled={sharing}
-              >
-                {sharing ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={styles.shareButtonText}>{t('gallery.share')}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </TouchableWithoutFeedback>
-        );
-      })()}
+            ))}
+          </ScrollView>
+          {/* Close button */}
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={handleLongPressEnd}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.closeButtonText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-      {/* Full-screen combined photo view */}
-      {fullScreenPhotoSet && (() => {
-        // Find the combined photo ID based on before photo ID
-        const combinedPhotoId = `combined_${fullScreenPhotoSet.before.id}`;
-        const isSelected = selectedPhotos.has(combinedPhotoId);
+      {/* Legacy full-screen photo view - kept for backward compatibility when photos list is empty */}
+      {fullScreenPhoto && fullScreenPhotos.length === 0 && (
+        <View style={styles.fullScreenPhotoContainer} {...panResponder.panHandlers}>
+          {renderFullScreenSinglePhoto(fullScreenPhoto)}
+          {/* Close button */}
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={handleLongPressEnd}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.closeButtonText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
-        return (
-          <TouchableWithoutFeedback onPress={handleLongPressEnd}>
-            <View style={styles.fullScreenPhotoContainer} {...panResponder.panHandlers}>
-              <View 
-                ref={ref => {
-                  if (ref && fullScreenPhotoSet.before) {
-                    combinedCaptureRefs.current[combinedPhotoId] = ref;
-                  }
-                }}
-                collapsable={false}
-                style={[
-                  styles.fullScreenCombinedPreview,
-                  (() => {
-                    const phoneOrientation = fullScreenPhotoSet.before.orientation || 'portrait';
-                    const cameraViewMode = fullScreenPhotoSet.before.cameraViewMode || 'portrait';
-                    const isLetterbox = fullScreenPhotoSet.before.templateType === 'letterbox' || (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
-                    
-                    // In the enlarged view, only letterbox photos should be stacked.
-                    // True landscape and portrait photos are better side-by-side.
-                    return isLetterbox ? styles.fullScreenStacked : styles.fullScreenSideBySide;
-                  })()
-                ]}
-              >
-                <View style={styles.fullScreenHalf}>
-                  <Image
-                    source={{ uri: fullScreenPhotoSet.before.uri }}
-                    style={styles.fullScreenHalfImage}
-                    resizeMode="cover"
-                  />
-                  {/* Show BEFORE label only if showLabels is true */}
-                  {showLabels && (
-                    <PhotoLabel label="common.before" position={combinedLabelPosition} />
-                  )}
-                </View>
-                <View style={styles.fullScreenHalf}>
-                  <Image
-                    source={{ uri: fullScreenPhotoSet.after.uri }}
-                    style={styles.fullScreenHalfImage}
-                    resizeMode="cover"
-                  />
-                  {/* Show AFTER label only if showLabels is true */}
-                  {showLabels && (
-                    <PhotoLabel label="common.after" position={combinedLabelPosition} />
-                  )}
-                </View>
-                
-                {/* Checkbox overlay - positioned on the image */}
-                <View style={styles.fullScreenCheckboxWrapper}>
-                  <TouchableOpacity
-                    style={[styles.checkboxContainer, isSelected && styles.checkboxSelected]}
-                    onPress={() => togglePhotoSelection(combinedPhotoId)}
-                  >
-                    {isSelected && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
-                  </TouchableOpacity>
-                  <Text style={styles.checkboxLabel}>{t('common.select')}</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={styles.shareButton}
-                onPress={() => shareCombinedPhoto(fullScreenPhotoSet)}
-                disabled={sharing}
-              >
-                {sharing ? (
-                  <ActivityIndicator />
-                ) : (
-                  <Text style={styles.shareButtonText}>{t('gallery.share')}</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </TouchableWithoutFeedback>
-        );
-      })()}
+      {/* Legacy full-screen combined photo view - kept for backward compatibility when photos list is empty */}
+      {fullScreenPhotoSet && fullScreenPhotos.length === 0 && (
+        <View style={styles.fullScreenPhotoContainer} {...panResponder.panHandlers}>
+          {renderFullScreenCombinedPhoto(fullScreenPhotoSet)}
+          {/* Close button */}
+          <TouchableOpacity
+            style={styles.closeButton}
+            onPress={handleLongPressEnd}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.closeButtonText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }
@@ -1591,6 +1821,25 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT,
     fontSize: 18,
     fontWeight: 'bold'
+  },
+  closeButton: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1001,
+    elevation: 5
+  },
+  closeButtonText: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+    lineHeight: 24
   }
 });
 
