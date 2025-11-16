@@ -48,7 +48,7 @@ const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 export default function GalleryScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { photos, getBeforePhotos, getAfterPhotos, getCombinedPhotos, deleteAllPhotos, createProject, assignPhotosToProject, activeProjectId, deleteProject, setActiveProject, projects } = usePhotos();
-  const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels, userPlan } = useSettings();
+  const { userName, location, isBusiness, useFolderStructure, enabledFolders, showLabels, userPlan, labelLanguage } = useSettings();
   const { userMode, teamInfo, isAuthenticated, folderId, proxySessionId, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
@@ -1199,9 +1199,15 @@ export default function GalleryScreen({ navigation, route }) {
 
       <View style={styles.columnHeaders}>
         <View style={styles.setNamePlaceholder} />
-        <Text style={[styles.columnHeader, { color: '#4CAF50' }]}>{t('gallery.before')}</Text>
-        <Text style={[styles.columnHeader, { color: '#2196F3' }]}>{t('gallery.after')}</Text>
-        <Text style={[styles.columnHeader, { color: '#FFC107', marginRight: 0 }]}>{t('gallery.combined')}</Text>
+        <Text style={[styles.columnHeader, { color: '#4CAF50' }]}>
+          {t('camera.before', { lng: labelLanguage })}
+        </Text>
+        <Text style={[styles.columnHeader, { color: '#2196F3' }]}>
+          {t('camera.after', { lng: labelLanguage })}
+        </Text>
+        <Text style={[styles.columnHeader, { color: '#FFC107', marginRight: 0 }]}>
+          {t('camera.combined', { lng: labelLanguage })}
+        </Text>
       </View>
 
       {photos.length === 0 || !activeProjectId ? (
