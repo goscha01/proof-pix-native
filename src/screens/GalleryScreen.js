@@ -90,6 +90,7 @@ export default function GalleryScreen({ navigation, route }) {
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
   const [selectedShareTypes, setSelectedShareTypes] = useState({ before: true, after: true, combined: true });
+  const [shareAsArchive, setShareAsArchive] = useState(false); // Default: share individual photos
   const [uploadDestinations, setUploadDestinations] = useState({ google: true, dropbox: false }); // Default: Google only
   const [isDropboxConnected, setIsDropboxConnected] = useState(false);
   const [selectedFormats, setSelectedFormats] = useState(() => {
@@ -307,12 +308,14 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const startSharingWithOptions = async () => {
+    setSharing(true);
+    setShareOptionsVisible(false); // Close the modal immediately
+    
     try {
-        setSharing(true);
-        setShareOptionsVisible(false); // Close the modal immediately
         const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
         if (sourcePhotos.length === 0) {
             Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
+            setSharing(false);
             return;
         }
 
@@ -322,37 +325,94 @@ export default function GalleryScreen({ navigation, route }) {
         );
         if (itemsToShare.length === 0) {
             Alert.alert(t('gallery.noPhotosSelected'), t('gallery.selectAtLeastOne'));
+            setSharing(false);
             return;
         }
         
         const projectName = projects.find(p => p.id === activeProjectId)?.name || 'Shared-Photos';
-        const zipFileName = `${projectName.replace(/\s+/g, '_')}_${Date.now()}.zip`;
-        const zipPath = FileSystem.cacheDirectory + zipFileName;
-        const zip = new JSZip();
-        for (const item of itemsToShare) {
-            const filename = item.uri.split('/').pop();
-            const content = await FileSystem.readAsStringAsync(item.uri, {
-                encoding: FileSystem.EncodingType.Base64,
-            });
-            zip.file(filename, content, { base64: true });
-        }
-        const zipBase64 = await zip.generateAsync({ type: 'base64' });
-        await FileSystem.writeAsStringAsync(zipPath, zipBase64, {
-            encoding: FileSystem.EncodingType.Base64,
-        });
-        await Share.share({
-            url: zipPath,
-            title: `Share ${projectName} Photos`,
-            message: `Here are the photos from the project: ${projectName}`,
-            type: 'application/zip',
-        });
+        const tempFiles = []; // Track temporary files for cleanup
         
-        // analyticsService.logEvent('Project_Shared', { 
-        //   projectName, 
-        //   photoCount: itemsToShare.length,
-        //   sharedTypes: Object.keys(selectedShareTypes).filter(k => selectedShareTypes[k]),
-        // });
+        try {
+            if (shareAsArchive) {
+                // Share as ZIP archive
+                const zipFileName = `${projectName.replace(/\s+/g, '_')}_${Date.now()}.zip`;
+                const zipPath = FileSystem.cacheDirectory + zipFileName;
+                const zip = new JSZip();
+                
+                for (const item of itemsToShare) {
+                    // Copy photo to temp location first to ensure it's accessible
+                    const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+                    const tempUri = FileSystem.cacheDirectory + tempFileName;
+                    await FileSystem.copyAsync({ from: item.uri, to: tempUri });
+                    tempFiles.push(tempUri);
+                    
+                    const filename = item.uri.split('/').pop();
+                    const content = await FileSystem.readAsStringAsync(tempUri, {
+                        encoding: FileSystem.EncodingType.Base64,
+                    });
+                    zip.file(filename, content, { base64: true });
+                }
+                
+                const zipBase64 = await zip.generateAsync({ type: 'base64' });
+                await FileSystem.writeAsStringAsync(zipPath, zipBase64, {
+                    encoding: FileSystem.EncodingType.Base64,
+                });
+                tempFiles.push(zipPath);
+                
+                await Share.share({
+                    url: zipPath,
+                    title: `Share ${projectName} Photos`,
+                    message: `Here are the photos from the project: ${projectName}`,
+                    type: 'application/zip',
+                });
+            } else {
+                // Share individual photos - copy each to temp location first
+                for (let i = 0; i < itemsToShare.length; i++) {
+                    const item = itemsToShare[i];
+                    const photoNumber = itemsToShare.length > 1 ? ` (${i + 1}/${itemsToShare.length})` : '';
+                    
+                    // Copy photo to temp location to ensure it's accessible
+                    const tempFileName = `temp_${Date.now()}_${i}_${Math.random().toString(36).substring(7)}.jpg`;
+                    const tempUri = FileSystem.cacheDirectory + tempFileName;
+                    await FileSystem.copyAsync({ from: item.uri, to: tempUri });
+                    tempFiles.push(tempUri);
+                    
+                    await Share.share({
+                        url: tempUri,
+                        title: `Share ${projectName} Photo${photoNumber}`,
+                        message: `Photo${photoNumber} from the project: ${projectName}`,
+                        type: 'image/jpeg',
+                    });
+                    
+                    // Small delay between shares to avoid overwhelming the system
+                    if (i < itemsToShare.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 300));
+                    }
+                }
+            }
+            
+            // analyticsService.logEvent('Project_Shared', { 
+            //   projectName, 
+            //   photoCount: itemsToShare.length,
+            //   sharedTypes: Object.keys(selectedShareTypes).filter(k => selectedShareTypes[k]),
+            // });
+        } finally {
+            // Clean up temporary files after a delay (to allow sharing to complete)
+            setTimeout(async () => {
+                for (const tempFile of tempFiles) {
+                    try {
+                        const fileInfo = await FileSystem.getInfoAsync(tempFile);
+                        if (fileInfo.exists) {
+                            await FileSystem.deleteAsync(tempFile, { idempotent: true });
+                        }
+                    } catch (cleanupError) {
+                        // Ignore cleanup errors
+                    }
+                }
+            }, 5000); // 5 second delay to allow sharing to complete
+        }
     } catch (error) {
+        console.error('[GALLERY] Share error:', error);
         Alert.alert(t('common.error'), t('gallery.prepareShareError'));
     } finally {
         setSharing(false);
@@ -2027,6 +2087,28 @@ export default function GalleryScreen({ navigation, route }) {
                 onPress={() => setSelectedShareTypes(prev => ({ ...prev, combined: !prev.combined }))}
               >
                 <Text style={[styles.chipText, selectedShareTypes.combined && styles.chipTextActive]}>{t('camera.combined')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Share as Archive Checkbox */}
+            <View style={styles.checkboxRow}>
+              <TouchableOpacity
+                style={styles.checkboxContainer}
+                onPress={() => setShareAsArchive(!shareAsArchive)}
+              >
+                <View style={[
+                  styles.checkbox,
+                  shareAsArchive && styles.checkboxChecked
+                ]}>
+                  {shareAsArchive && (
+                    <Text style={styles.checkmark}>✓</Text>
+                  )}
+                </View>
+                <View style={styles.checkboxLabelContainer}>
+                  <Text style={styles.checkboxLabelText}>
+                    {t('gallery.shareAsArchive')}
+                  </Text>
+                </View>
               </TouchableOpacity>
             </View>
 

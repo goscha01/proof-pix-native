@@ -190,7 +190,8 @@
     "dropboxUploadPartial": "Dropbox Upload Partial",
     "dropboxUploadPartialMessage": "{{success}} photo(s) uploaded successfully, {{failed}} photo(s) failed.",
     "noUploadServiceTitle": "No Upload Service Available",
-    "noUploadServiceMessage": "Please connect to Google Drive or Dropbox in Settings to upload photos."
+    "noUploadServiceMessage": "Please connect to Google Drive or Dropbox in Settings to upload photos.",
+    "shareAsArchive": "Share as archive (zip)"
   },
   "camera": {
     "before": "BEFORE",
