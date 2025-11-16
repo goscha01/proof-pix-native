@@ -209,7 +209,7 @@ export default function GalleryScreen({ navigation, route }) {
       } catch (cleanupError) {
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to share photo');
+      Alert.alert(t('common.error'), t('gallery.sharePhotoError'));
     } finally {
       setSharing(false);
     }
@@ -254,7 +254,7 @@ export default function GalleryScreen({ navigation, route }) {
       } catch (cleanupError) {
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to share photo');
+      Alert.alert(t('common.error'), t('gallery.sharePhotoError'));
     } finally {
       setSharing(false);
     }
@@ -307,7 +307,7 @@ export default function GalleryScreen({ navigation, route }) {
         //   sharedTypes: Object.keys(selectedShareTypes).filter(k => selectedShareTypes[k]),
         // });
     } catch (error) {
-        Alert.alert('Error', 'Failed to prepare photos for sharing.');
+        Alert.alert(t('common.error'), t('gallery.prepareShareError'));
     } finally {
         setSharing(false);
     }
@@ -328,7 +328,7 @@ export default function GalleryScreen({ navigation, route }) {
       if (teamInfo && teamInfo.sessionId && teamInfo.token) {
         setOptionsVisible(true); // Open options modal for team member
       } else {
-        Alert.alert('Error', 'Team information is missing. Please re-join the team.');
+        Alert.alert(t('common.error'), t('gallery.teamInfoMissing'));
       }
       return;
     }
@@ -340,11 +340,11 @@ export default function GalleryScreen({ navigation, route }) {
     if (shouldUseDirectDrive) {
       if (!isAuthenticated) {
         Alert.alert(
-          'Sign In Required',
-          'Please sign in with Google to upload photos to your Drive.',
+          t('gallery.signInRequiredTitle'),
+          t('gallery.signInRequiredMessage'),
           [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('gallery.goToSettings'), onPress: () => navigation.navigate('Settings') }
           ]
         );
         return;
@@ -353,11 +353,11 @@ export default function GalleryScreen({ navigation, route }) {
       // Check if user info is configured
       if (!userName) {
         Alert.alert(
-          'Setup Required',
-          'Please configure your name in Settings before uploading.',
+          t('gallery.setupRequiredTitle'),
+          t('gallery.setupNameMessage'),
           [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
+            { text: t('common.cancel'), style: 'cancel' },
+            { text: t('gallery.goToSettings'), onPress: () => navigation.navigate('Settings') }
           ]
         );
         return;
@@ -373,11 +373,11 @@ export default function GalleryScreen({ navigation, route }) {
       try {
         const userFolderId = await googleDriveService.findOrCreateProofPixFolder();
         if (!userFolderId) {
-          Alert.alert('Error', 'Could not create or find Google Drive folder. Please try again.');
+          Alert.alert(t('common.error'), t('gallery.driveFolderError'));
           return;
         }
       } catch (error) {
-        Alert.alert('Error', 'Failed to access Google Drive. Please sign in again.');
+        Alert.alert(t('common.error'), t('gallery.driveAccessError'));
         return;
       }
 
@@ -402,10 +402,10 @@ export default function GalleryScreen({ navigation, route }) {
     // For location-based uploads, we need folderId (legacy support)
     if (!config || !config.folderId || (config.useDirectDrive && !config.sessionId)) {
       Alert.alert(
-        'Setup Required',
-        'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in with your Google account.',
+        t('gallery.setupRequiredTitle'),
+        t('gallery.driveConfigMissing'),
         [
-          { text: 'OK', style: 'cancel' }
+          { text: t('common.ok'), style: 'cancel' }
         ]
       );
       return;
@@ -414,11 +414,11 @@ export default function GalleryScreen({ navigation, route }) {
     // Check if user info is configured
     if (!userName) {
       Alert.alert(
-        'Setup Required',
-        'Please configure your name in Settings before uploading.',
+        t('gallery.setupRequiredTitle'),
+        t('gallery.setupNameMessage'),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
+          { text: t('common.cancel'), style: 'cancel' },
+          { text: t('gallery.goToSettings'), onPress: () => navigation.navigate('Settings') }
         ]
       );
       return;
@@ -539,12 +539,12 @@ export default function GalleryScreen({ navigation, route }) {
                 }
               }
 
-              if (foundCount === 0 && pairs.length > 0) {
-                Alert.alert('Nothing to Upload', 'No original combined images found.');
+            if (foundCount === 0 && pairs.length > 0) {
+                Alert.alert(t('gallery.nothingToUploadTitle'), t('gallery.noOriginalCombinedFound'));
                 return;
               }
             } catch (e) {
-              Alert.alert('Error', 'Failed to find original combined images');
+              Alert.alert(t('common.error'), t('gallery.originalCombinedSearchError'));
               return;
             }
           } else {
@@ -569,7 +569,7 @@ export default function GalleryScreen({ navigation, route }) {
             const totalRenders = pairs.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
 
             if (totalRenders === 0) {
-              Alert.alert('Nothing to Upload', 'No before/after pairs available to create combined photos.');
+              Alert.alert(t('gallery.nothingToUploadTitle'), t('gallery.noPairsForCombined'));
               return;
             }
 
@@ -702,9 +702,9 @@ export default function GalleryScreen({ navigation, route }) {
         // For location-based uploads, we need folderId (legacy support)
         if (!config || !config.folderId || (config.useDirectDrive && !config.sessionId)) {
           Alert.alert(
-            'Setup Required',
-            'Google Drive configuration is missing. Please configure your Google Drive in Settings or sign in with your Google account.',
-            [{ text: 'OK', style: 'cancel' }]
+            t('gallery.setupRequiredTitle'),
+            t('gallery.driveConfigMissing'),
+            [{ text: t('common.ok'), style: 'cancel' }]
           );
           return;
         }
@@ -816,11 +816,11 @@ export default function GalleryScreen({ navigation, route }) {
             }
 
             if (foundCount === 0) {
-              Alert.alert('Nothing to Upload', 'No original combined images found.');
+              Alert.alert(t('gallery.nothingToUploadTitle'), t('gallery.noOriginalCombinedFound'));
               return;
             }
           } catch (e) {
-            Alert.alert('Error', 'Failed to find original combined images');
+            Alert.alert(t('common.error'), t('gallery.originalCombinedSearchError'));
             return;
           }
         } else {
@@ -845,7 +845,7 @@ export default function GalleryScreen({ navigation, route }) {
           const totalRenders = pairs.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
 
           if (totalRenders === 0) {
-            Alert.alert('Nothing to Upload', 'No before/after pairs available to create combined photos.');
+            Alert.alert(t('gallery.nothingToUploadTitle'), t('gallery.noPairsForCombined'));
             return;
           }
 
@@ -916,7 +916,7 @@ export default function GalleryScreen({ navigation, route }) {
       const allItems = [...filteredBefore, ...filteredAfter, ...filteredCombined];
 
       if (allItems.length === 0) {
-        Alert.alert('Nothing to Upload', 'Please select at least one photo type with available photos.');
+        Alert.alert(t('gallery.nothingToUploadTitle'), t('gallery.noTypesWithPhotos'));
         return;
       }
 
@@ -925,12 +925,12 @@ export default function GalleryScreen({ navigation, route }) {
       
       if (newItems.length === 0) {
         Alert.alert(
-          'No New Photos', 
-          'All selected photos have already been uploaded to this album. Would you like to upload them again anyway?',
+          t('gallery.noNewPhotosTitle'), 
+          t('gallery.noNewPhotosMessage'),
           [
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('common.cancel'), style: 'cancel' },
             { 
-              text: 'Upload Anyway', 
+              text: t('gallery.uploadAgain'), 
               style: 'default',
               onPress: () => {
                 // Force re-upload of all photos by using allItems instead of filtered newItems
@@ -945,17 +945,17 @@ export default function GalleryScreen({ navigation, route }) {
       if (newItems.length < allItems.length) {
         const skippedCount = allItems.length - newItems.length;
         Alert.alert(
-          'Some Photos Already Uploaded',
-          `${skippedCount} photo(s) were skipped because they were already uploaded to this album. ${newItems.length} new photo(s) will be uploaded.`,
+          t('gallery.somePhotosUploadedTitle'),
+          t('gallery.somePhotosUploadedMessage', { skippedCount, newCount: newItems.length }),
           [
-            { text: 'Cancel', style: 'cancel' },
+            { text: t('common.cancel'), style: 'cancel' },
             { 
-              text: 'Upload New Only', 
+              text: t('common.confirm'), 
               style: 'default',
               onPress: () => proceedWithUpload(newItems, albumName, uploadConfig) 
             },
             { 
-              text: 'Upload All', 
+              text: t('gallery.uploadAll'), 
               style: 'default',
               onPress: () => {
                 // Force re-upload of all photos including already uploaded ones
@@ -1228,7 +1228,9 @@ export default function GalleryScreen({ navigation, route }) {
           style={[styles.deleteAllButtonBottom, { backgroundColor: '#F2C31B' }]}
           onPress={() => setManageVisible(true)}
         >
-          <Text style={[styles.deleteAllButtonBottomText, { color: '#000' }]}>📤 Share Project</Text>
+          <Text style={[styles.deleteAllButtonBottomText, { color: '#000' }]}>
+            📤 {t('gallery.shareProject')}
+          </Text>
         </TouchableOpacity>
       )}
 
@@ -1623,7 +1625,9 @@ export default function GalleryScreen({ navigation, route }) {
                     handleUploadPhotos();
                   }}
                 >
-                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>📤 Upload All</Text>
+                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>
+                    📤 {t('gallery.uploadAll')}
+                  </Text>
                 </TouchableOpacity>
 
                 {/* Share All (light blue) */}
@@ -1634,7 +1638,9 @@ export default function GalleryScreen({ navigation, route }) {
                     handleShareProject();
                   }}
                 >
-                  <Text style={[styles.actionBtnText, styles.actionInfoText]}>🔗 Share All</Text>
+                  <Text style={[styles.actionBtnText, styles.actionInfoText]}>
+                    🔗 {t('gallery.shareAll')}
+                  </Text>
                 </TouchableOpacity>
 
                 {/* Delete All (red) */}
@@ -1646,7 +1652,9 @@ export default function GalleryScreen({ navigation, route }) {
                     handleDeleteAllConfirmed();
                   }}
                 >
-                  <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>🗑️ Delete All</Text>
+                  <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>
+                    🗑️ {t('gallery.deleteAll')}
+                  </Text>
                 </TouchableOpacity>
               </View>
 
@@ -1659,13 +1667,15 @@ export default function GalleryScreen({ navigation, route }) {
                     // TODO: Add select photos functionality
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: 'white' }]}>☑️ Select Photos</Text>
+                  <Text style={[styles.actionBtnText, { color: 'white' }]}>
+                    ☑️ {t('gallery.selectPhotos')}
+                  </Text>
                 </TouchableOpacity>
               </View>
 
               <View style={styles.optionsActionsRowCenter}>
                 <TouchableOpacity style={[styles.actionBtn, styles.actionWide, styles.actionCancel]} onPress={() => setManageVisible(false)}>
-                  <Text style={styles.actionBtnText}>{t('gallery.close')}</Text>
+                  <Text style={styles.actionBtnText}>{t('common.close')}</Text>
                 </TouchableOpacity>
               </View>
             </View>

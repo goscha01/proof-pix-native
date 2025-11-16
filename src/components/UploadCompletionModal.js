@@ -8,8 +8,10 @@ import {
   Alert
 } from 'react-native';
 import { COLORS } from '../constants/rooms';
+import { useTranslation } from 'react-i18next';
 
 const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearCompleted, onDeleteProject }) => {
+  const { t } = useTranslation();
   if (!completedUploads || completedUploads.length === 0) return null;
 
   const latestUpload = completedUploads[completedUploads.length - 1];
@@ -23,9 +25,9 @@ const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearComp
 
   const getCompletionMessage = () => {
     if (failed.length === 0) {
-      return `Successfully uploaded ${successful.length} photo${successful.length > 1 ? 's' : ''} to "${albumName}"`;
+      return t('gallery.uploadCompleteMessage', { count: successful.length, albumName });
     } else {
-      return `Uploaded ${successful.length} photo${successful.length > 1 ? 's' : ''}, ${failed.length} failed. Please try again.`;
+      return t('gallery.uploadPartialMessage', { successCount: successful.length, failedCount: failed.length });
     }
   };
 
@@ -48,13 +50,15 @@ const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearComp
         <View style={styles.modalContent}>
           <View style={styles.body}>
             <Text style={styles.title}>
-              {failed.length === 0 ? 'Upload Complete!' : 'Upload Partially Complete'}
+              {failed.length === 0 ? t('gallery.uploadCompleteTitle') : t('gallery.uploadPartialTitle')}
             </Text>
             <Text style={styles.message}>{getCompletionMessage()}</Text>
             
             {successful.length > 0 && (
               <View style={styles.successSection}>
-                <Text style={styles.sectionTitle}>🟡 Successful ({successful.length})</Text>
+                <Text style={styles.sectionTitle}>
+                  🟡 {t('gallery.successfulCount', { count: successful.length })}
+                </Text>
                 <Text style={styles.sectionText}>
                   {successful.map(item => item.filename).join(', ')}
                 </Text>
@@ -63,7 +67,9 @@ const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearComp
 
             {failed.length > 0 && (
               <View style={styles.failedSection}>
-                <Text style={styles.sectionTitle}>❌ Failed ({failed.length})</Text>
+                <Text style={styles.sectionTitle}>
+                  ❌ {t('gallery.failedCount', { count: failed.length })}
+                </Text>
                 <Text style={styles.sectionText}>
                   {failed.map(item => item.filename).join(', ')}
                 </Text>
@@ -77,7 +83,7 @@ const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearComp
               onPress={handleClose}
             >
               <Text style={styles.buttonText}>
-                {failed.length === 0 ? 'Great!' : 'OK'}
+                {failed.length === 0 ? t('gallery.great') : t('common.ok')}
               </Text>
             </TouchableOpacity>
             
@@ -85,12 +91,12 @@ const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearComp
               style={[styles.button, styles.deleteButton]}
               onPress={() => {
                 Alert.alert(
-                  'Delete Project',
-                  'Are you sure you want to delete this project and all its photos? This action cannot be undone.',
+                  t('gallery.deleteProjectTitle'),
+                  t('gallery.deleteProjectMessage'),
                   [
-                    { text: 'Cancel', style: 'cancel' },
+                    { text: t('common.cancel'), style: 'cancel' },
                     { 
-                      text: 'Delete', 
+                      text: t('common.delete'), 
                       style: 'destructive',
                       onPress: () => {
                         onDeleteProject && onDeleteProject();
@@ -101,7 +107,9 @@ const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearComp
                 );
               }}
             >
-              <Text style={styles.deleteButtonText}>🗑️ Delete Project</Text>
+              <Text style={styles.deleteButtonText}>
+                🗑️ {t('gallery.deleteProjectButton')}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
