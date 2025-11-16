@@ -3842,7 +3842,7 @@ const sliderStyles = StyleSheet.create({
     languageSelector: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      gap: 6,
     },
     languageFlag: {
       fontSize: 20,
@@ -3920,13 +3920,15 @@ const sliderStyles = StyleSheet.create({
     },
     settingButton: {
       backgroundColor: '#FFFFFF',
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 14,
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
       borderWidth: 1,
       borderColor: '#E5E5E5',
+      marginBottom: 6,
     },
     settingText: {
       fontSize: 16,
