@@ -277,6 +277,14 @@
     "teamDisconnectedSuccess": "Disconnected from team successfully",
     "teamDisconnectedError": "Failed to disconnect from team"
   },
+  "rooms": {
+    "kitchen": "Kitchen",
+    "bathroom": "Bathroom",
+    "bedroom": "Bedroom",
+    "living-room": "Living Room",
+    "dining-room": "Dining Room",
+    "office": "Office"
+  },
   "labels": {
     "position": "Position",
     "margins": "Margins",

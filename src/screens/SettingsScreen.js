@@ -420,7 +420,7 @@ export default function SettingsScreen({ navigation }) {
                 ]}
               >
                 {cleaningServiceEnabled
-                  ? room.name
+                  ? t(`rooms.${room.id}`, { lng: sectionLanguage, defaultValue: room.name })
                   : `${t('settings.section', { lng: sectionLanguage })} ${index + 1}`}
               </Text>
             )}

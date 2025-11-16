@@ -247,9 +247,18 @@
     "disconnectTeamMessage": "您确定要断开与团队的连接吗？",
     "teamDisconnectedSuccess": "成功断开团队连接",
     "teamDisconnectedError": "断开团队连接失败",
+    "清洁服务": "清洁服务",
     "cleaningService": "清洁服务",
     "cleaningServiceDescription": "显示真实房间名称（厨房、浴室等），而不是通用分区名称。",
     "section": "分区"
+  },
+  "rooms": {
+    "kitchen": "厨房",
+    "bathroom": "浴室",
+    "bedroom": "卧室",
+    "living-room": "客厅",
+    "dining-room": "餐厅",
+    "office": "办公室"
   },
   "labels": {
     "position": "位置",

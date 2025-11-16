@@ -251,6 +251,14 @@
     "cleaningServiceDescription": "Ipakita ang tunay na pangalan ng mga kwarto (Kusina, Banyo, atbp.) sa halip na generic na mga seksyon.",
     "section": "Seksyon"
   },
+  "rooms": {
+    "kitchen": "Kusina",
+    "bathroom": "Banyo",
+    "bedroom": "Silid-tulugan",
+    "living-room": "Sala",
+    "dining-room": "Kainan",
+    "office": "Opisina"
+  },
   "labels": {
     "position": "Posisyon",
     "margins": "Mga Margin",

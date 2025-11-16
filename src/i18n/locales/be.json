@@ -264,6 +264,14 @@
     "cleaningServiceDescription": "Паказваць рэальныя назвы пакояў (Кухня, Ванная і г.д.) замест агульных секцый.",
     "section": "Секцыя"
   },
+  "rooms": {
+    "kitchen": "Кухня",
+    "bathroom": "Ванная",
+    "bedroom": "Спальня",
+    "living-room": "Гасціная",
+    "dining-room": "Сталоўая",
+    "office": "Офіс"
+  },
   "labels": {
     "position": "Пазіцыя",
     "margins": "Палі",

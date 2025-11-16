@@ -254,6 +254,14 @@
     "cleaningServiceDescription": "Afficher les vrais noms de pièces (Cuisine, Salle de bain, etc.) au lieu de sections génériques.",
     "section": "Section"
   },
+  "rooms": {
+    "kitchen": "Cuisine",
+    "bathroom": "Salle de bain",
+    "bedroom": "Chambre",
+    "living-room": "Salon",
+    "dining-room": "Salle à manger",
+    "office": "Bureau"
+  },
   "labels": {
     "position": "Position",
     "margins": "Marges",

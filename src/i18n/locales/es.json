@@ -254,6 +254,14 @@
     "cleaningServiceDescription": "Mostrar nombres reales de habitaciones (Cocina, Baño, etc.) en lugar de secciones genéricas.",
     "section": "Sección"
   },
+  "rooms": {
+    "kitchen": "Cocina",
+    "bathroom": "Baño",
+    "bedroom": "Dormitorio",
+    "living-room": "Sala de estar",
+    "dining-room": "Comedor",
+    "office": "Oficina"
+  },
   "labels": {
     "position": "Posición",
     "margins": "Márgenes",

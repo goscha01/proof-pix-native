@@ -236,6 +236,14 @@
     "cleaningServiceDescription": "إظهار أسماء الغرف الحقيقية (المطبخ، الحمام، إلخ) بدلاً من الأقسام العامة.",
     "section": "قسم"
   },
+  "rooms": {
+    "kitchen": "المطبخ",
+    "bathroom": "الحمام",
+    "bedroom": "غرفة النوم",
+    "living-room": "غرفة المعيشة",
+    "dining-room": "غرفة الطعام",
+    "office": "المكتب"
+  },
   "labels": {
     "position": "الموضع",
     "margins": "الهوامش",

@@ -236,6 +236,14 @@
     "cleaningServiceDescription": "일반적인 섹션 대신 실제 방 이름(주방, 욕실 등)을 표시합니다.",
     "section": "섹션"
   },
+  "rooms": {
+    "kitchen": "주방",
+    "bathroom": "욕실",
+    "bedroom": "침실",
+    "living-room": "거실",
+    "dining-room": "식당",
+    "office": "사무실"
+  },
   "labels": {
     "position": "위치",
     "margins": "여백",
