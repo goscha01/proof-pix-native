@@ -471,6 +471,19 @@ export default function PhotoSelectionScreen({ navigation, route }) {
             </TouchableOpacity>
             <Text style={styles.checkboxLabel}>{t('common.select')}</Text>
           </View>
+          
+          {/* Show Selected button */}
+          {selectedPhotos.size > 0 && (
+            <TouchableOpacity
+              style={styles.showSelectedButton}
+              onPress={() => {
+                const selectedIds = Array.from(selectedPhotos);
+                navigation.navigate('SelectedPhotosGallery', { selectedPhotoIds: selectedIds });
+              }}
+            >
+              <Text style={styles.showSelectedButtonText}>{t('gallery.showSelected')}</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -577,17 +590,19 @@ export default function PhotoSelectionScreen({ navigation, route }) {
             <Text style={styles.checkboxLabel}>{t('common.select')}</Text>
           </View>
         </View>
-        <TouchableOpacity
-          style={styles.shareButton}
-          onPress={() => shareCombinedPhoto(photoSet)}
-          disabled={sharing}
-        >
-          {sharing ? (
-            <ActivityIndicator />
-          ) : (
-            <Text style={styles.shareButtonText}>{t('gallery.share')}</Text>
-          )}
-        </TouchableOpacity>
+        
+        {/* Show Selected button */}
+        {selectedPhotos.size > 0 && (
+          <TouchableOpacity
+            style={styles.showSelectedButton}
+            onPress={() => {
+              const selectedIds = Array.from(selectedPhotos);
+              navigation.navigate('SelectedPhotosGallery', { selectedPhotoIds: selectedIds });
+            }}
+          >
+            <Text style={styles.showSelectedButtonText}>{t('gallery.showSelected')}</Text>
+          </TouchableOpacity>
+        )}
       </View>
     );
   };
@@ -1819,6 +1834,26 @@ const styles = StyleSheet.create({
   },
   shareButtonText: {
     color: COLORS.TEXT,
+    fontSize: 18,
+    fontWeight: 'bold'
+  },
+  showSelectedButton: {
+    position: 'absolute',
+    bottom: 120,
+    left: 20,
+    right: 20,
+    backgroundColor: '#4CAF50',
+    padding: 18,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 5
+  },
+  showSelectedButtonText: {
+    color: 'white',
     fontSize: 18,
     fontWeight: 'bold'
   },

@@ -172,7 +172,10 @@
     "great": "Great!",
     "deleteProjectTitle": "Delete Project",
     "deleteProjectMessage": "Are you sure you want to delete this project and all its photos? This action cannot be undone.",
-    "deleteProjectButton": "Delete Project"
+    "deleteProjectButton": "Delete Project",
+    "showSelected": "Show Selected",
+    "selectedPhotos": "Selected Photos",
+    "noSelectedPhotos": "No selected photos"
   },
   "camera": {
     "before": "BEFORE",
