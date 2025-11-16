@@ -752,7 +752,7 @@ export default function PhotoSelectionScreen({ navigation, route }) {
           </View>
           
           {/* Checkbox overlay */}
-          <View style={[styles.checkboxContainer, isSelected && styles.checkboxSelected]}>
+          <View style={[styles.checkboxContainer, styles.checkboxContainerGrid, isSelected && styles.checkboxSelected]}>
             {isSelected && (
               <Text style={styles.checkmark}>✓</Text>
             )}
@@ -818,7 +818,7 @@ export default function PhotoSelectionScreen({ navigation, route }) {
         />
         
         {/* Checkbox overlay */}
-        <View style={[styles.checkboxContainer, isSelected && styles.checkboxSelected]}>
+        <View style={[styles.checkboxContainer, styles.checkboxContainerGrid, isSelected && styles.checkboxSelected]}>
           {isSelected && (
             <Text style={styles.checkmark}>✓</Text>
           )}
@@ -1113,6 +1113,31 @@ export default function PhotoSelectionScreen({ navigation, route }) {
                     style={getLabelStyle()}
                   />
                 )}
+                
+                {/* Checkbox overlay - positioned on the image */}
+                {(() => {
+                  const bounds = getFullScreenImageDisplayBounds();
+                  const checkboxStyle = bounds ? {
+                    position: 'absolute',
+                    top: bounds.offsetY + 8,
+                    right: bounds.offsetX + 8,
+                    zIndex: 10
+                  } : styles.checkboxContainer;
+                  
+                  return (
+                    <View style={checkboxStyle}>
+                      <TouchableOpacity
+                        style={[styles.checkboxContainer, selectedPhotos.has(fullScreenPhoto.id) && styles.checkboxSelected]}
+                        onPress={() => togglePhotoSelection(fullScreenPhoto.id)}
+                      >
+                        {selectedPhotos.has(fullScreenPhoto.id) && (
+                          <Text style={styles.checkmark}>✓</Text>
+                        )}
+                      </TouchableOpacity>
+                      <Text style={styles.checkboxLabel}>{t('common.select')}</Text>
+                    </View>
+                  );
+                })()}
               </View>
               <TouchableOpacity
                 style={styles.shareButton}
@@ -1131,66 +1156,85 @@ export default function PhotoSelectionScreen({ navigation, route }) {
       })()}
 
       {/* Full-screen combined photo view */}
-      {fullScreenPhotoSet && (
-        <TouchableWithoutFeedback onPress={handleLongPressEnd}>
-          <View style={styles.fullScreenPhotoContainer} {...panResponder.panHandlers}>
-            <View 
-              ref={ref => {
-                if (ref && fullScreenPhotoSet.before) {
-                  combinedCaptureRefs.current[`combined_${fullScreenPhotoSet.before.id}`] = ref;
-                }
-              }}
-              collapsable={false}
-              style={[
-                styles.fullScreenCombinedPreview,
-                (() => {
-                  const phoneOrientation = fullScreenPhotoSet.before.orientation || 'portrait';
-                  const cameraViewMode = fullScreenPhotoSet.before.cameraViewMode || 'portrait';
-                  const isLetterbox = fullScreenPhotoSet.before.templateType === 'letterbox' || (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
-                  
-                  // In the enlarged view, only letterbox photos should be stacked.
-                  // True landscape and portrait photos are better side-by-side.
-                  return isLetterbox ? styles.fullScreenStacked : styles.fullScreenSideBySide;
-                })()
-              ]}
-            >
-              <View style={styles.fullScreenHalf}>
-                <Image
-                  source={{ uri: fullScreenPhotoSet.before.uri }}
-                  style={styles.fullScreenHalfImage}
-                  resizeMode="cover"
-                />
-                {/* Show BEFORE label only if showLabels is true */}
-                {showLabels && (
-                  <PhotoLabel label="common.before" position={combinedLabelPosition} />
-                )}
+      {fullScreenPhotoSet && (() => {
+        // Find the combined photo ID based on before photo ID
+        const combinedPhotoId = `combined_${fullScreenPhotoSet.before.id}`;
+        const isSelected = selectedPhotos.has(combinedPhotoId);
+
+        return (
+          <TouchableWithoutFeedback onPress={handleLongPressEnd}>
+            <View style={styles.fullScreenPhotoContainer} {...panResponder.panHandlers}>
+              <View 
+                ref={ref => {
+                  if (ref && fullScreenPhotoSet.before) {
+                    combinedCaptureRefs.current[combinedPhotoId] = ref;
+                  }
+                }}
+                collapsable={false}
+                style={[
+                  styles.fullScreenCombinedPreview,
+                  (() => {
+                    const phoneOrientation = fullScreenPhotoSet.before.orientation || 'portrait';
+                    const cameraViewMode = fullScreenPhotoSet.before.cameraViewMode || 'portrait';
+                    const isLetterbox = fullScreenPhotoSet.before.templateType === 'letterbox' || (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
+                    
+                    // In the enlarged view, only letterbox photos should be stacked.
+                    // True landscape and portrait photos are better side-by-side.
+                    return isLetterbox ? styles.fullScreenStacked : styles.fullScreenSideBySide;
+                  })()
+                ]}
+              >
+                <View style={styles.fullScreenHalf}>
+                  <Image
+                    source={{ uri: fullScreenPhotoSet.before.uri }}
+                    style={styles.fullScreenHalfImage}
+                    resizeMode="cover"
+                  />
+                  {/* Show BEFORE label only if showLabels is true */}
+                  {showLabels && (
+                    <PhotoLabel label="common.before" position={combinedLabelPosition} />
+                  )}
+                </View>
+                <View style={styles.fullScreenHalf}>
+                  <Image
+                    source={{ uri: fullScreenPhotoSet.after.uri }}
+                    style={styles.fullScreenHalfImage}
+                    resizeMode="cover"
+                  />
+                  {/* Show AFTER label only if showLabels is true */}
+                  {showLabels && (
+                    <PhotoLabel label="common.after" position={combinedLabelPosition} />
+                  )}
+                </View>
+                
+                {/* Checkbox overlay - positioned on the image */}
+                <View style={styles.fullScreenCheckboxWrapper}>
+                  <TouchableOpacity
+                    style={[styles.checkboxContainer, isSelected && styles.checkboxSelected]}
+                    onPress={() => togglePhotoSelection(combinedPhotoId)}
+                  >
+                    {isSelected && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                  <Text style={styles.checkboxLabel}>{t('common.select')}</Text>
+                </View>
               </View>
-              <View style={styles.fullScreenHalf}>
-                <Image
-                  source={{ uri: fullScreenPhotoSet.after.uri }}
-                  style={styles.fullScreenHalfImage}
-                  resizeMode="cover"
-                />
-                {/* Show AFTER label only if showLabels is true */}
-                {showLabels && (
-                  <PhotoLabel label="common.after" position={combinedLabelPosition} />
+              <TouchableOpacity
+                style={styles.shareButton}
+                onPress={() => shareCombinedPhoto(fullScreenPhotoSet)}
+                disabled={sharing}
+              >
+                {sharing ? (
+                  <ActivityIndicator />
+                ) : (
+                  <Text style={styles.shareButtonText}>{t('gallery.share')}</Text>
                 )}
-              </View>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity
-              style={styles.shareButton}
-              onPress={() => shareCombinedPhoto(fullScreenPhotoSet)}
-              disabled={sharing}
-            >
-              {sharing ? (
-                <ActivityIndicator />
-              ) : (
-                <Text style={styles.shareButtonText}>{t('gallery.share')}</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-        </TouchableWithoutFeedback>
-      )}
+          </TouchableWithoutFeedback>
+        );
+      })()}
     </View>
   );
 }
@@ -1259,9 +1303,6 @@ const styles = StyleSheet.create({
     opacity: 0.8
   },
   checkboxContainer: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
     width: 28,
     height: 28,
     borderRadius: 14,
@@ -1269,7 +1310,12 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: 'white',
     justifyContent: 'center',
-    alignItems: 'center',
+    alignItems: 'center'
+  },
+  checkboxContainerGrid: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
     zIndex: 10
   },
   checkboxSelected: {
@@ -1280,6 +1326,23 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 18,
     fontWeight: 'bold'
+  },
+  checkboxLabel: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600',
+    marginTop: 4,
+    textAlign: 'center',
+    textShadowColor: 'rgba(0, 0, 0, 0.75)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2
+  },
+  fullScreenCheckboxWrapper: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    alignItems: 'center',
+    zIndex: 10
   },
   modeLabel: {
     position: 'absolute',
