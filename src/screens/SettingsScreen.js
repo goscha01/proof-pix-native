@@ -1147,6 +1147,272 @@ export default function SettingsScreen({ navigation }) {
           </TouchableOpacity>
         </View>
 
+        {userMode !== 'team_member' && (
+          <>
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{t('settings.displaySettings')}</Text>
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>{t('settings.business')}</Text>
+                  <Text style={styles.settingDescription}>
+                    {t('settings.businessDescription')}
+                  </Text>
+                </View>
+                <Switch
+                  value={isBusiness}
+                  onValueChange={toggleBusiness}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
+              </View>
+            </View>
+
+            {/* Label Customization */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{t('settings.labelCustomization_short')}</Text>
+              <Text style={styles.sectionDescription}>
+                {t('settings.labelCustomizationDescription')}
+              </Text>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>{t('settings.showLabels')}</Text>
+                  <Text style={styles.settingDescription}>
+                    {t('settings.showLabelsDescription')}
+                  </Text>
+                </View>
+                <Switch
+                  value={showLabels}
+                  onValueChange={toggleLabels}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
+              </View>
+
+              {/* Dummy Photo Preview */}
+              <View style={styles.labelPreviewSection}>
+                <View style={styles.positionPreviewBox}>
+                  {/* Left half - BEFORE */}
+                  <View style={styles.previewHalfBefore}>
+                    <View
+                      style={[
+                        styles.previewLabel,
+                        getLabelPositions(labelMarginVertical, labelMarginHorizontal)[beforeLabelPosition]
+                      ]}
+                    >
+                      <PhotoLabel
+                        label="common.before"
+                        position="left-top"
+                        style={{ position: 'relative', top: 0, left: 0 }}
+                      />
+                    </View>
+                  </View>
+
+                  {/* Right half - AFTER */}
+                  <View style={styles.previewHalfAfter}>
+                    <View
+                      style={[
+                        styles.previewLabel,
+                        getLabelPositions(labelMarginVertical, labelMarginHorizontal)[afterLabelPosition]
+                      ]}
+                    >
+                      <PhotoLabel
+                        label="common.after"
+                        position="left-top"
+                        style={{ position: 'relative', top: 0, left: 0 }}
+                      />
+                    </View>
+                  </View>
+                </View>
+              </View>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>{t('settings.customizeWatermark')}</Text>
+                  <Text style={styles.settingDescription}>
+                    {customWatermarkEnabled
+                      ? t('settings.watermarkCustomDescription')
+                      : t('settings.watermarkDefaultDescription')}
+                  </Text>
+                </View>
+                <Switch
+                  value={customWatermarkEnabled}
+                  onValueChange={toggleWatermark}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
+              </View>
+              {customWatermarkEnabled && (
+                <View style={styles.watermarkCustomization}>
+                  <View style={styles.watermarkField}>
+                    <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkText')}</Text>
+                    <TextInput
+                      style={styles.watermarkInput}
+                      value={watermarkText}
+                      onChangeText={updateWatermarkText}
+                      placeholder={t('settings.watermarkTextPlaceholder')}
+                      placeholderTextColor={COLORS.GRAY}
+                    />
+                  </View>
+                  <View style={styles.watermarkField}>
+                    <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkLink')}</Text>
+                    <TextInput
+                      style={styles.watermarkInput}
+                      value={watermarkLink}
+                      onChangeText={updateWatermarkLink}
+                      placeholder={t('settings.watermarkLinkPlaceholder')}
+                      placeholderTextColor={COLORS.GRAY}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      keyboardType="url"
+                    />
+                  </View>
+                  <View style={styles.watermarkColorRow}>
+                    <View style={styles.watermarkColorInfo}>
+                      <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkColor')}</Text>
+                      <Text style={styles.watermarkColorValue}>{watermarkSwatchColor}</Text>
+                    </View>
+                    <TouchableOpacity
+                      style={styles.watermarkColorButton}
+                      onPress={() => openColorModal('watermark')}
+                    >
+                      <View
+                        style={[
+                          styles.colorPreviewSwatch,
+                          styles.watermarkColorSwatch,
+                          { backgroundColor: watermarkSwatchColor },
+                        ]}
+                      />
+                      <Text style={styles.customSelectorButtonText}>{t('settings.pickColor')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                  <View style={styles.watermarkOpacityRow}>
+                    <Text style={styles.watermarkFieldLabel}>{t('settings.opacity')}</Text>
+                    <View style={styles.watermarkOpacityControls}>
+                      <WatermarkOpacitySlider
+                        value={watermarkOpacityPreview}
+                        onChange={setWatermarkOpacityPreview}
+                        onChangeEnd={updateWatermarkOpacity}
+                        fillColor={watermarkSwatchColor}
+                      />
+                      <Text style={styles.watermarkOpacityValue}>
+                        {Math.round(watermarkOpacityPreview * 100)}%
+                      </Text>
+                    </View>
+                  </View>
+                  <Text style={styles.watermarkHelperText}>
+                    {t('settings.watermarkHelperText')}
+                  </Text>
+                </View>
+              )}
+
+              {/* Customize Button */}
+              <TouchableOpacity
+                style={styles.customizeButton}
+                onPress={() => navigation.navigate('LabelCustomization')}
+              >
+                <Text style={styles.customizeButtonText}>{t('settings.customize')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Room Customization */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{t('settings.folderCustomization_short')}</Text>
+              <Text style={styles.sectionDescription}>
+                {t('settings.folderCustomizationDescription')}
+              </Text>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>{t('settings.cleaningService')}</Text>
+                  <Text style={styles.settingDescription}>
+                    {t('settings.cleaningServiceDescription')}
+                  </Text>
+                </View>
+                <Switch
+                  value={cleaningServiceEnabled}
+                  onValueChange={toggleCleaningServiceEnabled}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
+              </View>
+
+              {renderRoomTabs()}
+
+              {/* Customize Button */}
+              <TouchableOpacity
+                style={styles.customizeButton}
+                onPress={() => {
+                  setShowRoomEditor(true);
+                }}
+              >
+                <Text style={styles.customizeButtonText}>{t('settings.customize')}</Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* Upload Structure */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>{t('settings.uploadStructure')}</Text>
+
+              <View style={styles.settingRow}>
+                <View style={styles.settingInfo}>
+                  <Text style={styles.settingLabel}>{t('settings.useFolderStructure')}</Text>
+                  <Text style={styles.settingDescription}>
+                    {t('settings.useFolderStructureDescription')}
+                  </Text>
+                </View>
+                <Switch
+                  value={useFolderStructure}
+                  onValueChange={toggleUseFolderStructure}
+                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                  thumbColor="white"
+                />
+              </View>
+
+              {useFolderStructure && (
+                <>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Text style={styles.settingLabel}>{t('settings.beforeFolder')}</Text>
+                      <Text style={styles.settingDescription}>{t('settings.beforeFolderDescription')}</Text>
+                    </View>
+                    <Switch
+                      value={enabledFolders.before}
+                      onValueChange={(v) => updateEnabledFolders({ before: v })}
+                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                      thumbColor="white"
+                    />
+                  </View>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Text style={styles.settingLabel}>{t('settings.afterFolder')}</Text>
+                      <Text style={styles.settingDescription}>{t('settings.afterFolderDescription')}</Text>
+                    </View>
+                    <Switch
+                      value={enabledFolders.after}
+                      onValueChange={(v) => updateEnabledFolders({ after: v })}
+                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                      thumbColor="white"
+                    />
+                  </View>
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Text style={styles.settingLabel}>{t('settings.combinedFolder')}</Text>
+                      <Text style={styles.settingDescription}>{t('settings.combinedFolderDescription')}</Text>
+                    </View>
+                    <Switch
+                      value={enabledFolders.combined}
+                      onValueChange={(v) => updateEnabledFolders({ combined: v })}
+                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                      thumbColor="white"
+                    />
+                  </View>
+                </>
+              )}
+            </View>
+          </>
+        )}
+
         {/* Admin Setup Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('settings.cloudTeamSync')}</Text>
@@ -1676,272 +1942,6 @@ export default function SettingsScreen({ navigation }) {
             </>
           )}
         </View>
-
-        {userMode !== 'team_member' && (
-          <>
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('settings.displaySettings')}</Text>
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>{t('settings.showLabels')}</Text>
-                  <Text style={styles.settingDescription}>
-                    {t('settings.showLabelsDescription')}
-                  </Text>
-                </View>
-                <Switch
-                  value={showLabels}
-                  onValueChange={toggleLabels}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>{t('settings.customizeWatermark')}</Text>
-                  <Text style={styles.settingDescription}>
-                    {customWatermarkEnabled
-                      ? t('settings.watermarkCustomDescription')
-                      : t('settings.watermarkDefaultDescription')}
-                  </Text>
-                </View>
-                <Switch
-                  value={customWatermarkEnabled}
-                  onValueChange={toggleWatermark}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
-              {customWatermarkEnabled && (
-                <View style={styles.watermarkCustomization}>
-                  <View style={styles.watermarkField}>
-                    <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkText')}</Text>
-                    <TextInput
-                      style={styles.watermarkInput}
-                      value={watermarkText}
-                      onChangeText={updateWatermarkText}
-                      placeholder={t('settings.watermarkTextPlaceholder')}
-                      placeholderTextColor={COLORS.GRAY}
-                    />
-                  </View>
-                  <View style={styles.watermarkField}>
-                    <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkLink')}</Text>
-                    <TextInput
-                      style={styles.watermarkInput}
-                      value={watermarkLink}
-                      onChangeText={updateWatermarkLink}
-                      placeholder={t('settings.watermarkLinkPlaceholder')}
-                      placeholderTextColor={COLORS.GRAY}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="url"
-                    />
-                  </View>
-                  <View style={styles.watermarkColorRow}>
-                    <View style={styles.watermarkColorInfo}>
-                      <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkColor')}</Text>
-                      <Text style={styles.watermarkColorValue}>{watermarkSwatchColor}</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.watermarkColorButton}
-                      onPress={() => openColorModal('watermark')}
-                    >
-                      <View
-                        style={[
-                          styles.colorPreviewSwatch,
-                          styles.watermarkColorSwatch,
-                          { backgroundColor: watermarkSwatchColor },
-                        ]}
-                      />
-                      <Text style={styles.customSelectorButtonText}>{t('settings.pickColor')}</Text>
-                    </TouchableOpacity>
-                  </View>
-                  <View style={styles.watermarkOpacityRow}>
-                    <Text style={styles.watermarkFieldLabel}>{t('settings.opacity')}</Text>
-                    <View style={styles.watermarkOpacityControls}>
-                      <WatermarkOpacitySlider
-                        value={watermarkOpacityPreview}
-                        onChange={setWatermarkOpacityPreview}
-                        onChangeEnd={updateWatermarkOpacity}
-                        fillColor={watermarkSwatchColor}
-                      />
-                      <Text style={styles.watermarkOpacityValue}>
-                        {Math.round(watermarkOpacityPreview * 100)}%
-                      </Text>
-                    </View>
-                  </View>
-                  <Text style={styles.watermarkHelperText}>
-                    {t('settings.watermarkHelperText')}
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>{t('settings.business')}</Text>
-                  <Text style={styles.settingDescription}>
-                    {t('settings.businessDescription')}
-                  </Text>
-                </View>
-                <Switch
-                  value={isBusiness}
-                  onValueChange={toggleBusiness}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
-            </View>
-
-            {/* Label Customization */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('settings.labelCustomization_short')}</Text>
-              <Text style={styles.sectionDescription}>
-                {t('settings.labelCustomizationDescription')}
-              </Text>
-
-              {/* Dummy Photo Preview */}
-              <View style={styles.labelPreviewSection}>
-                <View style={styles.positionPreviewBox}>
-                  {/* Left half - BEFORE */}
-                  <View style={styles.previewHalfBefore}>
-                    <View
-                      style={[
-                        styles.previewLabel,
-                        getLabelPositions(labelMarginVertical, labelMarginHorizontal)[beforeLabelPosition]
-                      ]}
-                    >
-                      <PhotoLabel
-                        label="common.before"
-                        position="left-top"
-                        style={{ position: 'relative', top: 0, left: 0 }}
-                      />
-                    </View>
-                  </View>
-
-                  {/* Right half - AFTER */}
-                  <View style={styles.previewHalfAfter}>
-                    <View
-                      style={[
-                        styles.previewLabel,
-                        getLabelPositions(labelMarginVertical, labelMarginHorizontal)[afterLabelPosition]
-                      ]}
-                    >
-                      <PhotoLabel
-                        label="common.after"
-                        position="left-top"
-                        style={{ position: 'relative', top: 0, left: 0 }}
-                      />
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              {/* Customize Button */}
-              <TouchableOpacity
-                style={styles.customizeButton}
-                onPress={() => navigation.navigate('LabelCustomization')}
-              >
-                <Text style={styles.customizeButtonText}>{t('settings.customize')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Room Customization */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('settings.folderCustomization_short')}</Text>
-              <Text style={styles.sectionDescription}>
-                {t('settings.folderCustomizationDescription')}
-              </Text>
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>{t('settings.cleaningService')}</Text>
-                  <Text style={styles.settingDescription}>
-                    {t('settings.cleaningServiceDescription')}
-                  </Text>
-                </View>
-                <Switch
-                  value={cleaningServiceEnabled}
-                  onValueChange={toggleCleaningServiceEnabled}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
-
-              {renderRoomTabs()}
-
-              {/* Customize Button */}
-              <TouchableOpacity
-                style={styles.customizeButton}
-                onPress={() => {
-                  setShowRoomEditor(true);
-                }}
-              >
-                <Text style={styles.customizeButtonText}>{t('settings.customize')}</Text>
-              </TouchableOpacity>
-            </View>
-
-            {/* Upload Structure */}
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>{t('settings.uploadStructure')}</Text>
-
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>{t('settings.useFolderStructure')}</Text>
-                  <Text style={styles.settingDescription}>
-                    {t('settings.useFolderStructureDescription')}
-                  </Text>
-                </View>
-                <Switch
-                  value={useFolderStructure}
-                  onValueChange={toggleUseFolderStructure}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
-
-              {useFolderStructure && (
-                <>
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>{t('settings.beforeFolder')}</Text>
-                      <Text style={styles.settingDescription}>{t('settings.beforeFolderDescription')}</Text>
-                    </View>
-                    <Switch
-                      value={enabledFolders.before}
-                      onValueChange={(v) => updateEnabledFolders({ before: v })}
-                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                      thumbColor="white"
-                    />
-                  </View>
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>{t('settings.afterFolder')}</Text>
-                      <Text style={styles.settingDescription}>{t('settings.afterFolderDescription')}</Text>
-                    </View>
-                    <Switch
-                      value={enabledFolders.after}
-                      onValueChange={(v) => updateEnabledFolders({ after: v })}
-                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                      thumbColor="white"
-                    />
-                  </View>
-                  <View style={styles.settingRow}>
-                    <View style={styles.settingInfo}>
-                      <Text style={styles.settingLabel}>{t('settings.combinedFolder')}</Text>
-                      <Text style={styles.settingDescription}>{t('settings.combinedFolderDescription')}</Text>
-                    </View>
-                    <Switch
-                      value={enabledFolders.combined}
-                      onValueChange={(v) => updateEnabledFolders({ combined: v })}
-                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                      thumbColor="white"
-                    />
-                  </View>
-                </>
-              )}
-            </View>
-          </>
-        )}
 
         {/* Account & Data */}
         <View style={styles.section}>
