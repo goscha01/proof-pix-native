@@ -60,9 +60,11 @@ export default function CameraScreen({ route, navigation }) {
   const [room, setRoom] = useState(initialRoom);
   const [facing, setFacing] = useState('back');
   const [enableTorch, setEnableTorch] = useState(false);
+  const [enableSound, setEnableSound] = useState(true); // Default sound on
   const [aspectRatio, setAspectRatio] = useState('4:3'); // '4:3' or '2:3'
   const [selectedBeforePhoto, setSelectedBeforePhoto] = useState(beforePhoto);
   const [isCapturing, setIsCapturing] = useState(false);
+  const [isProcessingAfter, setIsProcessingAfter] = useState(false);
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [showCarousel, setShowCarousel] = useState(false);
   const [carouselIndex, setCarouselIndex] = useState(0);
@@ -1110,7 +1112,7 @@ export default function CameraScreen({ route, navigation }) {
       const photo = await cameraRef.current.takePhoto({
         qualityPrioritization: 'quality',
         flash: enableTorch ? 'on' : 'off',
-        enableShutterSound: true
+        enableShutterSound: enableSound
       });
       console.log(`[DEBUG] ⏱️ Photo capture time: ${Date.now() - captureStart}ms`);
 
@@ -1550,6 +1552,16 @@ export default function CameraScreen({ route, navigation }) {
       console.log(`[DEBUG] ⏱️ Add photo to context: ${Date.now() - addStart}ms`);
       console.log('[DEBUG] ✅ After photo added to context');
       console.log(`[DEBUG] ⏱️ Total handleAfterPhoto time: ${Date.now() - startTime}ms`);
+      
+      // Mark that we're processing after photo (for visual feedback)
+      // Button is now active, but we show different visual state to indicate background processing
+      setIsProcessingAfter(true);
+      
+      // Clear processing state after combined photo creation starts (it's non-blocking)
+      // This gives visual feedback that background processing is happening
+      setTimeout(() => {
+        setIsProcessingAfter(false);
+      }, 300); // Short delay just for visual feedback
 
       // Prepare labeled photo in background immediately after after photo is captured
       // This ensures it's ready when user clicks share, making sharing instant
@@ -1985,6 +1997,17 @@ export default function CameraScreen({ route, navigation }) {
           </View>
         </View>
 
+        {/* Sound toggle button - between room name and close button */}
+        <TouchableOpacity
+          style={styles.soundButton}
+          onPress={() => {
+            setEnableSound(!enableSound);
+          }}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.soundButtonText}>{enableSound ? '🔔' : '🔕'}</Text>
+        </TouchableOpacity>
+
         {/* Close button - fixed to screen */}
         <TouchableOpacity
           style={styles.closeButtonTopRight}
@@ -2086,12 +2109,21 @@ export default function CameraScreen({ route, navigation }) {
             {/* Center container - Capture button */}
             <View style={styles.buttonContainer}>
               <TouchableOpacity
-                style={[styles.captureButton, (isOrientationMismatch() || isCapturing) && styles.captureButtonDisabled]} 
+                style={[
+                  styles.captureButton, 
+                  (isOrientationMismatch() || isCapturing) && styles.captureButtonDisabled,
+                  isProcessingAfter && styles.captureButtonProcessing
+                ]} 
                 onPress={takePicture}
                 disabled={isOrientationMismatch() || isCapturing}
               >
                 {isCapturing ? (
                   <ActivityIndicator size="large" color={COLORS.PRIMARY} />
+                ) : isProcessingAfter ? (
+                  <View style={styles.captureButtonProcessingContent}>
+                    <ActivityIndicator size="small" color={COLORS.PRIMARY} />
+                    <Text style={styles.captureButtonProcessingText}>Processing...</Text>
+                  </View>
                 ) : (
                   <>
                     <View style={[styles.captureButtonInner, isOrientationMismatch() && styles.captureButtonInnerDisabled]} />
@@ -2836,6 +2868,24 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 6
   },
+  soundButton: {
+    position: 'absolute',
+    top: 50,
+    right: 80, // Positioned between room indicator and close button
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+    elevation: 1000,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.3)'
+  },
+  soundButtonText: {
+    fontSize: 24
+  },
   closeButtonTopRight: {
     position: 'absolute',
     top: 50,
@@ -2930,6 +2980,22 @@ const styles = StyleSheet.create({
   captureButtonDisabled: {
     opacity: 0.5,
     backgroundColor: '#ccc'
+  },
+  captureButtonProcessing: {
+    backgroundColor: 'rgba(255, 193, 7, 0.3)', // Amber/yellow tint to show processing
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY
+  },
+  captureButtonProcessingContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4
+  },
+  captureButtonProcessingText: {
+    color: COLORS.PRIMARY,
+    fontSize: 10,
+    fontWeight: '600',
+    marginTop: 2
   },
   captureButtonInner: {
     width: 68,
