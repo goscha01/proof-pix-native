@@ -54,10 +54,9 @@ import {
 } from '../services/labelCacheService';
 
 const { width } = Dimensions.get('window');
-const SET_NAME_WIDTH = 80;
 const CONTAINER_PADDING = 32; // 16px on each side
 const PHOTO_SPACING = 16; // 8px between each of the 2 gaps
-const AVAILABLE_WIDTH = width - SET_NAME_WIDTH - CONTAINER_PADDING - PHOTO_SPACING;
+const AVAILABLE_WIDTH = width - CONTAINER_PADDING - PHOTO_SPACING;
 const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function GalleryScreen({ navigation, route }) {
@@ -2027,6 +2026,13 @@ export default function GalleryScreen({ navigation, route }) {
             <Image source={{ uri: photoSet.before.uri }} style={styles.halfImage} resizeMode="cover" />
             <Image source={{ uri: photoSet.after.uri }} style={styles.halfImage} resizeMode="cover" />
           </View>
+          
+          {/* Mode label */}
+          <View style={[styles.modeLabel, { backgroundColor: borderColor }]}>
+            <Text style={styles.modeLabelText}>
+              {t('camera.combined', { lng: labelLanguage })}
+            </Text>
+          </View>
         </TouchableOpacity>
       );
     }
@@ -2061,25 +2067,24 @@ export default function GalleryScreen({ navigation, route }) {
           orientation={photo.orientation || photoSet.before?.orientation || 'portrait'}
           size={COLUMN_WIDTH}
         />
+        
+        {/* Mode label */}
+        <View style={[styles.modeLabel, { backgroundColor: borderColor }]}>
+          <Text style={styles.modeLabelText}>
+            {photoType === 'before'
+              ? t('camera.before', { lng: labelLanguage })
+              : photoType === 'after'
+              ? t('camera.after', { lng: labelLanguage })
+              : t('camera.combined', { lng: labelLanguage })}
+          </Text>
+        </View>
       </TouchableOpacity>
     );
   };
 
   const renderPhotoSet = (set, index, roomId) => {
-    const roomDisplayName = t(`rooms.${roomId}`, {
-      lng: sectionLanguage,
-      defaultValue: roomId,
-    });
-
     return (
       <View key={index} style={styles.photoSetRow}>
-        <View style={styles.setNameContainer}>
-          <Text style={styles.setName}>
-            {cleaningServiceEnabled
-              ? `${roomDisplayName} ${index + 1}`
-              : `${t('settings.section', { lng: sectionLanguage })} ${index + 1}`}
-          </Text>
-        </View>
         <View style={styles.threeColumnRow}>
           {renderPhotoCard(set.before, '#4CAF50', 'before', set, false)}
           {renderPhotoCard(set.after, '#2196F3', 'after', set, false)}
@@ -2145,6 +2150,12 @@ export default function GalleryScreen({ navigation, route }) {
         <Text style={styles.projectNameText}>
           {(projects?.find?.(p => p.id === activeProjectId)?.name) || t('gallery.noProjectSelected')}
         </Text>
+        <TouchableOpacity
+          style={styles.selectButton}
+          onPress={() => navigation.navigate('PhotoSelection')}
+        >
+          <Text style={styles.selectButtonText}>{t('gallery.selectPhotos')}</Text>
+        </TouchableOpacity>
         <UploadIndicatorLine 
           uploadStatus={uploadStatus}
           onPress={() => setShowUploadDetails(true)}
@@ -2152,7 +2163,6 @@ export default function GalleryScreen({ navigation, route }) {
       </View>
 
       <View style={styles.columnHeaders}>
-        <View style={styles.setNamePlaceholder} />
         <Text style={[styles.columnHeader, { color: '#4CAF50' }]}>
           {t('camera.before', { lng: labelLanguage })}
         </Text>
@@ -3008,6 +3018,9 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT
   },
   projectNameContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 8,
     marginTop: -6,
@@ -3018,7 +3031,20 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.TEXT,
     opacity: 0.7,
-    fontWeight: '500'
+    fontWeight: '500',
+    flex: 1
+  },
+  selectButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: COLORS.PRIMARY,
+    marginLeft: 12
+  },
+  selectButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600'
   },
   uploadButton: {
     width: 40,
@@ -3057,10 +3083,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     borderBottomWidth: 2,
     borderBottomColor: COLORS.BORDER
-  },
-  setNamePlaceholder: {
-    width: 80,
-    marginRight: 8
   },
   columnHeader: {
     flex: 1,
@@ -3103,16 +3125,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12
   },
-  setNameContainer: {
-    width: 80,
-    marginRight: 8,
-    justifyContent: 'center'
-  },
-  setName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.TEXT
-  },
   threeColumnRow: {
     flex: 1,
     flexDirection: 'row',
@@ -3125,7 +3137,8 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     overflow: 'hidden',
     backgroundColor: 'white',
-    marginRight: 8
+    marginRight: 8,
+    position: 'relative'
   },
   cardImage: {
     width: '100%',
@@ -3155,6 +3168,20 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: COLORS.PRIMARY
+  },
+  modeLabel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    alignItems: 'center'
+  },
+  modeLabelText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold'
   },
   dummyCard: {
     width: '100%',
