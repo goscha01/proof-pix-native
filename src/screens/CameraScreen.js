@@ -12,7 +12,8 @@ import {
   Platform,
   PanResponder,
   Animated,
-  StatusBar
+  StatusBar,
+  Modal
 } from 'react-native';
 import { Camera, useCameraDevice, useCameraPermission } from 'react-native-vision-camera';
 import { compositeImages } from '../utils/imageCompositor';
@@ -25,6 +26,14 @@ import { savePhotoToDevice } from '../services/storage';
 import { COLORS, PHOTO_MODES, getLabelPositions } from '../constants/rooms';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
+import {
+  calculateSettingsHash,
+  getCachedLabeledPhoto,
+  saveCachedLabeledPhoto,
+  ensureCacheDir,
+} from '../services/labelCacheService';
+import backgroundLabelPreparationService from '../services/backgroundLabelPreparationService';
+import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as MediaLibrary from 'expo-media-library';
@@ -79,6 +88,8 @@ export default function CameraScreen({ route, navigation }) {
   const longPressTimer = useRef(null);
   const cameraRef = useRef(null);
   const [pictureSize, setPictureSize] = useState('Photo'); // Use iOS preset for full resolution
+  // Background label preparation is now handled by GlobalBackgroundLabelPreparation component
+  // No local state needed - uses global service that stays mounted regardless of navigation
   const carouselScrollRef = useRef(null);
   const fullScreenScrollRef = useRef(null);
   const galleryScrollRef = useRef(null);
@@ -95,7 +106,19 @@ export default function CameraScreen({ route, navigation }) {
   const enlargedGalleryPhotoRef = useRef(enlargedGalleryPhoto);
   const isGalleryAnimatingRef = useRef(false);
   const { addPhoto, getBeforePhotos, getUnpairedBeforePhotos, deletePhoto, setCurrentRoom, activeProjectId } = usePhotos();
-  const { showLabels, shouldShowWatermark, getRooms, beforeLabelPosition, afterLabelPosition, labelMarginVertical, labelMarginHorizontal } = useSettings();
+  const { 
+    showLabels, 
+    shouldShowWatermark, 
+    getRooms, 
+    beforeLabelPosition, 
+    afterLabelPosition, 
+    labelMarginVertical, 
+    labelMarginHorizontal,
+    labelBackgroundColor,
+    labelTextColor,
+    labelSize,
+    labelFontFamily,
+  } = useSettings();
 
   // Vision Camera setup - default to ultra-wide (0.5x)
   const [cameraType, setCameraType] = useState('ultra-wide-angle-camera'); // 'ultra-wide-angle-camera' or 'wide-angle-camera'
@@ -1134,6 +1157,98 @@ export default function CameraScreen({ route, navigation }) {
     }
   };
 
+  // Helper function to prepare combined photo with labels in background
+  // Now uses global service that stays mounted regardless of navigation
+  const prepareCombinedPhotoInBackground = (combinedPhoto, beforePhoto, afterPhoto, settingsHash, isLetterbox) => {
+    return new Promise((resolve, reject) => {
+      if (!combinedPhoto || !beforePhoto || !afterPhoto) {
+        console.log('[CAMERA] Cannot prepare combined photo - missing data');
+        resolve();
+        return;
+      }
+
+      try {
+        // Get dimensions of combined photo
+        Image.getSize(combinedPhoto.uri, (width, height) => {
+          console.log(`[CAMERA] Queueing combined photo for global background preparation`);
+          // Queue preparation in global service (stays mounted regardless of navigation)
+          backgroundLabelPreparationService.queuePreparation({
+            photo: combinedPhoto,
+            beforePhoto,
+            afterPhoto,
+            width,
+            height,
+            settingsHash,
+            isLetterbox,
+            beforeLabelPosition: beforeLabelPosition || 'top-left',
+            afterLabelPosition: afterLabelPosition || 'top-right',
+            isCombined: true,
+            resolve,
+            reject,
+          });
+        }, (error) => {
+          console.error('[CAMERA] Error getting combined photo size:', error);
+          reject(error);
+        });
+      } catch (error) {
+        console.error('[CAMERA] Error preparing combined photo in background:', error);
+        reject(error);
+      }
+    });
+  };
+
+  // Helper function to prepare labeled photo in background and save to cache
+  // Now uses global service that stays mounted regardless of navigation
+  const prepareLabeledPhotoInBackground = (photo, settingsHash, mode) => {
+    return new Promise((resolve, reject) => {
+      console.log(`[CAMERA] prepareLabeledPhotoInBackground called for ${mode} photo, id: ${photo?.id}`);
+      if (!photo || !photo.uri || !photo.id) {
+        console.log('[CAMERA] ❌ Cannot prepare labeled photo - missing data:', { hasPhoto: !!photo, hasUri: !!photo?.uri, hasId: !!photo?.id });
+        resolve();
+        return;
+      }
+
+      try {
+        console.log(`[CAMERA] Getting image size for ${mode} photo: ${photo.uri}`);
+        // Get image dimensions
+        Image.getSize(photo.uri, (width, height) => {
+          console.log(`[CAMERA] Image size for ${mode} photo: ${width}x${height}`);
+          // Determine label position based on photo mode
+          let labelPosition;
+          if (mode === 'before') {
+            labelPosition = beforeLabelPosition || 'top-left';
+          } else if (mode === 'after') {
+            labelPosition = afterLabelPosition || 'top-right';
+          } else {
+            labelPosition = 'top-left';
+          }
+
+          console.log(`[CAMERA] Queueing ${mode} photo for global background preparation (label position: ${labelPosition})`);
+          // Queue preparation in global service (stays mounted regardless of navigation)
+          backgroundLabelPreparationService.queuePreparation({
+            photo,
+            width,
+            height,
+            labelPosition,
+            settingsHash,
+            mode,
+            resolve,
+            reject,
+          });
+        }, (error) => {
+          console.error(`[CAMERA] ❌ Error getting image size for ${mode} photo:`, error);
+          reject(error);
+        });
+      } catch (error) {
+        console.error(`[CAMERA] ❌ Error preparing labeled ${mode} photo in background:`, error);
+        reject(error);
+      }
+    });
+  };
+
+  // Background label preparation is now handled by GlobalBackgroundLabelPreparation component
+  // No local useEffect hooks needed - the global component stays mounted regardless of navigation
+
   // Helper function to add label to photo
   const addLabelToPhoto = async (uri, labelText) => {
     return uri; // Temporarily disabled
@@ -1426,23 +1541,86 @@ export default function CameraScreen({ route, navigation }) {
       };
       await addPhoto(newAfterPhoto);
 
-      // Process label in background if enabled (non-blocking)
-      // ⚠️ TEMPORARILY DISABLED FOR DEBUGGING
-      if (false && showLabels) {
-        (async () => {
+      // Prepare labeled photos in background immediately after after photo is captured
+      // This ensures they're ready when user clicks share, making sharing instant
+      // Run this in background (don't await) so it doesn't block the UI
+      if (showLabels) {
+        // Start background preparation immediately (no delay needed)
+        // Use Promise.resolve().then() to run async code without blocking
+        // Capture activeBeforePhoto in a const to ensure it's available in the async closure
+        const beforePhotoForPrep = activeBeforePhoto;
+        
+        Promise.resolve().then(async () => {
           try {
-            const labeledUri = await addLabelToPhoto(uri, 'AFTER');
-            const labeledSavedUri = await savePhotoToDevice(labeledUri, `${activeBeforePhoto.room}_${activeBeforePhoto.name}_AFTER_LABELED_${Date.now()}.jpg`, activeProjectId || null);
+            console.log('[CAMERA] ========== STARTING BACKGROUND LABEL PREPARATION ==========');
+            console.log('[CAMERA] After photo ID:', newAfterPhoto.id);
+            console.log('[CAMERA] Before photo ID:', beforePhotoForPrep?.id);
+            console.log('[CAMERA] Before photo URI:', beforePhotoForPrep?.uri);
+            console.log('[CAMERA] Preparing labeled photos in background...');
             
-            // Update the after photo with labeled version
-            const updatedAfterPhoto = {
-              ...newAfterPhoto,
-              uri: labeledSavedUri
-            };
-            await addPhoto(updatedAfterPhoto);
+            // Calculate settings hash
+            const settingsHash = calculateSettingsHash({
+              showLabels,
+              beforeLabelPosition,
+              afterLabelPosition,
+              labelBackgroundColor: labelBackgroundColor || null,
+              labelTextColor: labelTextColor || null,
+              labelSize: labelSize || null,
+              labelFontFamily: labelFontFamily || null,
+              labelMarginVertical,
+              labelMarginHorizontal,
+            });
+            console.log('[CAMERA] Settings hash:', settingsHash);
+
+            // Prepare after photo with label first (wait for it to complete)
+            console.log('[CAMERA] [1/3] Checking cache for after photo (id:', newAfterPhoto.id, ')...');
+            const cachedAfter = await getCachedLabeledPhoto(newAfterPhoto, settingsHash);
+            if (!cachedAfter) {
+              console.log('[CAMERA] [1/3] ❌ No cache found for after photo, preparing now...');
+              try {
+                await prepareLabeledPhotoInBackground(newAfterPhoto, settingsHash, 'after');
+                console.log('[CAMERA] [1/3] ✅ After photo preparation completed');
+              } catch (error) {
+                console.error('[CAMERA] [1/3] ❌ Error preparing after photo:', error);
+                console.error('[CAMERA] [1/3] Error details:', error.message, error.stack);
+              }
+            } else {
+              console.log('[CAMERA] [1/3] ✅ After photo already cached:', cachedAfter);
+            }
+
+            // Then prepare before photo with label (sequential to avoid conflicts)
+            if (!beforePhotoForPrep || !beforePhotoForPrep.id || !beforePhotoForPrep.uri) {
+              console.error('[CAMERA] [2/3] ❌ Cannot prepare before photo - activeBeforePhoto is invalid:', {
+                hasPhoto: !!beforePhotoForPrep,
+                hasId: !!beforePhotoForPrep?.id,
+                hasUri: !!beforePhotoForPrep?.uri,
+                photo: beforePhotoForPrep
+              });
+            } else {
+              console.log('[CAMERA] [2/3] Checking cache for before photo (id:', beforePhotoForPrep.id, ')...');
+              const cachedBefore = await getCachedLabeledPhoto(beforePhotoForPrep, settingsHash);
+              if (!cachedBefore) {
+                console.log('[CAMERA] [2/3] ❌ No cache found for before photo, preparing now...');
+                try {
+                  await prepareLabeledPhotoInBackground(beforePhotoForPrep, settingsHash, 'before');
+                  console.log('[CAMERA] [2/3] ✅ Before photo preparation completed');
+                } catch (error) {
+                  console.error('[CAMERA] [2/3] ❌ Error preparing before photo:', error);
+                  console.error('[CAMERA] [2/3] Error details:', error.message, error.stack);
+                }
+              } else {
+                console.log('[CAMERA] [2/3] ✅ Before photo already cached:', cachedBefore);
+              }
+            }
+            
+            console.log('[CAMERA] ========== BACKGROUND LABEL PREPARATION COMPLETED ==========');
           } catch (error) {
+            console.error('[CAMERA] ❌ Error in background label preparation:', error);
+            console.error('[CAMERA] Error stack:', error.stack);
           }
-        })();
+        });
+      } else {
+        console.log('[CAMERA] Labels are disabled, skipping background preparation');
       }
 
       // Create combined photo in background using ImageManipulator (non-blocking)
@@ -1516,6 +1694,62 @@ export default function CameraScreen({ route, navigation }) {
               activeProjectId || null
             );
             console.log(`✅ Combined photo saved to gallery: ${firstSaved}`);
+            
+            // Prepare labeled combined photo in background if labels are enabled
+            if (showLabels) {
+              (async () => {
+                try {
+                  // Create a combined photo object for cache lookup/preparation
+                  // The ID format matches what GalleryScreen uses: combined_<beforePhotoId>
+                  const combinedPhotoId = `combined_${activeBeforePhoto.id}`;
+                  const combinedPhoto = {
+                    id: combinedPhotoId,
+                    mode: PHOTO_MODES.COMBINED,
+                    uri: firstSaved,
+                    name: activeBeforePhoto.name,
+                    room: activeBeforePhoto.room,
+                    projectId: activeProjectId,
+                    beforePhotoId: activeBeforePhoto.id,
+                  };
+                  
+                  // Calculate settings hash
+                  const settingsHash = calculateSettingsHash({
+                    showLabels,
+                    beforeLabelPosition,
+                    afterLabelPosition,
+                    labelBackgroundColor: labelBackgroundColor || null,
+                    labelTextColor: labelTextColor || null,
+                    labelSize: labelSize || null,
+                    labelFontFamily: labelFontFamily || null,
+                    labelMarginVertical,
+                    labelMarginHorizontal,
+                  });
+                  
+                  // Check if already cached
+                  const cachedCombined = await getCachedLabeledPhoto(combinedPhoto, settingsHash);
+                  if (!cachedCombined) {
+                    console.log('[CAMERA] Preparing labeled combined photo...');
+                    // Prepare combined photo with labels in background
+                    // We have activeBeforePhoto and newAfterPhoto available here
+                    try {
+                      await prepareCombinedPhotoInBackground(
+                        combinedPhoto,
+                        activeBeforePhoto,
+                        newAfterPhoto,
+                        settingsHash,
+                        isLetterbox
+                      );
+                    } catch (error) {
+                      console.error('[CAMERA] Error preparing combined photo:', error);
+                    }
+                  } else {
+                    console.log('[CAMERA] Combined photo already cached');
+                  }
+                } catch (error) {
+                  console.error('[CAMERA] Error preparing combined photo:', error);
+                }
+              })();
+            }
 
             // In LETTERBOX, also save the SIDE-BY-SIDE variant in addition to STACK
             if (isLetterbox) {
@@ -2478,6 +2712,8 @@ export default function CameraScreen({ route, navigation }) {
         {renderOverlayMode()}
         {renderLabelView()}
       </Animated.View>
+      {/* Background label preparation is now handled by GlobalBackgroundLabelPreparation component */}
+      {/* No local Modals needed - the global component stays mounted regardless of navigation */}
     </View>
   );
 }

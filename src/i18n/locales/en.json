@@ -136,6 +136,8 @@
     "startUpload": "Start Upload",
     "close": "Close",
     "preparingPhotos": "Preparing photos for sharing...",
+    "preparingPhotosWithLabels": "Adding labels to photos...",
+    "preparingPhotosCopying": "Preparing photos...",
     "mayTakeFewSeconds": "This may take a few seconds",
     "whatToShare": "What would you like to share?",
     "prepareToShare": "Prepare to Share",

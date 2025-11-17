@@ -43,6 +43,15 @@ import { filterNewPhotos, markPhotosAsUploaded } from '../services/uploadTracker
 import Share from 'react-native-share';
 import JSZip from 'jszip';
 import { useTranslation } from 'react-i18next';
+import {
+  calculateSettingsHash,
+  getCachedLabeledPhoto,
+  saveCachedLabeledPhoto,
+  updateCacheLastUsed,
+  getCacheDir,
+  cleanupOldCache,
+  invalidateCache,
+} from '../services/labelCacheService';
 
 const { width } = Dimensions.get('window');
 const SET_NAME_WIDTH = 80;
@@ -78,6 +87,10 @@ export default function GalleryScreen({ navigation, route }) {
     combinedLabelPosition,
     labelMarginVertical,
     labelMarginHorizontal,
+    labelBackgroundColor,
+    labelTextColor,
+    labelSize,
+    labelFontFamily,
     userPlan,
     labelLanguage,
     sectionLanguage,
@@ -185,6 +198,44 @@ export default function GalleryScreen({ navigation, route }) {
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [manageVisible, setManageVisible] = useState(false);
   const [shareOptionsVisible, setShareOptionsVisible] = useState(false);
+
+  // Cleanup old cache on screen focus (runs periodically)
+  useFocusEffect(
+    React.useCallback(() => {
+      // Run cleanup in background (non-blocking)
+      (async () => {
+        try {
+          await cleanupOldCache(30); // Clean up files older than 30 days
+        } catch (error) {
+          console.error('[GALLERY] Error cleaning up cache:', error);
+        }
+      })();
+    }, [])
+  );
+
+  // Invalidate cache when label settings change
+  useEffect(() => {
+    const settingsHash = calculateSettingsHash({
+      showLabels,
+      beforeLabelPosition,
+      afterLabelPosition,
+      labelBackgroundColor,
+      labelTextColor,
+      labelSize,
+      labelFontFamily,
+      labelMarginVertical,
+      labelMarginHorizontal,
+    });
+
+    // Check if cache needs invalidation (runs once on mount and when settings change)
+    (async () => {
+      try {
+        await invalidateCache(settingsHash);
+      } catch (error) {
+        console.error('[GALLERY] Error invalidating cache:', error);
+      }
+    })();
+  }, [showLabels, beforeLabelPosition, afterLabelPosition, labelBackgroundColor, labelTextColor, labelSize, labelFontFamily, labelMarginVertical, labelMarginHorizontal]);
   const [deleteFromStorage, setDeleteFromStorage] = useState(true);
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
@@ -408,196 +459,317 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const startSharingWithOptions = async () => {
-    setSharing(true);
-    setShareOptionsVisible(false); // Close the modal immediately
+    console.log(`[GALLERY] ========== startSharingWithOptions CALLED ==========`);
+    console.log(`[GALLERY] shareAsArchive state: ${shareAsArchive}`);
+    console.log(`[GALLERY] showLabels state: ${showLabels}`);
     
-    try {
-        const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
-        if (sourcePhotos.length === 0) {
-            Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
-            setSharing(false);
-            return;
-        }
+    setShareOptionsVisible(false); // Close the modal immediately
+    // Don't set sharing to true yet - we'll show it when we start preparing
+    
+    const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+    if (sourcePhotos.length === 0) {
+        Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
+        setSharing(false);
+        return;
+    }
 
-        // Filter before and after photos
-        const itemsToShare = sourcePhotos.filter(p =>
-            (selectedShareTypes.before && p.mode === PHOTO_MODES.BEFORE) ||
-            (selectedShareTypes.after && p.mode === PHOTO_MODES.AFTER)
-        );
-        
-        // If combined photos are selected, find them from file system
-        let combinedPhotosToShare = [];
-        if (selectedShareTypes.combined) {
-            try {
-                const beforePhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.BEFORE);
-                const afterPhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.AFTER);
-                const dir = FileSystem.documentDirectory;
-                const entries = await FileSystem.readDirectoryAsync(dir);
+    // Filter before and after photos
+    const itemsToShare = sourcePhotos.filter(p =>
+        (selectedShareTypes.before && p.mode === PHOTO_MODES.BEFORE) ||
+        (selectedShareTypes.after && p.mode === PHOTO_MODES.AFTER)
+    );
+    
+    // If combined photos are selected, find them from file system
+    let combinedPhotosToShare = [];
+    if (selectedShareTypes.combined) {
+        try {
+            const beforePhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.BEFORE);
+            const afterPhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.AFTER);
+            const dir = FileSystem.documentDirectory;
+            const entries = await FileSystem.readDirectoryAsync(dir);
+            
+            for (const beforePhoto of beforePhotos) {
+                const afterPhoto = afterPhotos.find(p => p.beforePhotoId === beforePhoto.id);
+                if (!afterPhoto) continue;
                 
-                for (const beforePhoto of beforePhotos) {
-                    const afterPhoto = afterPhotos.find(p => p.beforePhotoId === beforePhoto.id);
-                    if (!afterPhoto) continue;
-                    
-                    const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
-                    const projectId = beforePhoto.projectId;
-                    const projectIdSuffix = projectId ? `_P${projectId}` : '';
-                    
-                    const extractTimestamp = (filename) => {
-                        const match = filename.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
-                        return match ? parseInt(match[1], 10) : 0;
-                    };
-                    
-                    // Prioritize STACK over SIDE variant
-                    const stackPrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
-                    const sidePrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
-                    
-                    let newestUri = null;
-                    let newestTs = -1;
-                    
-                    // First, try to find STACK variant
-                    const stackMatches = entries.filter(name => {
-                        if (!name.startsWith(stackPrefix)) return false;
+                const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
+                const projectId = beforePhoto.projectId;
+                const projectIdSuffix = projectId ? `_P${projectId}` : '';
+                
+                const extractTimestamp = (filename) => {
+                    const match = filename.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+                    return match ? parseInt(match[1], 10) : 0;
+                };
+                
+                // Prioritize STACK over SIDE variant
+                const stackPrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
+                const sidePrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
+                
+                let newestUri = null;
+                let newestTs = -1;
+                
+                // First, try to find STACK variant
+                const stackMatches = entries.filter(name => {
+                    if (!name.startsWith(stackPrefix)) return false;
+                    if (projectId && !name.includes(projectIdSuffix)) return false;
+                    return true;
+                });
+                
+                for (const filename of stackMatches) {
+                    const ts = extractTimestamp(filename);
+                    if (ts > newestTs) {
+                        newestTs = ts;
+                        newestUri = `${dir}${filename}`;
+                    }
+                }
+                
+                // Only use SIDE if no STACK found
+                if (!newestUri) {
+                    const sideMatches = entries.filter(name => {
+                        if (!name.startsWith(sidePrefix)) return false;
                         if (projectId && !name.includes(projectIdSuffix)) return false;
                         return true;
                     });
                     
-                    for (const filename of stackMatches) {
+                    for (const filename of sideMatches) {
                         const ts = extractTimestamp(filename);
                         if (ts > newestTs) {
                             newestTs = ts;
                             newestUri = `${dir}${filename}`;
                         }
                     }
-                    
-                    // Only use SIDE if no STACK found
-                    if (!newestUri) {
-                        const sideMatches = entries.filter(name => {
-                            if (!name.startsWith(sidePrefix)) return false;
-                            if (projectId && !name.includes(projectIdSuffix)) return false;
-                            return true;
-                        });
-                        
-                        for (const filename of sideMatches) {
-                            const ts = extractTimestamp(filename);
-                            if (ts > newestTs) {
-                                newestTs = ts;
-                                newestUri = `${dir}${filename}`;
-                            }
-                        }
-                    }
-                    
-                    if (newestUri) {
-                        // Create a photo object for the combined photo
-                        combinedPhotosToShare.push({
-                            uri: newestUri,
-                            mode: PHOTO_MODES.COMBINED,
-                            name: beforePhoto.name,
-                            room: beforePhoto.room,
-                            projectId: beforePhoto.projectId,
-                            id: `combined_${beforePhoto.id}`, // Unique ID for combined photo
-                        });
-                    }
                 }
                 
-                console.log('[GALLERY] Found combined photos from file system:', combinedPhotosToShare.length);
-            } catch (error) {
-                console.error('[GALLERY] Error finding combined photos:', error);
-            }
-        }
-        
-        // Combine all photos to share
-        const allItemsToShare = [...itemsToShare, ...combinedPhotosToShare];
-        
-        console.log('[GALLERY] Items to share count:', allItemsToShare.length);
-        console.log('[GALLERY] Items to share breakdown - Before:', itemsToShare.filter(p => p.mode === PHOTO_MODES.BEFORE).length, 
-                    'After:', itemsToShare.filter(p => p.mode === PHOTO_MODES.AFTER).length,
-                    'Combined:', combinedPhotosToShare.length);
-        
-        if (allItemsToShare.length === 0) {
-            Alert.alert(t('gallery.noPhotosSelected'), t('gallery.selectAtLeastOne'));
-            setSharing(false);
-            return;
-        }
-        
-        const projectName = projects.find(p => p.id === activeProjectId)?.name || 'Shared-Photos';
-        const tempFiles = []; // Track temporary files for cleanup
-        
-        // Close loading popup before starting file operations
-        // This ensures it closes even if Share.open() blocks
-        setSharing(false);
-        
-        try {
-            if (shareAsArchive) {
-                // Share as ZIP archive
-                const zipFileName = `${projectName.replace(/\s+/g, '_')}_${Date.now()}.zip`;
-                const zipPath = FileSystem.cacheDirectory + zipFileName;
-                const zip = new JSZip();
-                
-                for (const item of allItemsToShare) {
-                    // Copy photo to temp location first to ensure it's accessible
-                    const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
-                    const tempUri = FileSystem.cacheDirectory + tempFileName;
-                    await FileSystem.copyAsync({ from: item.uri, to: tempUri });
-                    tempFiles.push(tempUri);
-                    
-                    const filename = item.uri.split('/').pop();
-                    const content = await FileSystem.readAsStringAsync(tempUri, {
-                        encoding: FileSystem.EncodingType.Base64,
+                if (newestUri) {
+                    // Create a photo object for the combined photo
+                    combinedPhotosToShare.push({
+                        uri: newestUri,
+                        mode: PHOTO_MODES.COMBINED,
+                        name: beforePhoto.name,
+                        room: beforePhoto.room,
+                        projectId: beforePhoto.projectId,
+                        id: `combined_${beforePhoto.id}`, // Unique ID for combined photo
                     });
-                    zip.file(filename, content, { base64: true });
                 }
+            }
+            
+            console.log('[GALLERY] Found combined photos from file system:', combinedPhotosToShare.length);
+        } catch (error) {
+            console.error('[GALLERY] Error finding combined photos:', error);
+        }
+    }
+    
+    // Combine all photos to share
+    const allItemsToShare = [...itemsToShare, ...combinedPhotosToShare];
+    
+    console.log('[GALLERY] Items to share count:', allItemsToShare.length);
+    console.log('[GALLERY] Items to share breakdown - Before:', itemsToShare.filter(p => p.mode === PHOTO_MODES.BEFORE).length, 
+                'After:', itemsToShare.filter(p => p.mode === PHOTO_MODES.AFTER).length,
+                'Combined:', combinedPhotosToShare.length);
+    
+    if (allItemsToShare.length === 0) {
+        Alert.alert(t('gallery.noPhotosSelected'), t('gallery.selectAtLeastOne'));
+        setSharing(false);
+        return;
+    }
+    
+    const projectName = projects.find(p => p.id === activeProjectId)?.name || 'Shared-Photos';
+    const tempFiles = []; // Track temporary files for cleanup
+    
+    try {
+        if (shareAsArchive) {
+            // For ZIP, always show loading since we need to copy files
+            setSharing(true);
+            // Share as ZIP archive
+            const zipFileName = `${projectName.replace(/\s+/g, '_')}_${Date.now()}.zip`;
+            const zipPath = FileSystem.cacheDirectory + zipFileName;
+            const zip = new JSZip();
+            
+            for (const item of allItemsToShare) {
+                // Copy photo to temp location first to ensure it's accessible
+                const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
+                const tempUri = FileSystem.cacheDirectory + tempFileName;
+                await FileSystem.copyAsync({ from: item.uri, to: tempUri });
+                tempFiles.push(tempUri);
                 
-                const zipBase64 = await zip.generateAsync({ type: 'base64' });
-                await FileSystem.writeAsStringAsync(zipPath, zipBase64, {
+                const filename = item.uri.split('/').pop();
+                const content = await FileSystem.readAsStringAsync(tempUri, {
                     encoding: FileSystem.EncodingType.Base64,
                 });
-                tempFiles.push(zipPath);
+                zip.file(filename, content, { base64: true });
+            }
+            
+            const zipBase64 = await zip.generateAsync({ type: 'base64' });
+            await FileSystem.writeAsStringAsync(zipPath, zipBase64, {
+                encoding: FileSystem.EncodingType.Base64,
+            });
+            tempFiles.push(zipPath);
+            
+            // Use react-native-share for ZIP file as well for better compatibility
+            console.log('[GALLERY] Starting to share ZIP file:', zipPath);
+            try {
+                const sharePromise = Share.open({
+                    url: zipPath,
+                    title: `Share ${projectName} Photos`,
+                    message: `Here are the photos from the project: ${projectName}`,
+                    type: 'application/zip',
+                });
                 
-                // Use react-native-share for ZIP file as well for better compatibility
-                console.log('[GALLERY] Starting to share ZIP file:', zipPath);
-                try {
-                    const sharePromise = Share.open({
-                        url: zipPath,
-                        title: `Share ${projectName} Photos`,
-                        message: `Here are the photos from the project: ${projectName}`,
-                        type: 'application/zip',
-                    });
-                    
-                    // Add a timeout to detect if Share.open hangs
-                    const timeoutPromise = new Promise((_, reject) => {
-                        setTimeout(() => {
-                            reject(new Error('Share operation timed out after 30 seconds'));
-                        }, 30000); // 30 second timeout
-                    });
-                    
-                    const result = await Promise.race([sharePromise, timeoutPromise]);
-                    console.log('[GALLERY] ZIP share completed successfully:', result);
-                } catch (shareError) {
-                    console.error('[GALLERY] ZIP share error caught:', shareError);
-                    console.error('[GALLERY] Error message:', shareError?.message);
-                    
-                    // User cancelled or error occurred - this is fine, just log it
-                    if (shareError?.message?.includes('User did not share') || 
-                        shareError?.message?.includes('cancelled') ||
-                        shareError?.message?.includes('User Cancel')) {
-                        // User cancelled - no need to show error
-                        console.log('[GALLERY] User cancelled sharing ZIP');
-                    } else if (shareError?.message?.includes('timed out')) {
-                        // Timeout - show error but don't rethrow
-                        console.error('[GALLERY] ZIP share operation timed out');
-                        Alert.alert(t('common.error'), 'Share operation took too long. Please try again.');
-                    } else {
-                        // Real error - rethrow to be caught by outer catch
-                        throw shareError;
+                // Add a timeout to detect if Share.open hangs
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => {
+                        reject(new Error('Share operation timed out after 30 seconds'));
+                    }, 30000); // 30 second timeout
+                });
+                
+                const result = await Promise.race([sharePromise, timeoutPromise]);
+                console.log('[GALLERY] ZIP share completed successfully:', result);
+            } catch (shareError) {
+                console.error('[GALLERY] ZIP share error caught:', shareError);
+                console.error('[GALLERY] Error message:', shareError?.message);
+                
+                // User cancelled or error occurred - this is fine, just log it
+                if (shareError?.message?.includes('User did not share') || 
+                    shareError?.message?.includes('cancelled') ||
+                    shareError?.message?.includes('User Cancel')) {
+                    // User cancelled - no need to show error
+                    console.log('[GALLERY] User cancelled sharing ZIP');
+                } else if (shareError?.message?.includes('timed out')) {
+                    // Timeout - show error but don't rethrow
+                    console.error('[GALLERY] ZIP share operation timed out');
+                    Alert.alert(t('common.error'), 'Share operation took too long. Please try again.');
+                } else {
+                    // Real error - rethrow to be caught by outer catch
+                    throw shareError;
+                }
+            }
+        } else {
+            // Share multiple photos as individual files using react-native-share
+            console.log(`[GALLERY] ========== STARTING SHARING (NOT ARCHIVE) ==========`);
+            console.log(`[GALLERY] shareAsArchive: ${shareAsArchive}, allItemsToShare.length: ${allItemsToShare.length}`);
+            console.log(`[GALLERY] showLabels: ${showLabels}`);
+            
+            // Calculate settings hash once for all photos
+            const settingsHash = calculateSettingsHash({
+                showLabels,
+                beforeLabelPosition,
+                afterLabelPosition,
+                labelBackgroundColor,
+                labelTextColor,
+                labelSize,
+                labelFontFamily,
+                labelMarginVertical,
+                labelMarginHorizontal,
+            });
+            
+            console.log(`[GALLERY] Settings hash calculated: ${settingsHash}, showLabels: ${showLabels}`);
+            
+            // Check cache for all photos first to determine if we need to show loading
+            // Also store cache results to avoid duplicate checks
+            let needsPreparation = false;
+            const cachedPhotoUris = new Map(); // Map photo ID to cached URI
+            
+            if (showLabels) {
+                console.log('[GALLERY] Checking cache for all photos before showing loading indicator...');
+                for (const item of allItemsToShare) {
+                    if (item.mode) {
+                        try {
+                            const cachedUri = await getCachedLabeledPhoto(item, settingsHash);
+                            if (cachedUri) {
+                                // Store the cached URI for reuse
+                                cachedPhotoUris.set(item.id, cachedUri);
+                                console.log(`[GALLERY] Photo ${item.id} (${item.mode}) found in cache`);
+                            } else {
+                                needsPreparation = true;
+                                console.log(`[GALLERY] Photo ${item.id} (${item.mode}) needs preparation`);
+                                // Don't break - continue checking all photos to populate cache map
+                            }
+                        } catch (error) {
+                            // If cache check fails, assume preparation is needed
+                            needsPreparation = true;
+                            console.log(`[GALLERY] Cache check failed for photo ${item.id}, will prepare`);
+                        }
                     }
                 }
-            } else {
-                // Share multiple photos as individual files using react-native-share
-                // Process all photos to add labels if needed
-                const urls = [];
+                console.log(`[GALLERY] Cache check complete. Needs preparation: ${needsPreparation}, Cached: ${cachedPhotoUris.size}/${allItemsToShare.length}`);
+            }
+            
+            // Only show loading indicator if preparation is actually needed
+            if (needsPreparation) {
+                setSharing(true);
+            }
+            
+            // Process all photos to add labels if needed
+            const urls = [];
+
+            // Fast path: If all photos are already cached, use them directly without processing
+            let allCached = showLabels && cachedPhotoUris.size === allItemsToShare.length && !needsPreparation;
+            if (allCached) {
+                console.log(`[GALLERY] All ${allItemsToShare.length} photos are cached, using cached URIs directly (fast path)`);
+                for (const item of allItemsToShare) {
+                    const cachedUri = cachedPhotoUris.get(item.id);
+                    if (cachedUri) {
+                        // Verify cached file exists
+                        const fileInfo = await FileSystem.getInfoAsync(cachedUri);
+                        if (fileInfo.exists) {
+                            urls.push(cachedUri);
+                            await updateCacheLastUsed(item);
+                            console.log(`[GALLERY] ✅ Using cached photo ${item.id} (${item.mode}): ${cachedUri.substring(0, 80)}...`);
+                        } else {
+                            console.error(`[GALLERY] Cached file does not exist: ${cachedUri}`);
+                            // Fall through to normal processing for this photo
+                            allCached = false;
+                            urls.length = 0; // Clear the array
+                            break;
+                        }
+                    } else {
+                        console.error(`[GALLERY] No cached URI found for photo ${item.id}`);
+                        // Fall through to normal processing for this photo
+                        allCached = false;
+                        urls.length = 0; // Clear the array
+                        break;
+                    }
+                }
                 
-                // Helper function to capture a photo with label if showLabels is enabled
-                const capturePhotoWithLabel = async (photo, index) => {
+                if (allCached && urls.length === allItemsToShare.length) {
+                    console.log(`[GALLERY] Successfully prepared ${urls.length} cached photos for sharing (fast path)`);
+                    // Skip the processing loop and go directly to sharing
+                } else if (!allCached) {
+                    // Some photos failed validation, need to process normally
+                    console.log(`[GALLERY] Fast path failed, falling back to normal processing`);
+                }
+            }
+
+            // Helper function to capture a photo with label if showLabels is enabled
+            const capturePhotoWithLabel = async (photo, index) => {
+                    console.log(`[GALLERY] capturePhotoWithLabel called for photo ${index + 1}, mode: ${photo.mode}, id: ${photo.id}`);
+                    
+                    // Check if we already have this photo in cache from the initial check
+                    if (showLabels && photo.mode && cachedPhotoUris.has(photo.id)) {
+                        const cachedUri = cachedPhotoUris.get(photo.id);
+                        console.log(`[GALLERY] ✅ Using cached labeled photo ${index + 1} (${photo.mode}) from initial check: ${cachedUri}`);
+                        await updateCacheLastUsed(photo);
+                        return cachedUri;
+                    }
+                    
+                    // If not in initial cache check, check cache now (for photos that weren't checked initially)
+                    if (showLabels && photo.mode) {
+                        try {
+                            console.log(`[GALLERY] Checking cache for photo ${index + 1} (${photo.mode}), photoId: ${photo.id}, settingsHash: ${settingsHash}`);
+                            const cachedUri = await getCachedLabeledPhoto(photo, settingsHash);
+                            if (cachedUri) {
+                                console.log(`[GALLERY] ✅ Using cached labeled photo ${index + 1} (${photo.mode}): ${cachedUri}`);
+                                await updateCacheLastUsed(photo);
+                                return cachedUri;
+                            } else {
+                                console.log(`[GALLERY] ❌ No cache found for photo ${index + 1} (${photo.mode}), will prepare now`);
+                            }
+                        } catch (cacheError) {
+                            console.error(`[GALLERY] Error checking cache for photo ${index + 1}:`, cacheError);
+                            // Continue with preparation if cache check fails
+                        }
+                    }
+
                     // Handle combined photos specially - need to find before and after photos
                     if (photo.mode === PHOTO_MODES.COMBINED || photo.mode === 'mix' || photo.mode === 'combined') {
                         // Find the corresponding before and after photos
@@ -734,46 +906,78 @@ export default function GalleryScreen({ navigation, route }) {
                 
                 
                 // Process all photos sequentially (important for label capture)
-                for (let i = 0; i < allItemsToShare.length; i++) {
-                    const item = allItemsToShare[i];
-                    try {
-                        // Verify source file exists before processing
-                        const sourceInfo = await FileSystem.getInfoAsync(item.uri);
-                        if (!sourceInfo.exists) {
-                            console.error(`[GALLERY] Source file does not exist: ${item.uri}`);
-                            continue;
-                        }
-                        
-                        // Process photo (with or without labels)
-                        // This will wait for label capture to complete if labels are enabled
-                        const tempUri = await capturePhotoWithLabel(item, i);
-                        
-                        // Verify processed file exists
-                        const tempInfo = await FileSystem.getInfoAsync(tempUri);
-                        if (!tempInfo.exists) {
-                            console.error(`[GALLERY] Failed to process file: ${item.uri} to ${tempUri}`);
-                            continue;
-                        }
-                        
-                        tempFiles.push(tempUri);
-                        // Keep full file:// URI for react-native-share
-                        urls.push(tempUri);
-                        console.log(`[GALLERY] Processed photo ${i + 1} (${item.mode || 'unknown'}): ${tempUri}`);
-                        
-                        // Longer delay between processing to ensure label capture completes
-                        // This is especially important when labels are enabled
-                        if (i < allItemsToShare.length - 1) {
-                            if (showLabels && item.mode) {
-                                // If labels were applied, wait longer for capture to complete
-                                await new Promise(resolve => setTimeout(resolve, 1000));
-                            } else {
-                                await new Promise(resolve => setTimeout(resolve, 100));
+                // Skip this loop if we already have all cached photos (fast path)
+                if (!allCached || urls.length === 0) {
+                    console.log(`[GALLERY] Starting to process ${allItemsToShare.length} photos for sharing...`);
+                    for (let i = 0; i < allItemsToShare.length; i++) {
+                        const item = allItemsToShare[i];
+                        console.log(`[GALLERY] Processing photo ${i + 1}/${allItemsToShare.length}: mode=${item.mode}, id=${item.id}`);
+                        try {
+                            // Verify source file exists before processing
+                            const sourceInfo = await FileSystem.getInfoAsync(item.uri);
+                            if (!sourceInfo.exists) {
+                                console.error(`[GALLERY] Source file does not exist: ${item.uri}`);
+                                continue;
                             }
+                            
+                            // Process photo (with or without labels)
+                            // This will wait for label capture to complete if labels are enabled
+                            console.log(`[GALLERY] Calling capturePhotoWithLabel for photo ${i + 1}...`);
+                            const tempUri = await capturePhotoWithLabel(item, i);
+                            console.log(`[GALLERY] capturePhotoWithLabel returned for photo ${i + 1}: ${tempUri?.substring(0, 100)}...`);
+                            
+                            // Verify processed file exists
+                            const tempInfo = await FileSystem.getInfoAsync(tempUri);
+                            if (!tempInfo.exists) {
+                                console.error(`[GALLERY] Failed to process file: ${item.uri} to ${tempUri}`);
+                                continue;
+                            }
+                            
+                            // Save to cache if it was just prepared (not from cache)
+                            // Check if this URI is already in cache by checking if it contains the cache directory
+                            const cacheDir = getCacheDir();
+                            const isFromCache = tempUri.includes('_labeled_cache/') || tempUri.includes(cacheDir);
+                            console.log(`[GALLERY] Photo ${i + 1} - isFromCache: ${isFromCache}, tempUri: ${tempUri.substring(0, 100)}...`);
+                            if (showLabels && item.mode && !isFromCache) {
+                                // This is a newly prepared photo, save it to cache for future use
+                                try {
+                                    console.log(`[GALLERY] Saving photo ${i + 1} (${item.mode}, id: ${item.id}) to cache...`);
+                                    const cachedUri = await saveCachedLabeledPhoto(item, tempUri, settingsHash);
+                                    if (cachedUri) {
+                                        console.log(`[GALLERY] ✅ Successfully saved photo ${i + 1} to cache: ${cachedUri}`);
+                                    } else {
+                                        console.log(`[GALLERY] ⚠️ Failed to save photo ${i + 1} to cache`);
+                                    }
+                                } catch (cacheError) {
+                                    console.error(`[GALLERY] Error saving to cache:`, cacheError);
+                                    // Continue even if cache save fails
+                                }
+                            } else if (isFromCache) {
+                                console.log(`[GALLERY] Photo ${i + 1} is already from cache, skipping save`);
+                            } else {
+                                console.log(`[GALLERY] Photo ${i + 1} - not saving to cache (showLabels: ${showLabels}, mode: ${item.mode})`);
+                            }
+                            
+                            tempFiles.push(tempUri);
+                            // Keep full file:// URI for react-native-share
+                            urls.push(tempUri);
+                            console.log(`[GALLERY] Processed photo ${i + 1} (${item.mode || 'unknown'}): ${tempUri}`);
+                            
+                            // Longer delay between processing to ensure label capture completes
+                            // This is especially important when labels are enabled
+                            if (i < allItemsToShare.length - 1) {
+                                if (showLabels && item.mode) {
+                                    // If labels were applied, wait longer for capture to complete
+                                    await new Promise(resolve => setTimeout(resolve, 1000));
+                                } else {
+                                    await new Promise(resolve => setTimeout(resolve, 100));
+                                }
+                            }
+                        } catch (copyError) {
+                            console.error(`[GALLERY] Error processing photo ${i + 1}:`, copyError);
+                            console.error(`[GALLERY] Source URI: ${item.uri}`);
+                            // Continue with next photo
                         }
-                    } catch (copyError) {
-                        console.error(`[GALLERY] Error processing photo ${i + 1}:`, copyError);
-                        console.error(`[GALLERY] Source URI: ${item.uri}`);
-                        // Continue with next photo
                     }
                 }
                 
@@ -784,14 +988,20 @@ export default function GalleryScreen({ navigation, route }) {
                 
                 console.log(`[GALLERY] Successfully prepared ${urls.length} photos for sharing`);
                 
+                // Close loading popup before opening share sheet (if it was shown)
+                // This ensures it closes even if Share.open() blocks
+                if (needsPreparation) {
+                    setSharing(false);
+                }
+                
                 // Share multiple photos using react-native-share
                 // Use urls parameter to share all photos at once (same approach that worked for 8 photos)
                 console.log('[GALLERY] Starting to share', urls.length, 'photos together');
                 console.log('[GALLERY] Share to same app:', shareToSameApp);
                 
-                // Add a delay before sharing to ensure UI is ready
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Add a small delay before sharing to ensure UI is ready
                 await new Promise(resolve => InteractionManager.runAfterInteractions(resolve));
+                await new Promise(resolve => requestAnimationFrame(resolve));
                 await new Promise(resolve => setTimeout(resolve, 300));
                 
                 // Share all photos at once using urls parameter
@@ -820,19 +1030,24 @@ export default function GalleryScreen({ navigation, route }) {
                     console.log('[GALLERY] Share result:', shareResult);
                     console.log('[GALLERY] All photos shared successfully');
                 } catch (shareError) {
+                    // Check if user cancelled before logging as error
+                    const isUserCancellation = shareError?.message?.includes('User did not share') || 
+                        shareError?.message?.includes('cancelled') ||
+                        shareError?.message?.includes('User Cancel') ||
+                        shareError?.code === 'E_USER_CANCELLED';
+                    
+                    if (isUserCancellation) {
+                        // User cancelled - this is normal, not an error
+                        console.log('[GALLERY] User cancelled sharing - this is normal if share sheet was dismissed');
+                        return; // Exit gracefully, no error handling needed
+                    }
+                    
+                    // Real error occurred
                     console.error('[GALLERY] Error sharing photos:', shareError);
                     console.error('[GALLERY] Error message:', shareError?.message);
                     console.error('[GALLERY] Error code:', shareError?.code);
-                    
-                    // If batch sharing fails, fall back to one by one
-                    if (shareError?.message?.includes('User did not share') || 
-                        shareError?.message?.includes('cancelled') ||
-                        shareError?.message?.includes('User Cancel') ||
-                        shareError?.code === 'E_USER_CANCELLED') {
-                        console.log('[GALLERY] User cancelled sharing - this is normal if share sheet was dismissed');
-                    } else {
-                        console.log('[GALLERY] Batch share failed with error, falling back to one by one...');
-                        // Fallback to one by one sharing
+                    console.log('[GALLERY] Batch share failed with error, falling back to one by one...');
+                    // Fallback to one by one sharing
                         for (let i = 0; i < urls.length; i++) {
                             try {
                                 console.log(`[GALLERY] Sharing photo ${i + 1}/${urls.length}...`);
@@ -851,45 +1066,51 @@ export default function GalleryScreen({ navigation, route }) {
                                     await new Promise(resolve => setTimeout(resolve, 500));
                                 }
                             } catch (singleShareError) {
+                                // Check if user cancelled
+                                const isUserCancellation = singleShareError?.message?.includes('User did not share') || 
+                                    singleShareError?.message?.includes('cancelled') ||
+                                    singleShareError?.message?.includes('User Cancel') ||
+                                    singleShareError?.code === 'E_USER_CANCELLED';
+                                
+                                if (isUserCancellation) {
+                                    console.log(`[GALLERY] User cancelled sharing photo ${i + 1} - stopping one-by-one sharing`);
+                                    return; // Exit gracefully if user cancels
+                                }
+                                
+                                // Real error - log it but continue with next photo
                                 console.error(`[GALLERY] Error sharing photo ${i + 1}:`, singleShareError);
-                                // Continue with next photo
                             }
                         }
                     }
-                }
                 
-                console.log('[GALLERY] Finished sharing all photos');
-            }
-            
-            // analyticsService.logEvent('Project_Shared', { 
-            //   projectName, 
-            //   photoCount: itemsToShare.length,
-            //   sharedTypes: Object.keys(selectedShareTypes).filter(k => selectedShareTypes[k]),
-            // });
-        } finally {
-            // Always close the loading popup
-            setSharing(false);
-            
-            // Clean up temporary files after a delay (to allow sharing to complete)
-            setTimeout(async () => {
-                for (const tempFile of tempFiles) {
-                    try {
-                        const fileInfo = await FileSystem.getInfoAsync(tempFile);
-                        if (fileInfo.exists) {
-                            await FileSystem.deleteAsync(tempFile, { idempotent: true });
-                        }
-                    } catch (cleanupError) {
-                        // Ignore cleanup errors
-                    }
-                }
-            }, 5000); // 5 second delay to allow sharing to complete
+            console.log('[GALLERY] Finished sharing all photos');
         }
+        
+        // analyticsService.logEvent('Project_Shared', { 
+        //   projectName, 
+        //   photoCount: itemsToShare.length,
+        //   sharedTypes: Object.keys(selectedShareTypes).filter(k => selectedShareTypes[k]),
+        // });
     } catch (error) {
         console.error('[GALLERY] Share error:', error);
         Alert.alert(t('common.error'), t('gallery.prepareShareError'));
     } finally {
-        // Ensure loading popup is always closed, even if error occurs before inner try block
+        // Always close the loading popup
         setSharing(false);
+        
+        // Clean up temporary files after a delay (to allow sharing to complete)
+        setTimeout(async () => {
+            for (const tempFile of tempFiles) {
+                try {
+                    const fileInfo = await FileSystem.getInfoAsync(tempFile);
+                    if (fileInfo.exists) {
+                        await FileSystem.deleteAsync(tempFile, { idempotent: true });
+                    }
+                } catch (cleanupError) {
+                    // Ignore cleanup errors
+                }
+            }
+        }, 5000); // 5 second delay to allow sharing to complete
     }
   };
 
@@ -2620,7 +2841,9 @@ export default function GalleryScreen({ navigation, route }) {
         <View style={styles.modalOverlay}>
           <View style={styles.loadingModal}>
             <ActivityIndicator size="large" />
-            <Text style={styles.loadingText}>{t('gallery.preparingPhotos')}</Text>
+            <Text style={styles.loadingText}>
+              {showLabels ? t('gallery.preparingPhotosWithLabels') : t('gallery.preparingPhotosCopying')}
+            </Text>
             <Text style={styles.loadingSubtext}>{t('gallery.mayTakeFewSeconds')}</Text>
           </View>
         </View>

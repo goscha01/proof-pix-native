@@ -33,6 +33,7 @@ import JoinTeamScreen from './src/screens/JoinTeamScreen';
 import GoogleSignUpScreen from './src/screens/GoogleSignUpScreen';
 import AuthLoadingScreen from './src/screens/AuthLoadingScreen';
 import VisionCameraTest from './src/screens/VisionCameraTest';
+import GlobalBackgroundLabelPreparation from './src/components/GlobalBackgroundLabelPreparation';
 
 const Stack = createNativeStackNavigator();
 
@@ -263,6 +264,8 @@ export default function App() {
               >
                 <AppNavigator />
               </NavigationContainer>
+              {/* Global background label preparation - stays mounted regardless of navigation */}
+              <GlobalBackgroundLabelPreparation />
             </PhotoProvider>
           </AdminProvider>
         </SettingsProvider>
