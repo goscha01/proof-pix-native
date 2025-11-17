@@ -44,7 +44,6 @@ class BackgroundLabelPreparationService {
     const { photo } = preparationData;
     const key = `${photo.id}_${photo.mode || 'unknown'}`;
     
-    console.log(`[BG_LABEL_PREP] Queueing preparation for ${key}`);
     this.pendingPreparations.set(key, {
       ...preparationData,
       key,
@@ -60,7 +59,6 @@ class BackgroundLabelPreparationService {
    */
   removePreparation(key) {
     if (this.pendingPreparations.has(key)) {
-      console.log(`[BG_LABEL_PREP] Removing preparation ${key}`);
       this.pendingPreparations.delete(key);
       this.notifyListeners();
     }

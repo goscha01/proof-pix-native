@@ -13,7 +13,6 @@ const isFirebaseReady = () => {
   try {
     return firebase.apps.length > 0;
   } catch (error) {
-    console.error('[Analytics] Error checking Firebase status:', error);
     return false;
   }
 };
@@ -25,15 +24,12 @@ const isFirebaseReady = () => {
  */
 export const logEvent = async (eventName, params = {}) => {
   if (!isFirebaseReady()) {
-    console.warn('[Analytics] Firebase not initialized, skipping event:', eventName);
     return;
   }
 
   try {
     await analytics().logEvent(eventName, params);
-    console.log(`[Analytics] Event logged: ${eventName}`, params);
   } catch (error) {
-    console.error('[Analytics] Error logging event:', error);
   }
 };
 
@@ -44,7 +40,6 @@ export const logEvent = async (eventName, params = {}) => {
  */
 export const logScreenView = async (screenName, screenClass = screenName) => {
   if (!isFirebaseReady()) {
-    console.warn('[Analytics] Firebase not initialized, skipping screen view:', screenName);
     return;
   }
 
@@ -53,9 +48,7 @@ export const logScreenView = async (screenName, screenClass = screenName) => {
       screen_name: screenName,
       screen_class: screenClass,
     });
-    console.log(`[Analytics] Screen view logged: ${screenName}`);
   } catch (error) {
-    console.error('[Analytics] Error logging screen view:', error);
   }
 };
 
@@ -68,9 +61,7 @@ export const setUserProperties = async (properties) => {
     for (const [key, value] of Object.entries(properties)) {
       await analytics().setUserProperty(key, value);
     }
-    console.log('User properties set:', properties);
   } catch (error) {
-    console.error('Error setting user properties:', error);
   }
 };
 
@@ -81,9 +72,7 @@ export const setUserProperties = async (properties) => {
 export const setUserId = async (userId) => {
   try {
     await analytics().setUserId(userId);
-    console.log(`User ID set: ${userId}`);
   } catch (error) {
-    console.error('Error setting user ID:', error);
   }
 };
 
@@ -94,9 +83,7 @@ export const setUserId = async (userId) => {
 export const setAnalyticsEnabled = async (enabled) => {
   try {
     await analytics().setAnalyticsCollectionEnabled(enabled);
-    console.log(`Analytics collection ${enabled ? 'enabled' : 'disabled'}`);
   } catch (error) {
-    console.error('Error setting analytics collection:', error);
   }
 };
 

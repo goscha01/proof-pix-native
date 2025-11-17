@@ -69,28 +69,21 @@ export const ensureCacheDir = async () => {
 export const getCachedLabeledPhoto = async (photo, settingsHash) => {
   try {
     if (!photo || !photo.uri || !photo.id) {
-      console.log('[LABEL_CACHE] Missing photo data:', { hasPhoto: !!photo, hasUri: !!photo?.uri, hasId: !!photo?.id });
       return null;
     }
 
     // Load metadata
     const metadata = await loadCacheMetadata();
     const cacheKey = `${photo.id}_${photo.mode || 'unknown'}`;
-    console.log(`[LABEL_CACHE] Loaded metadata, total entries: ${Object.keys(metadata).length}, looking for key: ${cacheKey}`);
-    console.log(`[LABEL_CACHE] Available keys: ${Object.keys(metadata).join(', ')}`);
     const cached = metadata[cacheKey];
 
     if (!cached) {
-      console.log(`[LABEL_CACHE] No cache entry found for key: ${cacheKey}`);
       return null;
     }
-
-    console.log(`[LABEL_CACHE] Found cache entry for ${cacheKey}, cached hash: ${cached.settingsHash}, current hash: ${settingsHash}`);
 
     // Check if settings hash matches
     if (cached.settingsHash !== settingsHash) {
       // Settings changed, cache is invalid
-      console.log(`[LABEL_CACHE] Settings hash mismatch, cache invalid`);
       return null;
     }
 
@@ -98,7 +91,6 @@ export const getCachedLabeledPhoto = async (photo, settingsHash) => {
     const fileInfo = await FileSystem.getInfoAsync(cached.uri);
     if (!fileInfo.exists) {
       // File was deleted, remove from metadata
-      console.log(`[LABEL_CACHE] Cached file does not exist: ${cached.uri}`);
       delete metadata[cacheKey];
       await saveCacheMetadata(metadata);
       return null;
@@ -108,15 +100,12 @@ export const getCachedLabeledPhoto = async (photo, settingsHash) => {
     const originalInfo = await FileSystem.getInfoAsync(photo.uri);
     if (!originalInfo.exists) {
       // Original deleted, remove cache
-      console.log(`[LABEL_CACHE] Original photo does not exist: ${photo.uri}`);
       await deleteCachedPhoto(photo);
       return null;
     }
 
-    console.log(`[LABEL_CACHE] ✅ Cache hit! Returning: ${cached.uri}`);
     return cached.uri;
   } catch (error) {
-    console.error('[LABEL_CACHE] Error getting cached photo:', error);
     return null;
   }
 };
@@ -127,7 +116,6 @@ export const getCachedLabeledPhoto = async (photo, settingsHash) => {
 export const saveCachedLabeledPhoto = async (photo, labeledUri, settingsHash) => {
   try {
     if (!photo || !photo.id || !labeledUri) {
-      console.log('[LABEL_CACHE] Cannot save to cache - missing data:', { hasPhoto: !!photo, hasId: !!photo?.id, hasLabeledUri: !!labeledUri });
       return null;
     }
 
@@ -139,17 +127,12 @@ export const saveCachedLabeledPhoto = async (photo, labeledUri, settingsHash) =>
     const cacheFilename = `${nameWithoutExt}_labeled_${settingsHash}.jpg`;
     const cacheUri = `${getCacheDir()}${cacheFilename}`;
 
-    console.log(`[LABEL_CACHE] Saving to cache: ${cacheFilename}`);
-    console.log(`[LABEL_CACHE] From: ${labeledUri}`);
-    console.log(`[LABEL_CACHE] To: ${cacheUri}`);
-
     // Copy labeled photo to cache
     await FileSystem.copyAsync({ from: labeledUri, to: cacheUri });
 
     // Verify the file was copied
     const cacheInfo = await FileSystem.getInfoAsync(cacheUri);
     if (!cacheInfo.exists) {
-      console.error(`[LABEL_CACHE] Failed to copy file to cache: ${cacheUri}`);
       return null;
     }
 
@@ -167,10 +150,8 @@ export const saveCachedLabeledPhoto = async (photo, labeledUri, settingsHash) =>
 
     await saveCacheMetadata(metadata);
 
-    console.log(`[LABEL_CACHE] ✅ Saved labeled photo to cache: ${cacheFilename} (key: ${cacheKey})`);
     return cacheUri;
   } catch (error) {
-    console.error('[LABEL_CACHE] Error saving cached photo:', error);
     return null;
   }
 };
@@ -187,7 +168,6 @@ export const updateCacheLastUsed = async (photo) => {
       await saveCacheMetadata(metadata);
     }
   } catch (error) {
-    console.error('[LABEL_CACHE] Error updating last used:', error);
   }
 };
 
@@ -213,7 +193,6 @@ export const deleteCachedPhoto = async (photo) => {
       await saveCacheMetadata(metadata);
     }
   } catch (error) {
-    console.error('[LABEL_CACHE] Error deleting cached photo:', error);
   }
 };
 
@@ -262,12 +241,10 @@ export const cleanupOldCache = async (maxAgeDays = 30) => {
 
     if (toDelete.length > 0) {
       await saveCacheMetadata(metadata);
-      console.log(`[LABEL_CACHE] Cleaned up ${toDelete.length} old cached photos`);
     }
 
     return toDelete.length;
   } catch (error) {
-    console.error('[LABEL_CACHE] Error cleaning up cache:', error);
     return 0;
   }
 };
@@ -298,12 +275,10 @@ export const invalidateCache = async (newSettingsHash) => {
 
     if (toDelete.length > 0) {
       await saveCacheMetadata(metadata);
-      console.log(`[LABEL_CACHE] Invalidated ${toDelete.length} cached photos due to settings change`);
     }
 
     return toDelete.length;
   } catch (error) {
-    console.error('[LABEL_CACHE] Error invalidating cache:', error);
     return 0;
   }
 };
@@ -316,7 +291,6 @@ const loadCacheMetadata = async () => {
     const stored = await AsyncStorage.getItem(LABEL_CACHE_METADATA_KEY);
     return stored ? JSON.parse(stored) : {};
   } catch (error) {
-    console.error('[LABEL_CACHE] Error loading metadata:', error);
     return {};
   }
 };
@@ -328,7 +302,6 @@ const saveCacheMetadata = async (metadata) => {
   try {
     await AsyncStorage.setItem(LABEL_CACHE_METADATA_KEY, JSON.stringify(metadata));
   } catch (error) {
-    console.error('[LABEL_CACHE] Error saving metadata:', error);
   }
 };
 
@@ -366,7 +339,6 @@ export const getCacheStats = async () => {
       metadataEntries: Object.keys(metadata).length,
     };
   } catch (error) {
-    console.error('[LABEL_CACHE] Error getting cache stats:', error);
     return { fileCount: 0, totalSize: 0, metadataEntries: 0 };
   }
 };

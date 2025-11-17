@@ -36,7 +36,6 @@ export async function compositeImages(beforeUri, afterUri, layout, dimensions) {
 
     return resultUri;
   } catch (error) {
-    console.error('Native image composition failed:', error);
     throw error;
   }
 }

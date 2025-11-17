@@ -184,7 +184,6 @@ export default function CameraScreen({ route, navigation }) {
 
     if (selected) {
       const ratio = Math.max(selected.photoWidth, selected.photoHeight) / Math.min(selected.photoWidth, selected.photoHeight);
-      console.log(`✅ Camera format: ${selected.photoWidth}x${selected.photoHeight} (${(selected.photoWidth * selected.photoHeight / 1000000).toFixed(1)}MP, ratio: ${ratio.toFixed(2)}:1)`);
     }
 
     return selected;
@@ -852,9 +851,6 @@ export default function CameraScreen({ route, navigation }) {
   useEffect(() => {
     const subscription = Dimensions.addEventListener('change', ({ window }) => {
       const newOrientation = window.width > window.height ? 'landscape' : 'portrait';
-      console.log('📐 Screen dimensions changed:');
-      console.log(`  - New dimensions: ${window.width}x${window.height}`);
-      console.log(`  - New orientation: ${newOrientation}`);
       // Update dimensions immediately for instant response
       setDimensions({ width: window.width, height: window.height });
       setDeviceOrientation(newOrientation);
@@ -906,19 +902,16 @@ export default function CameraScreen({ route, navigation }) {
 
   // Track when cameraViewMode state changes
   useEffect(() => {
-    console.log(`🎬 Camera view mode changed to: ${cameraViewMode}`);
   }, [cameraViewMode]);
 
   // Track when aspectRatio state changes
   useEffect(() => {
-    console.log(`📐 Aspect ratio state changed to: ${aspectRatio}`);
   }, [aspectRatio]);
 
   // Update camera view mode when device orientation changes - Android only
   useEffect(() => {
     // Only auto-sync on Android; iOS uses manual toggle only
     if (Platform.OS === 'android') {
-      console.log(`🔄 Auto-updating camera view mode (Android): ${deviceOrientation}`);
       setCameraViewMode(deviceOrientation);
     }
   }, [deviceOrientation]);
@@ -926,15 +919,6 @@ export default function CameraScreen({ route, navigation }) {
   // Handle screen focus/blur to re-check permissions and settings
   useFocusEffect(
     useCallback(() => {
-      console.log('📱 CameraScreen focused - Current state:');
-      console.log(`  - Screen dimensions: ${dimensions.width}x${dimensions.height}`);
-      console.log(`  - Device orientation: ${deviceOrientation}`);
-      console.log(`  - Camera view mode: ${cameraViewMode}`);
-      console.log(`  - Aspect ratio: ${aspectRatio}`);
-      console.log(`  - Picture size: ${pictureSize}`);
-      console.log(`  - Mode: ${mode}`);
-      console.log(`  - Camera type: ${cameraType}`);
-
       if (!hasPermission) {
         requestPermission();
       }
@@ -1024,14 +1008,11 @@ export default function CameraScreen({ route, navigation }) {
         ? screenWidth / screenHeight
         : screenHeight / screenWidth;
       const calculatedRatio = `${ratio.toFixed(2)}:1`;
-      console.log(`📐 Calculating aspect ratio for before mode: ${calculatedRatio} (${screenHeight} / ${screenWidth})`);
       setAspectRatio(calculatedRatio);
     } else if (mode === 'before' && Platform.OS === 'ios' && cameraViewMode === 'landscape') {
-      console.log(`📐 Setting aspect ratio for before mode (iOS landscape): 4:3`);
       setAspectRatio('4:3');
     } else if (mode === 'before' && Platform.OS === 'android') {
       const androidRatio = cameraViewMode === 'landscape' ? '4:3' : '9:16';
-      console.log(`📐 Setting aspect ratio for before mode (Android): ${androidRatio}`);
       setAspectRatio(androidRatio);
     }
   }, [mode, cameraViewMode, dimensions, deviceOrientation]);
@@ -1042,7 +1023,6 @@ export default function CameraScreen({ route, navigation }) {
       const activeBeforePhoto = getActiveBeforePhoto();
       if (activeBeforePhoto) {
         if (activeBeforePhoto.aspectRatio) {
-          console.log(`📐 Setting aspect ratio to match before photo: ${activeBeforePhoto.aspectRatio}`);
           setAspectRatio(activeBeforePhoto.aspectRatio);
         }
       }
@@ -1052,19 +1032,15 @@ export default function CameraScreen({ route, navigation }) {
   // In after mode, camera view mode should match the before photo's camera view mode
   useEffect(() => {
     if (mode === 'after') {
-      console.log('🔄 After mode - Syncing camera view mode:');
       // Android: always use device orientation (auto-sync)
       // iOS: match before photo's camera view mode
       if (Platform.OS === 'android') {
-        console.log(`  - Android: setting to device orientation: ${deviceOrientation}`);
         setCameraViewMode(deviceOrientation);
       } else {
         const activeBeforePhoto = getActiveBeforePhoto();
         if (activeBeforePhoto && activeBeforePhoto.cameraViewMode) {
-          console.log(`  - iOS: matching before photo's camera view mode: ${activeBeforePhoto.cameraViewMode}`);
           setCameraViewMode(activeBeforePhoto.cameraViewMode);
         } else {
-          console.log(`  - iOS: no before photo camera view mode, using device orientation: ${deviceOrientation}`);
           // Fallback to device orientation if no cameraViewMode saved
           setCameraViewMode(deviceOrientation);
         }
@@ -1126,21 +1102,11 @@ export default function CameraScreen({ route, navigation }) {
     try {
       setIsCapturing(true);
 
-      console.log('📸 ========== TAKING PHOTO WITH VISION CAMERA ==========');
-      console.log(`  - Camera type: ${cameraType}`);
-      console.log(`  - Zoom: ${zoom}`);
-
       const photo = await cameraRef.current.takePhoto({
         qualityPrioritization: 'quality',
         flash: enableTorch ? 'on' : 'off',
         enableShutterSound: true
       });
-
-      console.log('📸 Photo taken!');
-      console.log(`  - Camera used: ${cameraType}`);
-      console.log(`  - Path: ${photo.path}`);
-      console.log(`  - Dimensions: ${photo.width}x${photo.height}`);
-      console.log(`  - Size: ${(photo.width * photo.height / 1000000).toFixed(1)}MP`);
 
       const photoUri = `file://${photo.path}`;
 
@@ -1150,7 +1116,6 @@ export default function CameraScreen({ route, navigation }) {
         await handleAfterPhoto(photoUri);
       }
     } catch (error) {
-      console.error('Error taking photo:', error);
       Alert.alert('Error', 'Failed to take picture');
     } finally {
       setIsCapturing(false);
@@ -1162,7 +1127,6 @@ export default function CameraScreen({ route, navigation }) {
   const prepareCombinedPhotoInBackground = (combinedPhoto, beforePhoto, afterPhoto, settingsHash, isLetterbox) => {
     return new Promise((resolve, reject) => {
       if (!combinedPhoto || !beforePhoto || !afterPhoto) {
-        console.log('[CAMERA] Cannot prepare combined photo - missing data');
         resolve();
         return;
       }
@@ -1170,7 +1134,6 @@ export default function CameraScreen({ route, navigation }) {
       try {
         // Get dimensions of combined photo
         Image.getSize(combinedPhoto.uri, (width, height) => {
-          console.log(`[CAMERA] Queueing combined photo for global background preparation`);
           // Queue preparation in global service (stays mounted regardless of navigation)
           backgroundLabelPreparationService.queuePreparation({
             photo: combinedPhoto,
@@ -1187,11 +1150,9 @@ export default function CameraScreen({ route, navigation }) {
             reject,
           });
         }, (error) => {
-          console.error('[CAMERA] Error getting combined photo size:', error);
           reject(error);
         });
       } catch (error) {
-        console.error('[CAMERA] Error preparing combined photo in background:', error);
         reject(error);
       }
     });
@@ -1201,18 +1162,14 @@ export default function CameraScreen({ route, navigation }) {
   // Now uses global service that stays mounted regardless of navigation
   const prepareLabeledPhotoInBackground = (photo, settingsHash, mode) => {
     return new Promise((resolve, reject) => {
-      console.log(`[CAMERA] prepareLabeledPhotoInBackground called for ${mode} photo, id: ${photo?.id}`);
       if (!photo || !photo.uri || !photo.id) {
-        console.log('[CAMERA] ❌ Cannot prepare labeled photo - missing data:', { hasPhoto: !!photo, hasUri: !!photo?.uri, hasId: !!photo?.id });
         resolve();
         return;
       }
 
       try {
-        console.log(`[CAMERA] Getting image size for ${mode} photo: ${photo.uri}`);
         // Get image dimensions
         Image.getSize(photo.uri, (width, height) => {
-          console.log(`[CAMERA] Image size for ${mode} photo: ${width}x${height}`);
           // Determine label position based on photo mode
           let labelPosition;
           if (mode === 'before') {
@@ -1223,7 +1180,6 @@ export default function CameraScreen({ route, navigation }) {
             labelPosition = 'top-left';
           }
 
-          console.log(`[CAMERA] Queueing ${mode} photo for global background preparation (label position: ${labelPosition})`);
           // Queue preparation in global service (stays mounted regardless of navigation)
           backgroundLabelPreparationService.queuePreparation({
             photo,
@@ -1236,11 +1192,9 @@ export default function CameraScreen({ route, navigation }) {
             reject,
           });
         }, (error) => {
-          console.error(`[CAMERA] ❌ Error getting image size for ${mode} photo:`, error);
           reject(error);
         });
       } catch (error) {
-        console.error(`[CAMERA] ❌ Error preparing labeled ${mode} photo in background:`, error);
         reject(error);
       }
     });
@@ -1311,11 +1265,6 @@ export default function CameraScreen({ route, navigation }) {
       // Capture device orientation (actual phone orientation)
       const currentOrientation = deviceOrientation;
 
-      console.log('📸 ========== BEFORE PHOTO CAPTURE ==========');
-      console.log(`  Platform: ${Platform.OS}`);
-      console.log(`  Device orientation: ${deviceOrientation}`);
-      console.log(`  Camera view mode: ${cameraViewMode}`);
-      console.log(`  Screen dimensions: ${dimensions.width}x${dimensions.height}`);
 
       // Calculate aspect ratio and crop if needed
       let aspectRatio;
@@ -1331,7 +1280,6 @@ export default function CameraScreen({ route, navigation }) {
             Image.getSize(uri, (width, height) => resolve({ width, height }), reject);
           });
 
-          console.log(`  Original photo: ${imageInfo.width}x${imageInfo.height}`);
 
           // Calculate 4:3 crop (1.333:1 ratio)
           const targetRatio = 4 / 3;
@@ -1353,8 +1301,6 @@ export default function CameraScreen({ route, navigation }) {
             cropY = (imageInfo.height - cropHeight) / 2;
           }
 
-          console.log(`  Cropping to 4:3: ${Math.round(cropWidth)}x${Math.round(cropHeight)} at (${Math.round(cropX)}, ${Math.round(cropY)})`);
-
           const croppedImage = await ImageManipulator.manipulateAsync(
             uri,
             [
@@ -1371,9 +1317,7 @@ export default function CameraScreen({ route, navigation }) {
           );
 
           processedUri = croppedImage.uri;
-          console.log(`  ✅ Cropped to 4:3: ${processedUri}`);
         } catch (cropError) {
-          console.error('  ❌ Error cropping photo:', cropError);
           // Fall back to original uri if cropping fails
         }
       } else {
@@ -1385,14 +1329,10 @@ export default function CameraScreen({ route, navigation }) {
           : screenHeight / screenWidth; // portrait orientation: taller / wider
         // Format as string with 2 decimal places, e.g., "2.16:1" or "2.17:1"
         aspectRatio = `${ratio.toFixed(2)}:1`;
-        console.log(`  Calculated ratio: ${ratio.toFixed(2)}:1 (${screenHeight} / ${screenWidth})`);
       }
 
       // Save processed photo to device
       const savedUri = await savePhotoToDevice(processedUri, `${room}_${photoName}_BEFORE_${Date.now()}.jpg`, activeProjectId || null);
-
-      console.log(`  Final aspect ratio: ${aspectRatio}`);
-      console.log('============================================');
 
       // Add to photos with device orientation AND camera view mode
       const newPhoto = {
@@ -1464,7 +1404,6 @@ export default function CameraScreen({ route, navigation }) {
 
       if (beforeCameraViewMode === 'landscape') {
         // Letterbox mode: crop to 4:3 to match before photo
-        console.log('📸 Cropping after photo to 4:3 (letterbox mode)');
 
         try {
           // Get original image dimensions
@@ -1472,7 +1411,6 @@ export default function CameraScreen({ route, navigation }) {
             Image.getSize(uri, (width, height) => resolve({ width, height }), reject);
           });
 
-          console.log(`  Original after photo: ${imageInfo.width}x${imageInfo.height}`);
 
           // Calculate 4:3 crop (1.333:1 ratio)
           const targetRatio = 4 / 3;
@@ -1494,7 +1432,6 @@ export default function CameraScreen({ route, navigation }) {
             cropY = (imageInfo.height - cropHeight) / 2;
           }
 
-          console.log(`  Cropping to 4:3: ${Math.round(cropWidth)}x${Math.round(cropHeight)} at (${Math.round(cropX)}, ${Math.round(cropY)})`);
 
           const croppedImage = await ImageManipulator.manipulateAsync(
             uri,
@@ -1512,9 +1449,7 @@ export default function CameraScreen({ route, navigation }) {
           );
 
           processedUri = croppedImage.uri;
-          console.log(`  ✅ After photo cropped to 4:3: ${processedUri}`);
         } catch (cropError) {
-          console.error('  ❌ Error cropping after photo:', cropError);
           // Fall back to original uri if cropping fails
         }
       }
@@ -1552,12 +1487,6 @@ export default function CameraScreen({ route, navigation }) {
         
         Promise.resolve().then(async () => {
           try {
-            console.log('[CAMERA] ========== STARTING BACKGROUND LABEL PREPARATION ==========');
-            console.log('[CAMERA] After photo ID:', newAfterPhoto.id);
-            console.log('[CAMERA] Before photo ID:', beforePhotoForPrep?.id);
-            console.log('[CAMERA] Before photo URI:', beforePhotoForPrep?.uri);
-            console.log('[CAMERA] Preparing labeled photos in background...');
-            
             // Calculate settings hash
             const settingsHash = calculateSettingsHash({
               showLabels,
@@ -1570,64 +1499,34 @@ export default function CameraScreen({ route, navigation }) {
               labelMarginVertical,
               labelMarginHorizontal,
             });
-            console.log('[CAMERA] Settings hash:', settingsHash);
 
             // Prepare after photo with label first (wait for it to complete)
-            console.log('[CAMERA] [1/3] Checking cache for after photo (id:', newAfterPhoto.id, ')...');
             const cachedAfter = await getCachedLabeledPhoto(newAfterPhoto, settingsHash);
             if (!cachedAfter) {
-              console.log('[CAMERA] [1/3] ❌ No cache found for after photo, preparing now...');
               try {
                 await prepareLabeledPhotoInBackground(newAfterPhoto, settingsHash, 'after');
-                console.log('[CAMERA] [1/3] ✅ After photo preparation completed');
               } catch (error) {
-                console.error('[CAMERA] [1/3] ❌ Error preparing after photo:', error);
-                console.error('[CAMERA] [1/3] Error details:', error.message, error.stack);
               }
-            } else {
-              console.log('[CAMERA] [1/3] ✅ After photo already cached:', cachedAfter);
             }
 
             // Then prepare before photo with label (sequential to avoid conflicts)
             if (!beforePhotoForPrep || !beforePhotoForPrep.id || !beforePhotoForPrep.uri) {
-              console.error('[CAMERA] [2/3] ❌ Cannot prepare before photo - activeBeforePhoto is invalid:', {
-                hasPhoto: !!beforePhotoForPrep,
-                hasId: !!beforePhotoForPrep?.id,
-                hasUri: !!beforePhotoForPrep?.uri,
-                photo: beforePhotoForPrep
-              });
             } else {
-              console.log('[CAMERA] [2/3] Checking cache for before photo (id:', beforePhotoForPrep.id, ')...');
               const cachedBefore = await getCachedLabeledPhoto(beforePhotoForPrep, settingsHash);
               if (!cachedBefore) {
-                console.log('[CAMERA] [2/3] ❌ No cache found for before photo, preparing now...');
                 try {
                   await prepareLabeledPhotoInBackground(beforePhotoForPrep, settingsHash, 'before');
-                  console.log('[CAMERA] [2/3] ✅ Before photo preparation completed');
                 } catch (error) {
-                  console.error('[CAMERA] [2/3] ❌ Error preparing before photo:', error);
-                  console.error('[CAMERA] [2/3] Error details:', error.message, error.stack);
                 }
-              } else {
-                console.log('[CAMERA] [2/3] ✅ Before photo already cached:', cachedBefore);
               }
             }
-            
-            console.log('[CAMERA] ========== BACKGROUND LABEL PREPARATION COMPLETED ==========');
           } catch (error) {
-            console.error('[CAMERA] ❌ Error in background label preparation:', error);
-            console.error('[CAMERA] Error stack:', error.stack);
           }
         });
-      } else {
-        console.log('[CAMERA] Labels are disabled, skipping background preparation');
       }
 
       // Create combined photo in background using ImageManipulator (non-blocking)
       (async () => {
-        console.log('📸 ========== CREATING COMBINED PHOTO ==========');
-        console.log(`  - Before photo: ${activeBeforePhoto.uri}`);
-        console.log(`  - After photo: ${savedUri}`);
         try {
           // Measure original sizes
           const getSize = (u) => new Promise((resolve) => {
@@ -1669,12 +1568,6 @@ export default function CameraScreen({ route, navigation }) {
           }
 
           // Use native image compositor instead of view-shot
-          console.log(`🎨 Compositing images using native module...`);
-          console.log(`  - Layout type: ${isLandscapePair ? 'STACK' : 'SIDE-BY-SIDE'}`);
-          console.log(`  - Dimensions: ${dimsLocal.width}x${dimsLocal.height}`);
-          console.log(`  - Before URI: ${activeBeforePhoto.uri}`);
-          console.log(`  - After URI: ${savedUri}`);
-
           try {
             const capUri = await compositeImages(
               activeBeforePhoto.uri,
@@ -1682,18 +1575,15 @@ export default function CameraScreen({ route, navigation }) {
               isLandscapePair ? 'STACK' : 'SIDE',
               dimsLocal
             );
-            console.log(`✅ Native composition successful! URI: ${capUri}`);
 
             const safeName = (activeBeforePhoto.name || 'Photo').replace(/\s+/g, '_');
             const baseType = isLandscapePair ? 'STACK' : 'SIDE';
             const projectIdSuffix = activeProjectId ? `_P${activeProjectId}` : '';
-            console.log(`💾 Saving combined photo (${baseType})...`);
             const firstSaved = await savePhotoToDevice(
               capUri,
               `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_${baseType}_${Date.now()}${projectIdSuffix}.jpg`,
               activeProjectId || null
             );
-            console.log(`✅ Combined photo saved to gallery: ${firstSaved}`);
             
             // Prepare labeled combined photo in background if labels are enabled
             if (showLabels) {
@@ -1728,7 +1618,6 @@ export default function CameraScreen({ route, navigation }) {
                   // Check if already cached
                   const cachedCombined = await getCachedLabeledPhoto(combinedPhoto, settingsHash);
                   if (!cachedCombined) {
-                    console.log('[CAMERA] Preparing labeled combined photo...');
                     // Prepare combined photo with labels in background
                     // We have activeBeforePhoto and newAfterPhoto available here
                     try {
@@ -1740,13 +1629,9 @@ export default function CameraScreen({ route, navigation }) {
                         isLetterbox
                       );
                     } catch (error) {
-                      console.error('[CAMERA] Error preparing combined photo:', error);
                     }
-                  } else {
-                    console.log('[CAMERA] Combined photo already cached');
                   }
                 } catch (error) {
-                  console.error('[CAMERA] Error preparing combined photo:', error);
                 }
               })();
             }
@@ -1763,33 +1648,24 @@ export default function CameraScreen({ route, navigation }) {
                 const rightWLB = totalW - leftWLB;
                 const sideDimsLB = { width: totalW, height: totalHLB, leftW: leftWLB, rightW: rightWLB };
 
-                console.log(`🎨 Compositing letterbox SIDE variant using native module...`);
                 const capUriLB = await compositeImages(
                   activeBeforePhoto.uri,
                   savedUri,
                   'SIDE',
                   sideDimsLB
                 );
-                console.log(`✅ Letterbox SIDE composition successful! URI: ${capUriLB}`);
 
-                console.log(`💾 Saving letterbox SIDE variant...`);
-                const secondSaved = await savePhotoToDevice(
+                await savePhotoToDevice(
                   capUriLB,
                   `${activeBeforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_${Date.now()}${projectIdSuffix}.jpg`,
                   activeProjectId || null
                 );
-                console.log(`✅ Letterbox SIDE variant saved: ${secondSaved}`);
               } catch (eLB) {
-                console.error('❌ Error saving letterbox SIDE variant:', eLB);
               }
             }
           } catch (captureError) {
-            console.error('❌ Error capturing combined photo:', captureError);
-            console.error('  - Error message:', captureError.message);
-            console.error('  - Error stack:', captureError.stack);
           }
         } catch (error) {
-          console.error('❌ Error creating combined photo:', error);
         }
       })();
 
@@ -2036,7 +1912,6 @@ export default function CameraScreen({ route, navigation }) {
             <TouchableOpacity
               style={[styles.zoomButton, cameraType === 'ultra-wide-angle-camera' && styles.zoomButtonActive]}
               onPress={() => {
-                console.log('📷 Switching to ultra-wide camera');
                 setCameraType('ultra-wide-angle-camera');
                 setZoom(1.0);
               }}
@@ -2046,7 +1921,6 @@ export default function CameraScreen({ route, navigation }) {
             <TouchableOpacity
               style={[styles.zoomButton, cameraType === 'wide-angle-camera' && zoom < 2 && styles.zoomButtonActive]}
               onPress={() => {
-                console.log('📷 Switching to wide camera');
                 setCameraType('wide-angle-camera');
                 setZoom(1.0);
               }}
@@ -2056,7 +1930,6 @@ export default function CameraScreen({ route, navigation }) {
             <TouchableOpacity
               style={[styles.zoomButton, cameraType === 'wide-angle-camera' && zoom >= 2 && styles.zoomButtonActive]}
               onPress={() => {
-                console.log('📷 Setting 2x zoom on wide camera');
                 setCameraType('wide-angle-camera');
                 setZoom(2.0);
               }}

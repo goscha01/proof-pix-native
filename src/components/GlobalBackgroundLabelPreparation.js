@@ -32,7 +32,6 @@ export default function GlobalBackgroundLabelPreparation() {
         const pending = state.pendingPreparations;
         if (pending.length > 0) {
           const next = pending[0];
-          console.log(`[GLOBAL_BG_PREP] Starting preparation for ${next.key}`);
           return next;
         }
         return null;
@@ -44,7 +43,6 @@ export default function GlobalBackgroundLabelPreparation() {
     const pending = state.pendingPreparations;
     if (pending.length > 0) {
       const next = pending[0];
-      console.log(`[GLOBAL_BG_PREP] Found pending preparation on mount: ${next.key}`);
       setPreparingPhoto(next);
     }
 
@@ -59,7 +57,6 @@ export default function GlobalBackgroundLabelPreparation() {
       const pending = state.pendingPreparations;
       if (pending.length > 0) {
         const next = pending[0];
-        console.log(`[GLOBAL_BG_PREP] Processing next preparation: ${next.key}`);
         setPreparingPhoto(next);
       }
     }
@@ -72,8 +69,6 @@ export default function GlobalBackgroundLabelPreparation() {
     const { photo, width, height, labelPosition, settingsHash, mode, beforePhoto, afterPhoto, isCombined, isLetterbox } = preparingPhoto;
     let timeoutId;
 
-    console.log(`[GLOBAL_BG_PREP] Setting up capture for ${preparingPhoto.key}, mode: ${mode}, isCombined: ${isCombined}`);
-
     // Wait for view to render
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -82,10 +77,8 @@ export default function GlobalBackgroundLabelPreparation() {
             const ref = isCombined ? combinedCaptureRef : labelCaptureRef;
             
             if (!ref.current) {
-              console.log(`[GLOBAL_BG_PREP] Ref not ready for ${preparingPhoto.key}, retrying...`);
               setTimeout(async () => {
                 if (!ref.current) {
-                  console.error(`[GLOBAL_BG_PREP] Ref still not ready for ${preparingPhoto.key}, skipping`);
                   backgroundLabelPreparationService.removePreparation(preparingPhoto.key);
                   setPreparingPhoto(null);
                   return;
@@ -97,7 +90,6 @@ export default function GlobalBackgroundLabelPreparation() {
 
             await captureAndSave();
           } catch (error) {
-            console.error(`[GLOBAL_BG_PREP] Error preparing ${preparingPhoto.key}:`, error);
             backgroundLabelPreparationService.removePreparation(preparingPhoto.key);
             setPreparingPhoto(null);
           }
@@ -108,7 +100,6 @@ export default function GlobalBackgroundLabelPreparation() {
     const captureAndSave = async () => {
       try {
         const ref = isCombined ? combinedCaptureRef : labelCaptureRef;
-        console.log(`[GLOBAL_BG_PREP] Capturing ${preparingPhoto.key}...`);
         
         const capturedUri = await captureRef(ref, {
           format: 'jpg',
@@ -117,11 +108,6 @@ export default function GlobalBackgroundLabelPreparation() {
 
         // Save to cache
         const cachedUri = await saveCachedLabeledPhoto(photo, capturedUri, settingsHash);
-        if (cachedUri) {
-          console.log(`[GLOBAL_BG_PREP] ✅ Successfully cached ${preparingPhoto.key}: ${cachedUri}`);
-        } else {
-          console.log(`[GLOBAL_BG_PREP] ⚠️ Failed to save ${preparingPhoto.key} to cache`);
-        }
 
         // Resolve promise if provided
         if (preparingPhoto.resolve) {
@@ -132,7 +118,6 @@ export default function GlobalBackgroundLabelPreparation() {
         backgroundLabelPreparationService.removePreparation(preparingPhoto.key);
         setPreparingPhoto(null);
       } catch (error) {
-        console.error(`[GLOBAL_BG_PREP] Error in captureAndSave for ${preparingPhoto.key}:`, error);
         if (preparingPhoto.reject) {
           preparingPhoto.reject(error);
         }
