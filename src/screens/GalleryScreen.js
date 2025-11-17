@@ -598,6 +598,97 @@ export default function GalleryScreen({ navigation, route }) {
                 
                 // Helper function to capture a photo with label if showLabels is enabled
                 const capturePhotoWithLabel = async (photo, index) => {
+                    // Handle combined photos specially - need to find before and after photos
+                    if (photo.mode === PHOTO_MODES.COMBINED || photo.mode === 'mix' || photo.mode === 'combined') {
+                        // Find the corresponding before and after photos
+                        const beforePhoto = photos.find(p => 
+                            p.mode === PHOTO_MODES.BEFORE && 
+                            p.name === photo.name && 
+                            p.room === photo.room &&
+                            p.projectId === photo.projectId
+                        );
+                        const afterPhoto = photos.find(p => 
+                            p.mode === PHOTO_MODES.AFTER && 
+                            p.beforePhotoId === beforePhoto?.id &&
+                            p.projectId === photo.projectId
+                        );
+                        
+                        if (beforePhoto && afterPhoto && showLabels) {
+                            // Capture combined view with both labels
+                            return new Promise((resolve, reject) => {
+                                // Get dimensions of both photos
+                                Image.getSize(beforePhoto.uri, (beforeWidth, beforeHeight) => {
+                                    Image.getSize(afterPhoto.uri, (afterWidth, afterHeight) => {
+                                        // Determine layout based on photo orientation
+                                        const phoneOrientation = beforePhoto.orientation || 'portrait';
+                                        const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
+                                        const isLetterbox = beforePhoto.templateType === 'letterbox' || 
+                                                          (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
+                                        
+                                        // Use combined photo dimensions if available, otherwise calculate
+                                        Image.getSize(photo.uri, (combinedWidth, combinedHeight) => {
+                                            // Set the combined photo to capture (triggers useEffect)
+                                            setCapturingPhoto({ 
+                                                photo: {
+                                                    ...photo,
+                                                    beforePhoto,
+                                                    afterPhoto,
+                                                    isCombined: true,
+                                                    isLetterbox
+                                                }, 
+                                                index, 
+                                                width: combinedWidth, 
+                                                height: combinedHeight, 
+                                                labelPosition: null, // Not used for combined
+                                                resolve, 
+                                                reject 
+                                            });
+                                        }, (error) => {
+                                            // If getSize fails, use before photo dimensions
+                                            const totalWidth = beforeWidth * 2; // Side by side
+                                            const totalHeight = isLetterbox ? beforeHeight * 2 : beforeHeight; // Stacked or side by side
+                                            setCapturingPhoto({ 
+                                                photo: {
+                                                    ...photo,
+                                                    beforePhoto,
+                                                    afterPhoto,
+                                                    isCombined: true,
+                                                    isLetterbox
+                                                }, 
+                                                index, 
+                                                width: totalWidth, 
+                                                height: totalHeight, 
+                                                labelPosition: null,
+                                                resolve, 
+                                                reject 
+                                            });
+                                        });
+                                    }, (error) => {
+                                        // If getSize fails, just copy original combined photo
+                                        const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                                        const tempUri = FileSystem.cacheDirectory + tempFileName;
+                                        FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
+                                            resolve(tempUri);
+                                        }).catch(reject);
+                                    });
+                                }, (error) => {
+                                    // If getSize fails, just copy original combined photo
+                                    const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                                    const tempUri = FileSystem.cacheDirectory + tempFileName;
+                                    FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
+                                        resolve(tempUri);
+                                    }).catch(reject);
+                                });
+                            });
+                        } else {
+                            // No labels or couldn't find before/after photos, just copy original
+                            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                            const tempUri = FileSystem.cacheDirectory + tempFileName;
+                            await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+                            return tempUri;
+                        }
+                    }
+                    
                     if (!showLabels || !photo.mode) {
                         // No labels needed, just copy the original
                         const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
@@ -1894,22 +1985,65 @@ export default function GalleryScreen({ navigation, route }) {
                 overflow: 'hidden',
                 position: 'absolute',
                 left: width + 1000, // Off-screen but still rendered
-                top: 0
+                top: 0,
+                flexDirection: capturingPhoto.photo.isCombined && capturingPhoto.photo.isLetterbox ? 'column' : 
+                              capturingPhoto.photo.isCombined ? 'row' : undefined
               }}
             >
-              <Image
-                source={{ uri: capturingPhoto.photo.uri }}
-                style={{
-                  width: '100%',
-                  height: '100%'
-                }}
-                resizeMode="cover"
-              />
-              {showLabels && capturingPhoto.photo.mode && (
-                <PhotoLabel
-                  label={capturingPhoto.photo.mode === PHOTO_MODES.BEFORE ? 'common.before' : 'common.after'}
-                  position={capturingPhoto.labelPosition}
-                />
+              {capturingPhoto.photo.isCombined && capturingPhoto.photo.beforePhoto && capturingPhoto.photo.afterPhoto ? (
+                // Combined photo - render both before and after with labels
+                <>
+                  <View style={{ flex: 1 }}>
+                    <Image
+                      source={{ uri: capturingPhoto.photo.beforePhoto.uri }}
+                      style={{
+                        width: '100%',
+                        height: '100%'
+                      }}
+                      resizeMode="cover"
+                    />
+                    {showLabels && (
+                      <PhotoLabel
+                        label="common.before"
+                        position={beforeLabelPosition || 'top-left'}
+                      />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Image
+                      source={{ uri: capturingPhoto.photo.afterPhoto.uri }}
+                      style={{
+                        width: '100%',
+                        height: '100%'
+                      }}
+                      resizeMode="cover"
+                    />
+                    {showLabels && (
+                      <PhotoLabel
+                        label="common.after"
+                        position={afterLabelPosition || 'top-right'}
+                      />
+                    )}
+                  </View>
+                </>
+              ) : (
+                // Single photo
+                <>
+                  <Image
+                    source={{ uri: capturingPhoto.photo.uri }}
+                    style={{
+                      width: '100%',
+                      height: '100%'
+                    }}
+                    resizeMode="cover"
+                  />
+                  {showLabels && capturingPhoto.photo.mode && (
+                    <PhotoLabel
+                      label={capturingPhoto.photo.mode === PHOTO_MODES.BEFORE ? 'common.before' : 'common.after'}
+                      position={capturingPhoto.labelPosition}
+                    />
+                  )}
+                </>
               )}
             </View>
           </View>
@@ -1995,7 +2129,10 @@ export default function GalleryScreen({ navigation, route }) {
                 />
                 {/* Show BEFORE label only if showLabels is true */}
                 {showLabels && (
-                  <PhotoLabel label="common.before" />
+                  <PhotoLabel 
+                    label="common.before" 
+                    position={beforeLabelPosition || 'top-left'}
+                  />
                 )}
               </View>
               <View style={styles.fullScreenHalf}>
@@ -2010,7 +2147,10 @@ export default function GalleryScreen({ navigation, route }) {
                 />
                 {/* Show AFTER label only if showLabels is true */}
                 {showLabels && (
-                  <PhotoLabel label="common.after" />
+                  <PhotoLabel 
+                    label="common.after" 
+                    position={afterLabelPosition || 'top-right'}
+                  />
                 )}
               </View>
             </View>

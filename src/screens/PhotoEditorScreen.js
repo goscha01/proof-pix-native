@@ -382,6 +382,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
     // If an original base is selected and available, display the saved image (no cropping)
     if ((templateType === 'original-stack' && originalBaseUris.stack) || (templateType === 'original-side' && originalBaseUris.side)) {
       const uri = templateType === 'original-stack' ? originalBaseUris.stack : originalBaseUris.side;
+      const isStackLayout = templateType === 'original-stack';
       // Fit inside max box while preserving original aspect
       const maxW = 350;
       const maxH = 500;
@@ -410,10 +411,33 @@ export default function PhotoEditorScreen({ route, navigation }) {
             }}
           />
           {/* Show labels overlay on original images if showLabels is true */}
+          {/* For STACK: before is on top, after is on bottom */}
+          {/* For SIDE: before is on left, after is on right */}
           {showLabels && (
             <>
-              <PhotoLabel label="common.before" position={beforeLabelPosition} />
-              <PhotoLabel label="common.after" position={afterLabelPosition} />
+              {isStackLayout ? (
+                <>
+                  {/* Before label on top half for stacked layout */}
+                  <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: '50%' }}>
+                    <PhotoLabel label="common.before" position={beforeLabelPosition} />
+                  </View>
+                  {/* After label on bottom half for stacked layout */}
+                  <View style={{ position: 'absolute', top: '50%', left: 0, right: 0, bottom: 0 }}>
+                    <PhotoLabel label="common.after" position={afterLabelPosition} />
+                  </View>
+                </>
+              ) : (
+                <>
+                  {/* Before label on left half for side-by-side layout */}
+                  <View style={{ position: 'absolute', top: 0, left: 0, right: '50%', bottom: 0 }}>
+                    <PhotoLabel label="common.before" position={beforeLabelPosition} />
+                  </View>
+                  {/* After label on right half for side-by-side layout */}
+                  <View style={{ position: 'absolute', top: 0, left: '50%', right: 0, bottom: 0 }}>
+                    <PhotoLabel label="common.after" position={afterLabelPosition} />
+                  </View>
+                </>
+              )}
             </>
           )}
           {/* Show watermark if enabled */}
