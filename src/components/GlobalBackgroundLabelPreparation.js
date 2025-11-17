@@ -4,7 +4,7 @@
  * It handles all background label preparation tasks using react-native-view-shot
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { View, Modal, Image, Dimensions } from 'react-native';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system';
@@ -21,6 +21,9 @@ export default function GlobalBackgroundLabelPreparation() {
   const labelCaptureRef = useRef(null);
   const combinedCaptureRef = useRef(null);
   const { showLabels } = useSettings();
+  const [imagesLoaded, setImagesLoaded] = useState({ before: false, after: false });
+  const captureTriggeredRef = useRef(false);
+  const fallbackTimeoutRef = useRef(null);
 
   useEffect(() => {
     // Subscribe to preparation service updates
@@ -62,74 +65,168 @@ export default function GlobalBackgroundLabelPreparation() {
     }
   }, [preparingPhoto]);
 
-  // Effect to handle photo capture when preparingPhoto changes
-  useEffect(() => {
+  const captureAndSave = useCallback(async () => {
     if (!preparingPhoto) return;
-
-    const { photo, width, height, labelPosition, settingsHash, mode, beforePhoto, afterPhoto, isCombined, isLetterbox } = preparingPhoto;
-    let timeoutId;
-
-    // Wait for view to render
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        timeoutId = setTimeout(async () => {
-          try {
-            const ref = isCombined ? combinedCaptureRef : labelCaptureRef;
-            
-            if (!ref.current) {
-              setTimeout(async () => {
-                if (!ref.current) {
-                  backgroundLabelPreparationService.removePreparation(preparingPhoto.key);
-                  setPreparingPhoto(null);
-                  return;
-                }
-                await captureAndSave();
-              }, 500);
-              return;
-            }
-
-            await captureAndSave();
-          } catch (error) {
-            backgroundLabelPreparationService.removePreparation(preparingPhoto.key);
-            setPreparingPhoto(null);
+    
+    try {
+      console.log(`[DEBUG] 📸 Capturing labeled photo (${preparingPhoto.key})...`);
+      const ref = preparingPhoto.isCombined ? combinedCaptureRef : labelCaptureRef;
+      
+      if (!ref.current) {
+        console.log(`[DEBUG] ⚠️ Ref not ready, retrying in 200ms...`);
+        setTimeout(() => {
+          if (ref.current && !captureTriggeredRef.current) {
+            captureAndSave();
           }
-        }, 800);
-      });
-    });
-
-    const captureAndSave = async () => {
-      try {
-        const ref = isCombined ? combinedCaptureRef : labelCaptureRef;
-        
-        const capturedUri = await captureRef(ref, {
-          format: 'jpg',
-          quality: 0.95
-        });
-
-        // Save to cache
-        const cachedUri = await saveCachedLabeledPhoto(photo, capturedUri, settingsHash);
-
-        // Resolve promise if provided
-        if (preparingPhoto.resolve) {
-          preparingPhoto.resolve(cachedUri || capturedUri);
-        }
-
-        // Remove from queue and move to next
-        backgroundLabelPreparationService.removePreparation(preparingPhoto.key);
-        setPreparingPhoto(null);
-      } catch (error) {
-        if (preparingPhoto.reject) {
-          preparingPhoto.reject(error);
-        }
-        backgroundLabelPreparationService.removePreparation(preparingPhoto.key);
-        setPreparingPhoto(null);
+        }, 200);
+        return;
       }
-    };
+
+      const capturedUri = await captureRef(ref, {
+        format: 'jpg',
+        quality: 0.95
+      });
+      console.log(`[DEBUG] ✅ Captured labeled photo: ${capturedUri}`);
+
+      // Save to cache
+      console.log(`[DEBUG] 💾 Saving to cache...`);
+      const cachedUri = await saveCachedLabeledPhoto(
+        preparingPhoto.photo, 
+        capturedUri, 
+        preparingPhoto.settingsHash
+      );
+      console.log(`[DEBUG] ✅ Saved to cache: ${cachedUri || 'failed'}`);
+
+      // Resolve promise if provided
+      if (preparingPhoto.resolve) {
+        preparingPhoto.resolve(cachedUri || capturedUri);
+      }
+
+      // Remove from queue and move to next
+      console.log(`[DEBUG] ✅ Label preparation complete for ${preparingPhoto.key}`);
+      backgroundLabelPreparationService.removePreparation(preparingPhoto.key);
+      setPreparingPhoto(null);
+    } catch (error) {
+      console.log(`[DEBUG] ❌ Error in captureAndSave:`, error);
+      if (preparingPhoto?.reject) {
+        preparingPhoto.reject(error);
+      }
+      if (preparingPhoto) {
+        backgroundLabelPreparationService.removePreparation(preparingPhoto.key);
+      }
+      setPreparingPhoto(null);
+    }
+  }, [preparingPhoto]);
+
+  const attemptCapture = useCallback(() => {
+    if (captureTriggeredRef.current || !preparingPhoto) return;
+    
+    const isCombined = preparingPhoto.isCombined;
+    const allImagesLoaded = isCombined 
+      ? imagesLoaded.before && imagesLoaded.after
+      : imagesLoaded.before;
+
+    if (allImagesLoaded) {
+      captureTriggeredRef.current = true;
+      // Wait for image to be fully rendered before capturing
+      // This runs in background and doesn't block user workflow
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          // Small delay in background to ensure image is fully painted
+          // This is non-blocking - user can continue working while label prep happens
+          setTimeout(() => {
+            // Verify image source is valid before capturing
+            if (preparingPhoto) {
+              const imageUri = preparingPhoto.isCombined 
+                ? preparingPhoto.beforePhoto?.uri 
+                : preparingPhoto.photo?.uri;
+              
+              if (!imageUri) {
+                console.log(`[DEBUG] ⚠️ Invalid image URI, skipping capture`);
+                backgroundLabelPreparationService.removePreparation(preparingPhoto.key);
+                setPreparingPhoto(null);
+                return;
+              }
+              
+              console.log(`[DEBUG] ✅ All images loaded and validated, capturing...`);
+              captureAndSave();
+            }
+          }, 300); // 300ms background delay - doesn't block UI, just ensures image is rendered
+        });
+      });
+    }
+  }, [imagesLoaded, preparingPhoto, captureAndSave]);
+
+  // Reset loaded state when preparingPhoto changes
+  useEffect(() => {
+    if (preparingPhoto) {
+      console.log(`[DEBUG] 🎬 GlobalBackgroundLabelPreparation: Starting label preparation for ${preparingPhoto.key} (mode: ${preparingPhoto.mode}, isCombined: ${preparingPhoto.isCombined})`);
+      setImagesLoaded({ before: false, after: false });
+      captureTriggeredRef.current = false;
+      
+      // Clear any existing fallback timeout
+      if (fallbackTimeoutRef.current) {
+        clearTimeout(fallbackTimeoutRef.current);
+        fallbackTimeoutRef.current = null;
+      }
+
+      // Set fallback timeout (2 seconds) in case onLoad doesn't fire
+      // Use a ref to the current preparingPhoto to avoid stale closure
+      const currentPreparingPhoto = preparingPhoto;
+      fallbackTimeoutRef.current = setTimeout(() => {
+        if (!captureTriggeredRef.current && currentPreparingPhoto) {
+          console.log(`[DEBUG] ⚠️ Fallback timeout reached, attempting capture anyway...`);
+          // Force capture even if images haven't loaded (fallback safety)
+          captureTriggeredRef.current = true;
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              // captureAndSave is in component scope, safe to call
+              captureAndSave();
+            });
+          });
+        }
+      }, 2000);
+    }
 
     return () => {
-      if (timeoutId) clearTimeout(timeoutId);
+      if (fallbackTimeoutRef.current) {
+        clearTimeout(fallbackTimeoutRef.current);
+        fallbackTimeoutRef.current = null;
+      }
     };
-  }, [preparingPhoto]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preparingPhoto]); // Only depend on preparingPhoto, captureAndSave is stable enough
+
+  // Attempt capture when images are loaded
+  useEffect(() => {
+    if (preparingPhoto) {
+      attemptCapture();
+    }
+  }, [imagesLoaded, preparingPhoto, attemptCapture]);
+
+  const handleImageLoad = (imageType) => {
+    if (preparingPhoto) {
+      const imageUri = preparingPhoto.isCombined
+        ? (imageType === 'before' ? preparingPhoto.beforePhoto?.uri : preparingPhoto.afterPhoto?.uri)
+        : preparingPhoto.photo?.uri;
+      console.log(`[DEBUG] ✅ Image load complete: ${imageType}, URI: ${imageUri?.substring(0, 50)}...`);
+    } else {
+      console.log(`[DEBUG] ✅ Image load complete: ${imageType}`);
+    }
+    setImagesLoaded(prev => {
+      const updated = { ...prev, [imageType]: true };
+      return updated;
+    });
+  };
+
+  const handleImageError = (imageType, error) => {
+    console.log(`[DEBUG] ❌ Image load error for ${imageType}:`, error);
+    // Still mark as loaded to prevent infinite waiting, but log the error
+    setImagesLoaded(prev => {
+      const updated = { ...prev, [imageType]: true };
+      return updated;
+    });
+  };
 
   // Render hidden modals for capture
   return (
@@ -169,6 +266,8 @@ export default function GlobalBackgroundLabelPreparation() {
                   height: '100%'
                 }}
                 resizeMode="cover"
+                onLoadEnd={() => handleImageLoad('before')}
+                onError={(error) => handleImageError('before', error)}
               />
               {showLabels && preparingPhoto.photo.mode && (
                 <PhotoLabel
@@ -219,6 +318,8 @@ export default function GlobalBackgroundLabelPreparation() {
                     height: '100%'
                   }}
                   resizeMode="cover"
+                  onLoad={() => handleImageLoad('before')}
+                  onError={(error) => handleImageError('before', error)}
                 />
                 {showLabels && (
                   <PhotoLabel
@@ -236,6 +337,8 @@ export default function GlobalBackgroundLabelPreparation() {
                     height: '100%'
                   }}
                   resizeMode="cover"
+                  onLoadEnd={() => handleImageLoad('after')}
+                  onError={(error) => handleImageError('after', error)}
                 />
                 {showLabels && (
                   <PhotoLabel
