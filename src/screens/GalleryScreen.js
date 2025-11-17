@@ -16,7 +16,8 @@ import {
   Switch,
   TextInput,
   Share as RNShare,
-  Platform
+  Platform,
+  InteractionManager
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
@@ -322,12 +323,101 @@ export default function GalleryScreen({ navigation, route }) {
             return;
         }
 
+        // Filter before and after photos
         const itemsToShare = sourcePhotos.filter(p =>
             (selectedShareTypes.before && p.mode === PHOTO_MODES.BEFORE) ||
             (selectedShareTypes.after && p.mode === PHOTO_MODES.AFTER)
         );
         
-        if (itemsToShare.length === 0) {
+        // If combined photos are selected, find them from file system
+        let combinedPhotosToShare = [];
+        if (selectedShareTypes.combined) {
+            try {
+                const beforePhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.BEFORE);
+                const afterPhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.AFTER);
+                const dir = FileSystem.documentDirectory;
+                const entries = await FileSystem.readDirectoryAsync(dir);
+                
+                for (const beforePhoto of beforePhotos) {
+                    const afterPhoto = afterPhotos.find(p => p.beforePhotoId === beforePhoto.id);
+                    if (!afterPhoto) continue;
+                    
+                    const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
+                    const projectId = beforePhoto.projectId;
+                    const projectIdSuffix = projectId ? `_P${projectId}` : '';
+                    
+                    const extractTimestamp = (filename) => {
+                        const match = filename.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+                        return match ? parseInt(match[1], 10) : 0;
+                    };
+                    
+                    // Prioritize STACK over SIDE variant
+                    const stackPrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
+                    const sidePrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
+                    
+                    let newestUri = null;
+                    let newestTs = -1;
+                    
+                    // First, try to find STACK variant
+                    const stackMatches = entries.filter(name => {
+                        if (!name.startsWith(stackPrefix)) return false;
+                        if (projectId && !name.includes(projectIdSuffix)) return false;
+                        return true;
+                    });
+                    
+                    for (const filename of stackMatches) {
+                        const ts = extractTimestamp(filename);
+                        if (ts > newestTs) {
+                            newestTs = ts;
+                            newestUri = `${dir}${filename}`;
+                        }
+                    }
+                    
+                    // Only use SIDE if no STACK found
+                    if (!newestUri) {
+                        const sideMatches = entries.filter(name => {
+                            if (!name.startsWith(sidePrefix)) return false;
+                            if (projectId && !name.includes(projectIdSuffix)) return false;
+                            return true;
+                        });
+                        
+                        for (const filename of sideMatches) {
+                            const ts = extractTimestamp(filename);
+                            if (ts > newestTs) {
+                                newestTs = ts;
+                                newestUri = `${dir}${filename}`;
+                            }
+                        }
+                    }
+                    
+                    if (newestUri) {
+                        // Create a photo object for the combined photo
+                        combinedPhotosToShare.push({
+                            uri: newestUri,
+                            mode: PHOTO_MODES.COMBINED,
+                            name: beforePhoto.name,
+                            room: beforePhoto.room,
+                            projectId: beforePhoto.projectId,
+                            id: `combined_${beforePhoto.id}`, // Unique ID for combined photo
+                        });
+                    }
+                }
+                
+                console.log('[GALLERY] Found combined photos from file system:', combinedPhotosToShare.length);
+            } catch (error) {
+                console.error('[GALLERY] Error finding combined photos:', error);
+            }
+        }
+        
+        // Combine all photos to share
+        const allItemsToShare = [...itemsToShare, ...combinedPhotosToShare];
+        
+        console.log('[GALLERY] Items to share count:', allItemsToShare.length);
+        console.log('[GALLERY] Items to share breakdown - Before:', itemsToShare.filter(p => p.mode === PHOTO_MODES.BEFORE).length, 
+                    'After:', itemsToShare.filter(p => p.mode === PHOTO_MODES.AFTER).length,
+                    'Combined:', combinedPhotosToShare.length);
+        
+        if (allItemsToShare.length === 0) {
             Alert.alert(t('gallery.noPhotosSelected'), t('gallery.selectAtLeastOne'));
             setSharing(false);
             return;
@@ -347,7 +437,7 @@ export default function GalleryScreen({ navigation, route }) {
                 const zipPath = FileSystem.cacheDirectory + zipFileName;
                 const zip = new JSZip();
                 
-                for (const item of itemsToShare) {
+                for (const item of allItemsToShare) {
                     // Copy photo to temp location first to ensure it's accessible
                     const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
                     const tempUri = FileSystem.cacheDirectory + tempFileName;
@@ -409,115 +499,117 @@ export default function GalleryScreen({ navigation, route }) {
                 // Share multiple photos as individual files using react-native-share
                 // Copy all photos to temp locations first
                 const urls = [];
-                for (let i = 0; i < itemsToShare.length; i++) {
-                    const item = itemsToShare[i];
-                    // Copy photo to temp location to ensure it's accessible
-                    const tempFileName = `temp_${Date.now()}_${i}_${Math.random().toString(36).substring(7)}.jpg`;
-                    const tempUri = FileSystem.cacheDirectory + tempFileName;
-                    await FileSystem.copyAsync({ from: item.uri, to: tempUri });
-                    tempFiles.push(tempUri);
-                    urls.push(tempUri);
+                for (let i = 0; i < allItemsToShare.length; i++) {
+                    const item = allItemsToShare[i];
+                    try {
+                        // Verify source file exists before copying
+                        const sourceInfo = await FileSystem.getInfoAsync(item.uri);
+                        if (!sourceInfo.exists) {
+                            console.error(`[GALLERY] Source file does not exist: ${item.uri}`);
+                            continue;
+                        }
+                        
+                        // Copy photo to temp location to ensure it's accessible
+                        // Use cache directory (same as other working screens)
+                        const tempFileName = `temp_${Date.now()}_${i}_${Math.random().toString(36).substring(7)}.jpg`;
+                        const tempUri = FileSystem.cacheDirectory + tempFileName;
+                        await FileSystem.copyAsync({ from: item.uri, to: tempUri });
+                        
+                        // Verify copied file exists
+                        const tempInfo = await FileSystem.getInfoAsync(tempUri);
+                        if (!tempInfo.exists) {
+                            console.error(`[GALLERY] Failed to copy file: ${item.uri} to ${tempUri}`);
+                            continue;
+                        }
+                        
+                        tempFiles.push(tempUri);
+                        // Keep full file:// URI for react-native-share
+                        urls.push(tempUri);
+                        console.log(`[GALLERY] Copied photo ${i + 1} (${item.mode || 'unknown'}): ${tempUri}`);
+                    } catch (copyError) {
+                        console.error(`[GALLERY] Error copying photo ${i + 1}:`, copyError);
+                        console.error(`[GALLERY] Source URI: ${item.uri}`);
+                        // Continue with next photo
+                    }
                 }
                 
+                if (urls.length === 0) {
+                    Alert.alert(t('common.error'), 'No photos could be prepared for sharing');
+                    return;
+                }
+                
+                console.log(`[GALLERY] Successfully prepared ${urls.length} photos for sharing`);
+                
                 // Share multiple photos using react-native-share
-                // If shareToSameApp is true and 5 or fewer photos, share all at once using urls parameter
-                // Otherwise, share one by one
-                console.log('[GALLERY] Starting to share', urls.length, 'photos');
+                // Use urls parameter to share all photos at once (same approach that worked for 8 photos)
+                console.log('[GALLERY] Starting to share', urls.length, 'photos together');
                 console.log('[GALLERY] Share to same app:', shareToSameApp);
                 
-                // Try to share all together if shareToSameApp is enabled, regardless of count
-                if (shareToSameApp && urls.length > 1) {
-                    // Share all photos at once using urls parameter
-                    try {
-                        console.log('[GALLERY] Sharing all photos at once - please select destination app');
-                        console.log('[GALLERY] Number of photos:', urls.length);
-                        
-                        await Share.open({
-                            urls: urls, // Array of all photo URIs - share all at once
-                            title: `Share ${projectName} Photos`,
-                            message: `${itemsToShare.length} photos from ${projectName}`,
-                            type: 'image/jpeg',
+                // Add a delay before sharing to ensure UI is ready
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                await new Promise(resolve => InteractionManager.runAfterInteractions(resolve));
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                // Share all photos at once using urls parameter
+                // Wrap in requestAnimationFrame to ensure it runs on main thread
+                try {
+                    console.log('[GALLERY] About to call Share.open() with', urls.length, 'photos');
+                    console.log('[GALLERY] First photo URI:', urls[0]);
+                    console.log('[GALLERY] Last photo URI:', urls[urls.length - 1]);
+                    
+                    const shareResult = await new Promise((resolve, reject) => {
+                        requestAnimationFrame(async () => {
+                            try {
+                                const result = await Share.open({
+                                    urls: urls,
+                                    title: `Share ${projectName} Photos`,
+                                    message: `Sharing ${urls.length} photos from ${projectName}`,
+                                    type: 'image/jpeg',
+                                });
+                                resolve(result);
+                            } catch (error) {
+                                reject(error);
+                            }
                         });
-                        
-                        console.log('[GALLERY] All photos shared successfully');
-                    } catch (shareError) {
-                        // Check if user cancelled - this is normal
-                        if (shareError?.message?.includes('User did not share') || 
-                            shareError?.message?.includes('cancelled') ||
-                            shareError?.message?.includes('User Cancel') ||
-                            shareError?.code === 'E_USER_CANCELLED') {
-                            console.log('[GALLERY] User cancelled sharing photos');
-                        } else {
-                            // Real error - log it but continue
-                            console.error('[GALLERY] Error sharing all photos together:', shareError);
-                            // Fall back to one-by-one sharing
-                            console.log('[GALLERY] Falling back to one-by-one sharing...');
-                            for (let i = 0; i < urls.length; i++) {
-                                try {
-                                    console.log(`[GALLERY] Sharing photo ${i + 1}/${urls.length}...`);
-                                    
-                                    await Share.open({
-                                        url: urls[i],
-                                        title: `${projectName} Photo ${i + 1}/${urls.length}`,
-                                        message: `Photo ${i + 1} of ${urls.length} from ${projectName}`,
-                                        type: 'image/jpeg',
-                                    });
-                                    
-                                    console.log(`[GALLERY] Photo ${i + 1} shared successfully`);
-                                    
-                                    // Small delay between shares
-                                    if (i < urls.length - 1) {
-                                        await new Promise(resolve => setTimeout(resolve, 500));
-                                    }
-                                } catch (singleShareError) {
-                                    if (singleShareError?.message?.includes('User did not share') || 
-                                        singleShareError?.message?.includes('cancelled') ||
-                                        singleShareError?.code === 'E_USER_CANCELLED') {
-                                        console.log(`[GALLERY] User cancelled photo ${i + 1} - stopping`);
-                                        break;
-                                    } else {
-                                        console.error(`[GALLERY] Error sharing photo ${i + 1}:`, singleShareError);
-                                    }
+                    });
+                    
+                    console.log('[GALLERY] Share result:', shareResult);
+                    console.log('[GALLERY] All photos shared successfully');
+                } catch (shareError) {
+                    console.error('[GALLERY] Error sharing photos:', shareError);
+                    console.error('[GALLERY] Error message:', shareError?.message);
+                    console.error('[GALLERY] Error code:', shareError?.code);
+                    
+                    // If batch sharing fails, fall back to one by one
+                    if (shareError?.message?.includes('User did not share') || 
+                        shareError?.message?.includes('cancelled') ||
+                        shareError?.message?.includes('User Cancel') ||
+                        shareError?.code === 'E_USER_CANCELLED') {
+                        console.log('[GALLERY] User cancelled sharing - this is normal if share sheet was dismissed');
+                    } else {
+                        console.log('[GALLERY] Batch share failed with error, falling back to one by one...');
+                        // Fallback to one by one sharing
+                        for (let i = 0; i < urls.length; i++) {
+                            try {
+                                console.log(`[GALLERY] Sharing photo ${i + 1}/${urls.length}...`);
+                                
+                                await Share.open({
+                                    url: urls[i],
+                                    title: `${projectName} Photo ${i + 1}/${urls.length}`,
+                                    message: `Photo ${i + 1} of ${urls.length} from ${projectName}`,
+                                    type: 'image/jpeg',
+                                });
+                                
+                                console.log(`[GALLERY] Photo ${i + 1} shared successfully`);
+                                
+                                // Small delay between shares
+                                if (i < urls.length - 1) {
+                                    await new Promise(resolve => setTimeout(resolve, 500));
                                 }
-                            }
-                        }
-                    }
-                } else {
-                    // Share photos one by one - either because shareToSameApp is false, 
-                    // or there are too many photos (> MAX_BATCH_SHARE)
-                    if (shareToSameApp && urls.length > MAX_BATCH_SHARE) {
-                        console.log(`[GALLERY] Too many photos (${urls.length}) to share at once. Sharing one by one...`);
-                    }
-                    // Share photos one by one - simple approach that works
-                    for (let i = 0; i < urls.length; i++) {
-                        try {
-                            console.log(`[GALLERY] Sharing photo ${i + 1}/${urls.length}...`);
-                            
-                            await Share.open({
-                                url: urls[i],
-                                title: `${projectName} Photo ${i + 1}/${itemsToShare.length}`,
-                                message: `Photo ${i + 1} of ${itemsToShare.length} from ${projectName}`,
-                                type: 'image/jpeg',
-                            });
-                            
-                            console.log(`[GALLERY] Photo ${i + 1} shared successfully`);
-                            
-                            // Small delay between shares to allow user to interact
-                            if (i < urls.length - 1) {
-                                await new Promise(resolve => setTimeout(resolve, 500));
-                            }
-                        } catch (singleShareError) {
-                            // Check if user cancelled - this is normal, just continue to next photo
-                            if (singleShareError?.message?.includes('User did not share') || 
-                                singleShareError?.message?.includes('cancelled') ||
-                                singleShareError?.message?.includes('User Cancel') ||
-                                singleShareError?.code === 'E_USER_CANCELLED') {
-                                console.log(`[GALLERY] User cancelled photo ${i + 1} - continuing to next`);
-                            } else {
-                                // Real error - log it but continue with next photo
+                            } catch (singleShareError) {
                                 console.error(`[GALLERY] Error sharing photo ${i + 1}:`, singleShareError);
+                                // Continue with next photo
                             }
-                            // Continue with next photo even if one fails or is cancelled
                         }
                     }
                 }
