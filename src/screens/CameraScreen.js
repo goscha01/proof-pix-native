@@ -2021,9 +2021,6 @@ export default function CameraScreen({ route, navigation }) {
 
         {/* Camera zoom controls - fixed to screen */}
         <View style={styles.zoomControls}>
-          <Text style={styles.zoomText}>
-            {cameraType === 'ultra-wide-angle-camera' ? '0.5x' : cameraType === 'wide-angle-camera' && zoom < 2 ? '1x' : '2x'}
-          </Text>
           <View style={styles.zoomButtons}>
             <TouchableOpacity
               style={[styles.zoomButton, cameraType === 'ultra-wide-angle-camera' && styles.zoomButtonActive]}
@@ -3607,21 +3604,12 @@ const styles = StyleSheet.create({
   },
   zoomControls: {
     position: 'absolute',
-    top: 120,
+    top: 100, // Moved up since we removed the label
     left: 0,
     right: 0,
     alignItems: 'center',
     zIndex: 100,
-  },
-  zoomText: {
-    color: '#fff',
-    fontSize: 14,
-    marginBottom: 10,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 15,
-    fontWeight: '600',
+    margin: 10,
   },
   zoomButtons: {
     flexDirection: 'row',
