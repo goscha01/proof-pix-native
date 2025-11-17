@@ -72,6 +72,12 @@ export default function GalleryScreen({ navigation, route }) {
     useFolderStructure,
     enabledFolders,
     showLabels,
+    shouldShowWatermark,
+    beforeLabelPosition,
+    afterLabelPosition,
+    combinedLabelPosition,
+    labelMarginVertical,
+    labelMarginHorizontal,
     userPlan,
     labelLanguage,
     sectionLanguage,
@@ -82,7 +88,97 @@ export default function GalleryScreen({ navigation, route }) {
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
   const [fullScreenPhotoSet, setFullScreenPhotoSet] = useState(null); // For combined preview
   const [sharing, setSharing] = useState(false);
+  const [capturingPhoto, setCapturingPhoto] = useState(null); // Photo being captured with label
+  const labelCaptureRef = useRef(null); // Ref for label capture view
   const [uploading, setUploading] = useState(false);
+  
+  // Effect to handle label capture when capturingPhoto state changes
+  useEffect(() => {
+    if (!capturingPhoto) return;
+    
+    const { photo, index, width, height, labelPosition, resolve, reject } = capturingPhoto;
+    let timeoutId;
+    
+    // Wait longer for the view to render and ensure ref is attached
+    // Use requestAnimationFrame to ensure we're on the next frame
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        timeoutId = setTimeout(async () => {
+          try {
+            // Check if ref is attached
+            if (!labelCaptureRef.current) {
+              console.log(`[GALLERY] Ref not ready for photo ${index + 1}, waiting longer...`);
+              // Wait a bit more
+              setTimeout(async () => {
+                if (!labelCaptureRef.current) {
+                  console.error(`[GALLERY] Ref still not ready for photo ${index + 1}, using original`);
+                  const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                  const tempUri = FileSystem.cacheDirectory + tempFileName;
+                  await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+                  resolve(tempUri);
+                  setCapturingPhoto(null);
+                  return;
+                }
+                
+                try {
+                  const capturedUri = await captureRef(labelCaptureRef, {
+                    format: 'jpg',
+                    quality: 0.95
+                  });
+                  
+                  const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                  const tempUri = FileSystem.cacheDirectory + tempFileName;
+                  await FileSystem.copyAsync({ from: capturedUri, to: tempUri });
+                  
+                  console.log(`[GALLERY] Captured photo ${index + 1} with label: ${tempUri}`);
+                  resolve(tempUri);
+                  setCapturingPhoto(null);
+                } catch (error) {
+                  console.error(`[GALLERY] Error capturing photo ${index + 1} with label:`, error);
+                  // Fall back to original
+                  const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                  const tempUri = FileSystem.cacheDirectory + tempFileName;
+                  await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+                  resolve(tempUri);
+                  setCapturingPhoto(null);
+                }
+              }, 500);
+              return;
+            }
+            
+            const capturedUri = await captureRef(labelCaptureRef, {
+              format: 'jpg',
+              quality: 0.95
+            });
+            
+            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+            const tempUri = FileSystem.cacheDirectory + tempFileName;
+            await FileSystem.copyAsync({ from: capturedUri, to: tempUri });
+            
+            console.log(`[GALLERY] Captured photo ${index + 1} with label: ${tempUri}`);
+            resolve(tempUri);
+            setCapturingPhoto(null);
+          } catch (error) {
+            console.error(`[GALLERY] Error capturing photo ${index + 1} with label:`, error);
+            // Fall back to original
+            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+            const tempUri = FileSystem.cacheDirectory + tempFileName;
+            try {
+              await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+              resolve(tempUri);
+            } catch (copyError) {
+              reject(copyError);
+            }
+            setCapturingPhoto(null);
+          }
+        }, 800); // Longer delay to ensure view is fully rendered
+      });
+    });
+    
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [capturingPhoto]);
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 });
   const uploadControllersRef = useRef([]); // AbortControllers for in-flight requests
   const masterAbortRef = useRef(null); // single signal to stop scheduling
@@ -497,37 +593,94 @@ export default function GalleryScreen({ navigation, route }) {
                 }
             } else {
                 // Share multiple photos as individual files using react-native-share
-                // Copy all photos to temp locations first
+                // Process all photos to add labels if needed
                 const urls = [];
+                
+                // Helper function to capture a photo with label if showLabels is enabled
+                const capturePhotoWithLabel = async (photo, index) => {
+                    if (!showLabels || !photo.mode) {
+                        // No labels needed, just copy the original
+                        const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                        const tempUri = FileSystem.cacheDirectory + tempFileName;
+                        await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+                        return tempUri;
+                    }
+                    
+                    // Need to capture with label - use state-based approach with hidden modal
+                    return new Promise((resolve, reject) => {
+                        // Get image dimensions first
+                        Image.getSize(photo.uri, (width, height) => {
+                            // Determine label position based on photo mode
+                            let labelPosition;
+                            if (photo.mode === PHOTO_MODES.BEFORE) {
+                                labelPosition = beforeLabelPosition || 'top-left';
+                            } else if (photo.mode === PHOTO_MODES.AFTER) {
+                                labelPosition = afterLabelPosition || 'top-right';
+                            } else {
+                                labelPosition = 'top-left'; // Default for combined
+                            }
+                            
+                            // Set the photo to capture (triggers useEffect to render and capture)
+                            setCapturingPhoto({ 
+                                photo, 
+                                index, 
+                                width, 
+                                height, 
+                                labelPosition,
+                                resolve, 
+                                reject 
+                            });
+                        }, (error) => {
+                            // If getSize fails, just copy original
+                            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                            const tempUri = FileSystem.cacheDirectory + tempFileName;
+                            FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
+                                resolve(tempUri);
+                            }).catch(reject);
+                        });
+                    });
+                };
+                
+                
+                // Process all photos sequentially (important for label capture)
                 for (let i = 0; i < allItemsToShare.length; i++) {
                     const item = allItemsToShare[i];
                     try {
-                        // Verify source file exists before copying
+                        // Verify source file exists before processing
                         const sourceInfo = await FileSystem.getInfoAsync(item.uri);
                         if (!sourceInfo.exists) {
                             console.error(`[GALLERY] Source file does not exist: ${item.uri}`);
                             continue;
                         }
                         
-                        // Copy photo to temp location to ensure it's accessible
-                        // Use cache directory (same as other working screens)
-                        const tempFileName = `temp_${Date.now()}_${i}_${Math.random().toString(36).substring(7)}.jpg`;
-                        const tempUri = FileSystem.cacheDirectory + tempFileName;
-                        await FileSystem.copyAsync({ from: item.uri, to: tempUri });
+                        // Process photo (with or without labels)
+                        // This will wait for label capture to complete if labels are enabled
+                        const tempUri = await capturePhotoWithLabel(item, i);
                         
-                        // Verify copied file exists
+                        // Verify processed file exists
                         const tempInfo = await FileSystem.getInfoAsync(tempUri);
                         if (!tempInfo.exists) {
-                            console.error(`[GALLERY] Failed to copy file: ${item.uri} to ${tempUri}`);
+                            console.error(`[GALLERY] Failed to process file: ${item.uri} to ${tempUri}`);
                             continue;
                         }
                         
                         tempFiles.push(tempUri);
                         // Keep full file:// URI for react-native-share
                         urls.push(tempUri);
-                        console.log(`[GALLERY] Copied photo ${i + 1} (${item.mode || 'unknown'}): ${tempUri}`);
+                        console.log(`[GALLERY] Processed photo ${i + 1} (${item.mode || 'unknown'}): ${tempUri}`);
+                        
+                        // Longer delay between processing to ensure label capture completes
+                        // This is especially important when labels are enabled
+                        if (i < allItemsToShare.length - 1) {
+                            if (showLabels && item.mode) {
+                                // If labels were applied, wait longer for capture to complete
+                                await new Promise(resolve => setTimeout(resolve, 1000));
+                            } else {
+                                await new Promise(resolve => setTimeout(resolve, 100));
+                            }
+                        }
                     } catch (copyError) {
-                        console.error(`[GALLERY] Error copying photo ${i + 1}:`, copyError);
+                        console.error(`[GALLERY] Error processing photo ${i + 1}:`, copyError);
                         console.error(`[GALLERY] Source URI: ${item.uri}`);
                         // Continue with next photo
                     }
@@ -1715,6 +1868,52 @@ export default function GalleryScreen({ navigation, route }) {
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
           {ROOMS.map(room => renderRoomSection(room))}
         </ScrollView>
+      )}
+
+      {/* Hidden modal for capturing photos with labels */}
+      {capturingPhoto && (
+        <Modal
+          visible={true}
+          transparent={true}
+          animationType="none"
+          onRequestClose={() => {}}
+        >
+          <View style={{ 
+            flex: 1,
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: 'transparent'
+          }}>
+            <View
+              ref={labelCaptureRef}
+              collapsable={false}
+              style={{
+                width: Math.min(capturingPhoto.width, width),
+                height: Math.min(capturingPhoto.height, width * (capturingPhoto.height / capturingPhoto.width)),
+                backgroundColor: 'white',
+                overflow: 'hidden',
+                position: 'absolute',
+                left: width + 1000, // Off-screen but still rendered
+                top: 0
+              }}
+            >
+              <Image
+                source={{ uri: capturingPhoto.photo.uri }}
+                style={{
+                  width: '100%',
+                  height: '100%'
+                }}
+                resizeMode="cover"
+              />
+              {showLabels && capturingPhoto.photo.mode && (
+                <PhotoLabel
+                  label={capturingPhoto.photo.mode === PHOTO_MODES.BEFORE ? 'common.before' : 'common.after'}
+                  position={capturingPhoto.labelPosition}
+                />
+              )}
+            </View>
+          </View>
+        </Modal>
       )}
 
       {/* Share Project button at bottom - only show if photos exist and project is selected */}
