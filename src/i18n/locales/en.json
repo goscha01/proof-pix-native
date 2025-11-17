@@ -191,7 +191,8 @@
     "dropboxUploadPartialMessage": "{{success}} photo(s) uploaded successfully, {{failed}} photo(s) failed.",
     "noUploadServiceTitle": "No Upload Service Available",
     "noUploadServiceMessage": "Please connect to Google Drive or Dropbox in Settings to upload photos.",
-    "shareAsArchive": "Share as archive (zip)"
+    "shareAsArchive": "Share as archive (zip)",
+    "shareToSameApp": "Auto-share to same app (select destination once)"
   },
   "camera": {
     "before": "BEFORE",

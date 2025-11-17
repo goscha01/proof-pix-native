@@ -15,7 +15,8 @@ import {
   ActivityIndicator,
   Switch,
   TextInput,
-  Share as RNShare
+  Share as RNShare,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { usePhotos } from '../context/PhotoContext';
@@ -92,6 +93,7 @@ export default function GalleryScreen({ navigation, route }) {
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
   const [selectedShareTypes, setSelectedShareTypes] = useState({ before: true, after: true, combined: true });
   const [shareAsArchive, setShareAsArchive] = useState(false); // Default: share individual photos
+  const [shareToSameApp, setShareToSameApp] = useState(true); // Default: reuse same app for all photos
   const [uploadDestinations, setUploadDestinations] = useState({ google: true, dropbox: false }); // Default: Google only
   const [isDropboxConnected, setIsDropboxConnected] = useState(false);
   const [selectedFormats, setSelectedFormats] = useState(() => {
@@ -324,6 +326,7 @@ export default function GalleryScreen({ navigation, route }) {
             (selectedShareTypes.before && p.mode === PHOTO_MODES.BEFORE) ||
             (selectedShareTypes.after && p.mode === PHOTO_MODES.AFTER)
         );
+        
         if (itemsToShare.length === 0) {
             Alert.alert(t('gallery.noPhotosSelected'), t('gallery.selectAtLeastOne'));
             setSharing(false);
@@ -332,6 +335,10 @@ export default function GalleryScreen({ navigation, route }) {
         
         const projectName = projects.find(p => p.id === activeProjectId)?.name || 'Shared-Photos';
         const tempFiles = []; // Track temporary files for cleanup
+        
+        // Close loading popup before starting file operations
+        // This ensures it closes even if Share.open() blocks
+        setSharing(false);
         
         try {
             if (shareAsArchive) {
@@ -361,12 +368,43 @@ export default function GalleryScreen({ navigation, route }) {
                 tempFiles.push(zipPath);
                 
                 // Use react-native-share for ZIP file as well for better compatibility
-                await Share.open({
-                    url: zipPath,
-                    title: `Share ${projectName} Photos`,
-                    message: `Here are the photos from the project: ${projectName}`,
-                    type: 'application/zip',
-                });
+                console.log('[GALLERY] Starting to share ZIP file:', zipPath);
+                try {
+                    const sharePromise = Share.open({
+                        url: zipPath,
+                        title: `Share ${projectName} Photos`,
+                        message: `Here are the photos from the project: ${projectName}`,
+                        type: 'application/zip',
+                    });
+                    
+                    // Add a timeout to detect if Share.open hangs
+                    const timeoutPromise = new Promise((_, reject) => {
+                        setTimeout(() => {
+                            reject(new Error('Share operation timed out after 30 seconds'));
+                        }, 30000); // 30 second timeout
+                    });
+                    
+                    const result = await Promise.race([sharePromise, timeoutPromise]);
+                    console.log('[GALLERY] ZIP share completed successfully:', result);
+                } catch (shareError) {
+                    console.error('[GALLERY] ZIP share error caught:', shareError);
+                    console.error('[GALLERY] Error message:', shareError?.message);
+                    
+                    // User cancelled or error occurred - this is fine, just log it
+                    if (shareError?.message?.includes('User did not share') || 
+                        shareError?.message?.includes('cancelled') ||
+                        shareError?.message?.includes('User Cancel')) {
+                        // User cancelled - no need to show error
+                        console.log('[GALLERY] User cancelled sharing ZIP');
+                    } else if (shareError?.message?.includes('timed out')) {
+                        // Timeout - show error but don't rethrow
+                        console.error('[GALLERY] ZIP share operation timed out');
+                        Alert.alert(t('common.error'), 'Share operation took too long. Please try again.');
+                    } else {
+                        // Real error - rethrow to be caught by outer catch
+                        throw shareError;
+                    }
+                }
             } else {
                 // Share multiple photos as individual files using react-native-share
                 // Copy all photos to temp locations first
@@ -381,14 +419,110 @@ export default function GalleryScreen({ navigation, route }) {
                     urls.push(tempUri);
                 }
                 
-                // Share all photos at once using react-native-share
-                // Note: This requires native code - rebuild with: npx expo run:ios or npx expo run:android
-                await Share.open({
-                    urls: urls, // Array of file URIs for multiple files
-                    title: `Share ${projectName} Photos`,
-                    message: `${itemsToShare.length} photos from the project: ${projectName}`,
-                    type: 'image/jpeg', // Type applies to all files in the array
-                });
+                // Share multiple photos using react-native-share
+                // If shareToSameApp is true and 5 or fewer photos, share all at once using urls parameter
+                // Otherwise, share one by one
+                console.log('[GALLERY] Starting to share', urls.length, 'photos');
+                console.log('[GALLERY] Share to same app:', shareToSameApp);
+                
+                // Try to share all together if shareToSameApp is enabled, regardless of count
+                if (shareToSameApp && urls.length > 1) {
+                    // Share all photos at once using urls parameter
+                    try {
+                        console.log('[GALLERY] Sharing all photos at once - please select destination app');
+                        console.log('[GALLERY] Number of photos:', urls.length);
+                        
+                        await Share.open({
+                            urls: urls, // Array of all photo URIs - share all at once
+                            title: `Share ${projectName} Photos`,
+                            message: `${itemsToShare.length} photos from ${projectName}`,
+                            type: 'image/jpeg',
+                        });
+                        
+                        console.log('[GALLERY] All photos shared successfully');
+                    } catch (shareError) {
+                        // Check if user cancelled - this is normal
+                        if (shareError?.message?.includes('User did not share') || 
+                            shareError?.message?.includes('cancelled') ||
+                            shareError?.message?.includes('User Cancel') ||
+                            shareError?.code === 'E_USER_CANCELLED') {
+                            console.log('[GALLERY] User cancelled sharing photos');
+                        } else {
+                            // Real error - log it but continue
+                            console.error('[GALLERY] Error sharing all photos together:', shareError);
+                            // Fall back to one-by-one sharing
+                            console.log('[GALLERY] Falling back to one-by-one sharing...');
+                            for (let i = 0; i < urls.length; i++) {
+                                try {
+                                    console.log(`[GALLERY] Sharing photo ${i + 1}/${urls.length}...`);
+                                    
+                                    await Share.open({
+                                        url: urls[i],
+                                        title: `${projectName} Photo ${i + 1}/${urls.length}`,
+                                        message: `Photo ${i + 1} of ${urls.length} from ${projectName}`,
+                                        type: 'image/jpeg',
+                                    });
+                                    
+                                    console.log(`[GALLERY] Photo ${i + 1} shared successfully`);
+                                    
+                                    // Small delay between shares
+                                    if (i < urls.length - 1) {
+                                        await new Promise(resolve => setTimeout(resolve, 500));
+                                    }
+                                } catch (singleShareError) {
+                                    if (singleShareError?.message?.includes('User did not share') || 
+                                        singleShareError?.message?.includes('cancelled') ||
+                                        singleShareError?.code === 'E_USER_CANCELLED') {
+                                        console.log(`[GALLERY] User cancelled photo ${i + 1} - stopping`);
+                                        break;
+                                    } else {
+                                        console.error(`[GALLERY] Error sharing photo ${i + 1}:`, singleShareError);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // Share photos one by one - either because shareToSameApp is false, 
+                    // or there are too many photos (> MAX_BATCH_SHARE)
+                    if (shareToSameApp && urls.length > MAX_BATCH_SHARE) {
+                        console.log(`[GALLERY] Too many photos (${urls.length}) to share at once. Sharing one by one...`);
+                    }
+                    // Share photos one by one - simple approach that works
+                    for (let i = 0; i < urls.length; i++) {
+                        try {
+                            console.log(`[GALLERY] Sharing photo ${i + 1}/${urls.length}...`);
+                            
+                            await Share.open({
+                                url: urls[i],
+                                title: `${projectName} Photo ${i + 1}/${itemsToShare.length}`,
+                                message: `Photo ${i + 1} of ${itemsToShare.length} from ${projectName}`,
+                                type: 'image/jpeg',
+                            });
+                            
+                            console.log(`[GALLERY] Photo ${i + 1} shared successfully`);
+                            
+                            // Small delay between shares to allow user to interact
+                            if (i < urls.length - 1) {
+                                await new Promise(resolve => setTimeout(resolve, 500));
+                            }
+                        } catch (singleShareError) {
+                            // Check if user cancelled - this is normal, just continue to next photo
+                            if (singleShareError?.message?.includes('User did not share') || 
+                                singleShareError?.message?.includes('cancelled') ||
+                                singleShareError?.message?.includes('User Cancel') ||
+                                singleShareError?.code === 'E_USER_CANCELLED') {
+                                console.log(`[GALLERY] User cancelled photo ${i + 1} - continuing to next`);
+                            } else {
+                                // Real error - log it but continue with next photo
+                                console.error(`[GALLERY] Error sharing photo ${i + 1}:`, singleShareError);
+                            }
+                            // Continue with next photo even if one fails or is cancelled
+                        }
+                    }
+                }
+                
+                console.log('[GALLERY] Finished sharing all photos');
             }
             
             // analyticsService.logEvent('Project_Shared', { 
@@ -397,6 +531,9 @@ export default function GalleryScreen({ navigation, route }) {
             //   sharedTypes: Object.keys(selectedShareTypes).filter(k => selectedShareTypes[k]),
             // });
         } finally {
+            // Always close the loading popup
+            setSharing(false);
+            
             // Clean up temporary files after a delay (to allow sharing to complete)
             setTimeout(async () => {
                 for (const tempFile of tempFiles) {
@@ -415,6 +552,7 @@ export default function GalleryScreen({ navigation, route }) {
         console.error('[GALLERY] Share error:', error);
         Alert.alert(t('common.error'), t('gallery.prepareShareError'));
     } finally {
+        // Ensure loading popup is always closed, even if error occurs before inner try block
         setSharing(false);
     }
   };
@@ -2111,6 +2249,30 @@ export default function GalleryScreen({ navigation, route }) {
                 </View>
               </TouchableOpacity>
             </View>
+
+            {/* Share to Same App Checkbox - only show if not sharing as archive */}
+            {!shareAsArchive && (
+              <View style={styles.checkboxRow}>
+                <TouchableOpacity
+                  style={styles.checkboxContainer}
+                  onPress={() => setShareToSameApp(!shareToSameApp)}
+                >
+                  <View style={[
+                    styles.checkbox,
+                    shareToSameApp && styles.checkboxChecked
+                  ]}>
+                    {shareToSameApp && (
+                      <Text style={styles.checkmark}>✓</Text>
+                    )}
+                  </View>
+                  <View style={styles.checkboxLabelContainer}>
+                    <Text style={styles.checkboxLabelText}>
+                      {t('gallery.shareToSameApp')}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              </View>
+            )}
 
             <View style={styles.optionsActionsRow}>
               <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setShareOptionsVisible(false)}>
