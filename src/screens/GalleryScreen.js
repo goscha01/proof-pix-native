@@ -103,6 +103,8 @@ export default function GalleryScreen({ navigation, route }) {
   const [capturingPhoto, setCapturingPhoto] = useState(null); // Photo being captured with label
   const labelCaptureRef = useRef(null); // Ref for label capture view
   const [uploading, setUploading] = useState(false);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedPhotos, setSelectedPhotos] = useState(new Set());
   
   // Effect to handle label capture when capturingPhoto state changes
   useEffect(() => {
@@ -323,12 +325,44 @@ export default function GalleryScreen({ navigation, route }) {
     longPressTriggered.current = false;
     longPressTimer.current = setTimeout(() => {
       longPressTriggered.current = true;
-      if (photoSet) {
-        // Show combined preview with both photos
-        setFullScreenPhotoSet(photoSet);
+      
+      // If in selection mode, just toggle selection and don't show preview
+      // Use a ref or check state directly to avoid closure issues
+      const currentMode = isSelectionMode;
+      if (currentMode) {
+        if (photo) {
+          setSelectedPhotos(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(photo.id)) {
+              newSet.delete(photo.id);
+            } else {
+              newSet.add(photo.id);
+            }
+            return newSet;
+          });
+        } else if (photoSet && photoSet.before) {
+          const combinedId = `combined_${photoSet.before.id}`;
+          setSelectedPhotos(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(combinedId)) {
+              newSet.delete(combinedId);
+            } else {
+              newSet.add(combinedId);
+            }
+            return newSet;
+          });
+        }
       } else {
-        // Show single photo
-        setFullScreenPhoto(photo);
+        // Not in selection mode - enter selection mode (don't show preview)
+        setIsSelectionMode(true);
+        // If a photo was long-pressed, select it
+        if (photo) {
+          setSelectedPhotos(new Set([photo.id]));
+        } else if (photoSet && photoSet.before) {
+          const combinedId = `combined_${photoSet.before.id}`;
+          setSelectedPhotos(new Set([combinedId]));
+        }
+        // Don't show preview when entering selection mode via long press
       }
     }, 300);
   };
@@ -1997,7 +2031,7 @@ export default function GalleryScreen({ navigation, route }) {
     </View>
   );
 
-  const renderPhotoCard = (photo, borderColor, photoType, photoSet, isLast = false) => {
+  const renderPhotoCard = (photo, borderColor, photoType, photoSet, isLast, currentSelectionMode, currentSelectedPhotos) => {
     // For combined thumbnail, show split preview based on phone orientation OR camera view mode - tap to retake after
     if (photoType === 'combined' && !photo && photoSet.before && photoSet.after) {
       const phoneOrientation = photoSet.before.orientation || 'portrait';
@@ -2009,23 +2043,50 @@ export default function GalleryScreen({ navigation, route }) {
       // For thumbnails, both should be stacked to fit the square aspect ratio.
       const useStackedLayout = isTrueLandscape || isLetterbox;
 
+      const combinedId = `combined_${photoSet.before.id}`;
+      const isSelected = currentSelectionMode && currentSelectedPhotos.has(combinedId);
+
+      const handleCombinedPress = () => {
+        if (longPressTriggered.current) return;
+        if (currentSelectionMode) {
+          // Toggle selection
+          setSelectedPhotos(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(combinedId)) {
+              newSet.delete(combinedId);
+            } else {
+              newSet.add(combinedId);
+            }
+            return newSet;
+          });
+        } else {
+          navigation.navigate('PhotoEditor', {
+            beforePhoto: photoSet.before,
+            afterPhoto: photoSet.after
+          });
+        }
+      };
+
       return (
         <TouchableOpacity
           key={photoType}
-          style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast]}
-          onPress={() => {
-            if (longPressTriggered.current) return;
-            navigation.navigate('PhotoEditor', {
-              beforePhoto: photoSet.before,
-              afterPhoto: photoSet.after
-            });
-          }}
+          style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast, isSelected && styles.photoCardSelected]}
+          onPress={handleCombinedPress}
           onLongPress={() => handleLongPressStart(null, photoSet)}
         >
           <View style={[styles.combinedThumbnail, useStackedLayout ? styles.stackedThumbnail : styles.sideBySideThumbnail]}>
             <Image source={{ uri: photoSet.before.uri }} style={styles.halfImage} resizeMode="cover" />
             <Image source={{ uri: photoSet.after.uri }} style={styles.halfImage} resizeMode="cover" />
           </View>
+          
+          {/* Checkbox overlay - only show in selection mode */}
+          {currentSelectionMode && (
+            <View style={[styles.photoCheckboxContainer, styles.photoCheckboxGrid, isSelected && styles.photoCheckboxSelected]}>
+              {isSelected && (
+                <Text style={styles.photoCheckmark}>✓</Text>
+              )}
+            </View>
+          )}
           
           {/* Mode label */}
           <View style={[styles.modeLabel, { backgroundColor: borderColor }]}>
@@ -2039,25 +2100,40 @@ export default function GalleryScreen({ navigation, route }) {
 
     if (!photo) return <View key={photoType} style={[styles.photoCard, isLast && styles.photoCardLast]}>{renderDummyCard('—')}</View>;
 
+    const isSelected = currentSelectionMode && currentSelectedPhotos.has(photo.id);
+
     const handlePress = () => {
       if (longPressTriggered.current) return;
       
-      if (photoType === 'combined') {
-        // Combined column - navigate to PhotoEditor to choose format
-        navigation.navigate('PhotoEditor', {
-          beforePhoto: photoSet.before,
-          afterPhoto: photoSet.after
+      if (currentSelectionMode) {
+        // Toggle selection
+        setSelectedPhotos(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(photo.id)) {
+            newSet.delete(photo.id);
+          } else {
+            newSet.add(photo.id);
+          }
+          return newSet;
         });
       } else {
-        // Before or After column - navigate to PhotoDetailScreen with share button
-        navigation.navigate('PhotoDetail', { photo });
+        if (photoType === 'combined') {
+          // Combined column - navigate to PhotoEditor to choose format
+          navigation.navigate('PhotoEditor', {
+            beforePhoto: photoSet.before,
+            afterPhoto: photoSet.after
+          });
+        } else {
+          // Before or After column - navigate to PhotoDetailScreen with share button
+          navigation.navigate('PhotoDetail', { photo });
+        }
       }
     };
 
     return (
       <TouchableOpacity
         key={photoType}
-        style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast]}
+        style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast, isSelected && styles.photoCardSelected]}
         onPress={handlePress}
         onLongPress={() => handleLongPressStart(photo, photoType === 'combined' ? photoSet : null)}
       >
@@ -2067,6 +2143,15 @@ export default function GalleryScreen({ navigation, route }) {
           orientation={photo.orientation || photoSet.before?.orientation || 'portrait'}
           size={COLUMN_WIDTH}
         />
+        
+        {/* Checkbox overlay - only show in selection mode */}
+        {currentSelectionMode && (
+          <View style={[styles.photoCheckboxContainer, styles.photoCheckboxGrid, isSelected && styles.photoCheckboxSelected]}>
+            {isSelected && (
+              <Text style={styles.photoCheckmark}>✓</Text>
+            )}
+          </View>
+        )}
         
         {/* Mode label */}
         <View style={[styles.modeLabel, { backgroundColor: borderColor }]}>
@@ -2083,12 +2168,13 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const renderPhotoSet = (set, index, roomId) => {
+    // Pass current state values to renderPhotoCard to avoid closure issues
     return (
       <View key={index} style={styles.photoSetRow}>
         <View style={styles.threeColumnRow}>
-          {renderPhotoCard(set.before, '#4CAF50', 'before', set, false)}
-          {renderPhotoCard(set.after, '#2196F3', 'after', set, false)}
-          {renderPhotoCard(set.combined, '#FFC107', 'combined', set, true)}
+          {renderPhotoCard(set.before, '#4CAF50', 'before', set, false, isSelectionMode, selectedPhotos)}
+          {renderPhotoCard(set.after, '#2196F3', 'after', set, false, isSelectionMode, selectedPhotos)}
+          {renderPhotoCard(set.combined, '#FFC107', 'combined', set, true, isSelectionMode, selectedPhotos)}
         </View>
       </View>
     );
@@ -2146,15 +2232,33 @@ export default function GalleryScreen({ navigation, route }) {
       </View>
 
       {/* Active project name under the title */}
-      <View style={styles.projectNameContainer}>
+      <View style={[styles.projectNameContainer, isSelectionMode && styles.projectNameContainerSelectionMode]}>
         <Text style={styles.projectNameText}>
           {(projects?.find?.(p => p.id === activeProjectId)?.name) || t('gallery.noProjectSelected')}
         </Text>
         <TouchableOpacity
-          style={styles.selectButton}
-          onPress={() => navigation.navigate('PhotoSelection')}
+          style={[styles.selectButton, isSelectionMode && styles.selectButtonActive]}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (isSelectionMode) {
+              // Deselect all and exit selection mode
+              setIsSelectionMode(false);
+              setSelectedPhotos(new Set());
+              // Clear long press state
+              if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+              }
+              longPressTriggered.current = false;
+            } else {
+              // Enter selection mode
+              setIsSelectionMode(true);
+            }
+          }}
         >
-          <Text style={styles.selectButtonText}>{t('gallery.selectPhotos')}</Text>
+          <Text style={styles.selectButtonText}>
+            {isSelectionMode ? t('common.deselectAll') : t('gallery.selectPhotos')}
+          </Text>
         </TouchableOpacity>
         <UploadIndicatorLine 
           uploadStatus={uploadStatus}
@@ -3039,12 +3143,26 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 6,
     backgroundColor: COLORS.PRIMARY,
-    marginLeft: 12
+    marginLeft: 12,
+    minWidth: 80,
+    alignItems: 'center'
+  },
+  selectButtonActive: {
+    backgroundColor: '#FF6B6B'
   },
   selectButtonText: {
     color: 'white',
     fontSize: 12,
     fontWeight: '600'
+  },
+  projectNameContainerSelectionMode: {
+    backgroundColor: '#E8F5E9'
+  },
+  selectionModeIndicator: {
+    fontSize: 10,
+    color: COLORS.PRIMARY,
+    fontWeight: 'bold',
+    marginRight: 8
   },
   uploadButton: {
     width: 40,
@@ -3182,6 +3300,36 @@ const styles = StyleSheet.create({
     color: 'white',
     fontSize: 10,
     fontWeight: 'bold'
+  },
+  photoCheckboxContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14, // Fully round
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderWidth: 2,
+    borderColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden' // Ensure it stays round
+  },
+  photoCheckboxGrid: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 10
+  },
+  photoCheckboxSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  photoCheckmark: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold'
+  },
+  photoCardSelected: {
+    borderWidth: 4,
+    opacity: 0.8
   },
   dummyCard: {
     width: '100%',
