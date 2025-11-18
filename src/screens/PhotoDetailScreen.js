@@ -78,7 +78,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
 
   // Get all photos for swiping
   useEffect(() => {
-    // If photos are provided via route params (e.g., from preview selected), use those
+    // If photos are provided via route params (e.g., from preview selected or selection mode), use those
     if (providedPhotos && Array.isArray(providedPhotos) && providedPhotos.length > 0) {
       setAllPhotos(providedPhotos);
       const index = providedPhotos.findIndex(p => p.id === photo.id);
@@ -92,6 +92,48 @@ export default function PhotoDetailScreen({ route, navigation }) {
         console.log('[PhotoDetailScreen] Photo not found in provided list, using index 0');
       }
       return;
+    }
+
+    // If in selection mode, filter to show only selected photos
+    if (isSelectionMode && selectedPhotos && selectedPhotos.length > 0) {
+      const selected = [];
+      if (!getRooms || typeof getRooms !== 'function') {
+        console.warn('[PhotoDetailScreen] getRooms is not available in selection mode');
+        setAllPhotos([photo]);
+        setCurrentIndex(0);
+        setCurrentPhoto(photo);
+        return;
+      }
+      const rooms = getRooms();
+      if (!rooms || !Array.isArray(rooms)) {
+        console.warn('[PhotoDetailScreen] getRooms returned invalid data in selection mode');
+        setAllPhotos([photo]);
+        setCurrentIndex(0);
+        setCurrentPhoto(photo);
+        return;
+      }
+      const selectedSet = new Set(selectedPhotos);
+      rooms.forEach(room => {
+        const beforePhotos = getBeforePhotos(room.id);
+        const afterPhotos = getAfterPhotos(room.id);
+        // Only include photos that are in the selected set
+        selected.push(...beforePhotos.filter(p => selectedSet.has(p.id)));
+        selected.push(...afterPhotos.filter(p => selectedSet.has(p.id)));
+      });
+      if (selected.length > 0) {
+        setAllPhotos(selected);
+        const index = selected.findIndex(p => p.id === photo.id);
+        if (index >= 0) {
+          setCurrentIndex(index);
+          setCurrentPhoto(selected[index]);
+          console.log('[PhotoDetailScreen] Using selected photos:', selected.length, 'Found photo at index:', index);
+        } else {
+          setCurrentIndex(0);
+          setCurrentPhoto(photo);
+          console.log('[PhotoDetailScreen] Photo not found in selected list, using index 0');
+        }
+        return;
+      }
     }
 
     // Otherwise, load all photos from all rooms

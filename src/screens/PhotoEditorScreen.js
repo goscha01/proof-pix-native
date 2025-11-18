@@ -23,7 +23,7 @@ import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
 
 export default function PhotoEditorScreen({ route, navigation }) {
-  const { beforePhoto, afterPhoto, isSelectionMode = false, selectedPhotos = [], onSelectionChange } = route.params;
+  const { beforePhoto, afterPhoto, isSelectionMode = false, selectedPhotos = [], onSelectionChange, allPhotoSets: providedPhotoSets } = route.params;
 
   // Set default template based on PHONE ORIENTATION or CAMERA VIEW MODE
   // Landscape phone position OR landscape camera view → stacked (horizontal split)
@@ -197,7 +197,40 @@ export default function PhotoEditorScreen({ route, navigation }) {
 
   // Get all photo sets for navigation
   useEffect(() => {
+    // If photo sets are provided via route params (e.g., from selection mode), use those
+    if (providedPhotoSets && Array.isArray(providedPhotoSets) && providedPhotoSets.length > 0) {
+      setAllPhotoSets(providedPhotoSets);
+      const index = providedPhotoSets.findIndex(set => set.before?.id === beforePhoto.id);
+      if (index >= 0) {
+        setCurrentPhotoIndex(index);
+        setCurrentPhotoSet(providedPhotoSets[index]);
+        console.log('[PhotoEditorScreen] Using provided photo sets:', providedPhotoSets.length, 'Found set at index:', index);
+      } else {
+        setCurrentPhotoIndex(0);
+        setCurrentPhotoSet({ before: beforePhoto, after: afterPhoto });
+        console.log('[PhotoEditorScreen] Photo set not found in provided list, using index 0');
+      }
+      return;
+    }
+
+    // Otherwise, load all photo sets from all rooms
+    if (!getRooms || typeof getRooms !== 'function') {
+      console.warn('[PhotoEditorScreen] getRooms is not available');
+      setAllPhotoSets([{ before: beforePhoto, after: afterPhoto }]);
+      setCurrentPhotoIndex(0);
+      setCurrentPhotoSet({ before: beforePhoto, after: afterPhoto });
+      return;
+    }
+
     const rooms = getRooms();
+    if (!rooms || !Array.isArray(rooms)) {
+      console.warn('[PhotoEditorScreen] getRooms returned invalid data');
+      setAllPhotoSets([{ before: beforePhoto, after: afterPhoto }]);
+      setCurrentPhotoIndex(0);
+      setCurrentPhotoSet({ before: beforePhoto, after: afterPhoto });
+      return;
+    }
+
     const sets = {};
     
     // Collect photo sets from all rooms
@@ -231,7 +264,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
       setCurrentPhotoIndex(0);
       setCurrentPhotoSet({ before: beforePhoto, after: afterPhoto });
     }
-  }, [beforePhoto, afterPhoto, getBeforePhotos, getAfterPhotos, activeProjectId, getRooms]);
+  }, [beforePhoto, afterPhoto, getBeforePhotos, getAfterPhotos, activeProjectId, getRooms, providedPhotoSets]);
 
   // Scroll to current photo index when photo sets load
   useEffect(() => {

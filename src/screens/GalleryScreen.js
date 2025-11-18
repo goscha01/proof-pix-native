@@ -2305,11 +2305,14 @@ export default function GalleryScreen({ navigation, route }) {
             lastTapRef.current[photoKey] = 0;
             delete originalSelectionStateRef.current[photoKey];
             
+            // Get all selected combined photo sets for swiping
+            const selectedSets = getSelectedPhotoSets();
             navigation.navigate('PhotoEditor', {
               beforePhoto: photoSet.before,
               afterPhoto: photoSet.after,
               isSelectionMode: isSelectionModeRef.current || isSelectionMode,
               selectedPhotos: Array.from(restoredSelected),
+              allPhotoSets: selectedSets, // Pass only selected sets for swiping
               onSelectionChange: (newSelectedPhotos) => {
                 setSelectedPhotos(new Set(newSelectedPhotos));
               }
@@ -2433,20 +2436,26 @@ export default function GalleryScreen({ navigation, route }) {
           delete originalSelectionStateRef.current[photoKey];
           
           if (photoType === 'combined') {
+            // Get all selected combined photo sets for swiping
+            const selectedSets = getSelectedPhotoSets();
             navigation.navigate('PhotoEditor', {
               beforePhoto: photoSet.before,
               afterPhoto: photoSet.after,
               isSelectionMode: isSelectionModeRef.current || isSelectionMode,
               selectedPhotos: Array.from(restoredSelected),
+              allPhotoSets: selectedSets, // Pass only selected sets for swiping
               onSelectionChange: (newSelectedPhotos) => {
                 setSelectedPhotos(new Set(newSelectedPhotos));
               }
             });
           } else {
+            // Get all selected individual photos for swiping
+            const selected = getSelectedPhotos();
             navigation.navigate('PhotoDetail', { 
               photo,
               isSelectionMode: isSelectionModeRef.current || isSelectionMode,
               selectedPhotos: Array.from(restoredSelected),
+              allPhotos: selected, // Pass only selected photos for swiping
               onSelectionChange: (newSelectedPhotos) => {
                 setSelectedPhotos(new Set(newSelectedPhotos));
               }
