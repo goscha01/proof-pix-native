@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -449,6 +449,13 @@ export default function SettingsScreen({ navigation }) {
     }
   }, [watermarkOpacity]);
 
+  // Reset watermark opacity preview when custom watermark is turned on
+  useEffect(() => {
+    if (customWatermarkEnabled && typeof watermarkOpacity === 'number') {
+      setWatermarkOpacityPreview(watermarkOpacity);
+    }
+  }, [customWatermarkEnabled]);
+
   // Load Dropbox tokens on mount and when screen is focused
   useFocusEffect(
     React.useCallback(() => {
@@ -558,6 +565,8 @@ export default function SettingsScreen({ navigation }) {
   const labelLanguageLayouts = useRef({});
   const sectionLanguageScrollViewRef = useRef(null);
   const sectionLanguageLayouts = useRef({});
+  const watermarkTextInputRef = useRef(null);
+  const watermarkLinkInputRef = useRef(null);
 
   const isTeamMember = userMode === 'team_member';
   const [canSwitchBack, setCanSwitchBack] = useState(false);
@@ -1186,20 +1195,20 @@ export default function SettingsScreen({ navigation }) {
                 {t('settings.labelCustomizationDescription')}
               </Text>
 
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>{t('settings.showLabels')}</Text>
-                  <Text style={styles.settingDescription}>
-                    {t('settings.showLabelsDescription')}
-                  </Text>
+                <View style={styles.settingRow}>
+                  <View style={styles.settingInfo}>
+                    <Text style={styles.settingLabel}>{t('settings.showLabels')}</Text>
+                    <Text style={styles.settingDescription}>
+                      {t('settings.showLabelsDescription')}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={showLabels}
+                    onValueChange={toggleLabels}
+                    trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                    thumbColor="white"
+                  />
                 </View>
-                <Switch
-                  value={showLabels}
-                  onValueChange={toggleLabels}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
 
               {/* Dummy Photo Preview */}
               <View style={styles.labelPreviewSection}>
@@ -1258,14 +1267,9 @@ export default function SettingsScreen({ navigation }) {
                 <Switch
                   value={customWatermarkEnabled}
                   onValueChange={(value) => {
-                    // Starter tier - no watermark removal/customization
-                    if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
-                      setShowPlanModal(true);
-                      return;
-                    }
+                    // Allow starter users to turn on/off watermark switch
                     toggleWatermark(value);
                   }}
-                  disabled={!canUse(FEATURES.CUSTOM_WATERMARKS)}
                   trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
                   thumbColor="white"
                 />
@@ -1275,9 +1279,20 @@ export default function SettingsScreen({ navigation }) {
                   <View style={styles.watermarkField}>
                     <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkText')}</Text>
                     <TextInput
+                      ref={watermarkTextInputRef}
                       style={styles.watermarkInput}
                       value={watermarkText}
                       onChangeText={updateWatermarkText}
+                      onFocus={() => {
+                        // Check if user has access to customize watermark
+                        if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                          setShowPlanModal(true);
+                          // Blur the input to prevent typing
+                          if (watermarkTextInputRef.current) {
+                            watermarkTextInputRef.current.blur();
+                          }
+                        }
+                      }}
                       placeholder={t('settings.watermarkTextPlaceholder')}
                       placeholderTextColor={COLORS.GRAY}
                     />
@@ -1285,9 +1300,20 @@ export default function SettingsScreen({ navigation }) {
                   <View style={styles.watermarkField}>
                     <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkLink')}</Text>
                     <TextInput
+                      ref={watermarkLinkInputRef}
                       style={styles.watermarkInput}
                       value={watermarkLink}
                       onChangeText={updateWatermarkLink}
+                      onFocus={() => {
+                        // Check if user has access to customize watermark
+                        if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                          setShowPlanModal(true);
+                          // Blur the input to prevent typing
+                          if (watermarkLinkInputRef.current) {
+                            watermarkLinkInputRef.current.blur();
+                          }
+                        }
+                      }}
                       placeholder={t('settings.watermarkLinkPlaceholder')}
                       placeholderTextColor={COLORS.GRAY}
                       autoCapitalize="none"
@@ -1302,7 +1328,14 @@ export default function SettingsScreen({ navigation }) {
                     </View>
                     <TouchableOpacity
                       style={styles.watermarkColorButton}
-                      onPress={() => openColorModal('watermark')}
+                      onPress={() => {
+                        // Check if user has access to customize watermark
+                        if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                          setShowPlanModal(true);
+                          return;
+                        }
+                        openColorModal('watermark');
+                      }}
                     >
                       <View
                         style={[
@@ -1319,8 +1352,28 @@ export default function SettingsScreen({ navigation }) {
                     <View style={styles.watermarkOpacityControls}>
                       <WatermarkOpacitySlider
                         value={watermarkOpacityPreview}
-                        onChange={setWatermarkOpacityPreview}
-                        onChangeEnd={updateWatermarkOpacity}
+                        onChange={(value) => {
+                          // Update preview during dragging (don't check permissions here to avoid jumping)
+                          setWatermarkOpacityPreview(value);
+                        }}
+                        onChangeEnd={(value) => {
+                          // Check if user has access to customize watermark when dragging ends
+                          if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                            setShowPlanModal(true);
+                            // Reset to original value
+                            setWatermarkOpacityPreview(watermarkOpacity);
+                            return;
+                          }
+                          updateWatermarkOpacity(value);
+                        }}
+                        onStartShouldSetResponder={() => {
+                          // Check permissions at the start of interaction
+                          if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                            setShowPlanModal(true);
+                            return false; // Don't allow interaction
+                          }
+                          return true; // Allow interaction
+                        }}
                         fillColor={watermarkSwatchColor}
                       />
                       <Text style={styles.watermarkOpacityValue}>
@@ -1334,25 +1387,20 @@ export default function SettingsScreen({ navigation }) {
                 </View>
               )}
 
-              {/* Customize Button */}
+              {/* Customize Button - Always active */}
               <TouchableOpacity
                 style={[
                   styles.customizeButton,
-                  (!showLabels || !canUse(FEATURES.CUSTOM_LABELS)) && styles.customizeButtonDisabled
+                  !showLabels && styles.customizeButtonDisabled
                 ]}
                 onPress={() => {
-                  // Starter tier - no customizations
-                  if (!canUse(FEATURES.CUSTOM_LABELS)) {
-                    setShowPlanModal(true);
-                    return;
-                  }
                   navigation.navigate('LabelCustomization');
                 }}
-                disabled={!showLabels || !canUse(FEATURES.CUSTOM_LABELS)}
+                disabled={!showLabels}
               >
                 <Text style={[
                   styles.customizeButtonText,
-                  (!showLabels || !canUse(FEATURES.CUSTOM_LABELS)) && styles.customizeButtonTextDisabled
+                  !showLabels && styles.customizeButtonTextDisabled
                 ]}>{t('settings.customize')}</Text>
               </TouchableOpacity>
             </View>
@@ -2782,43 +2830,115 @@ export default function SettingsScreen({ navigation }) {
     );
   }
 
-function WatermarkOpacitySlider({ value = 0, onChange, onChangeEnd, fillColor = '#FFD700' }) {
+function WatermarkOpacitySlider({ value = 0, onChange, onChangeEnd, onStartShouldSetResponder, fillColor = '#FFD700' }) {
   const [trackWidth, setTrackWidth] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggingValue, setDraggingValue] = useState(value);
+  const trackRef = useRef(null);
 
   const clamp = (val) => Math.max(0, Math.min(1, val));
+
+  // Use dragging value during drag, otherwise use prop value
+  const displayValue = isDragging ? draggingValue : value;
+
+  // Sync draggingValue when value prop changes (but not during drag)
+  useEffect(() => {
+    if (!isDragging) {
+      setDraggingValue(value);
+    }
+  }, [value, isDragging]);
+
+  const isDraggingRef = useRef(false);
+  
+  // Sync ref with state
+  useEffect(() => {
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
 
   const handleGesture = (event, commit = false) => {
     if (!trackWidth || !event || !event.nativeEvent) {
       if (commit && onChangeEnd) {
-        onChangeEnd(clamp(value));
+        onChangeEnd(clamp(displayValue));
+        setIsDragging(false);
+        isDraggingRef.current = false;
       }
       return;
     }
+    
+    // Use locationX which is relative to the responder view (the track itself)
     const { locationX } = event.nativeEvent;
     const ratio = clamp(locationX / trackWidth);
-    if (onChange) {
+    
+    // Update local state immediately for smooth dragging - this prevents jumps
+    setDraggingValue(ratio);
+    
+    // Only call onChange if not committing (during drag)
+    if (onChange && !commit && isDraggingRef.current) {
       onChange(ratio);
     }
+    
+    // Call onChangeEnd when commit is true (drag ended)
     if (commit && onChangeEnd) {
       onChangeEnd(ratio);
+      setIsDragging(false);
+      isDraggingRef.current = false;
     }
   };
 
+  const handleStartShouldSetResponder = () => {
+    if (onStartShouldSetResponder) {
+      const allow = onStartShouldSetResponder();
+      if (allow) {
+        setIsDragging(true);
+        isDraggingRef.current = true;
+        setDraggingValue(value);
+      }
+      return allow;
+    }
+    setIsDragging(true);
+    isDraggingRef.current = true;
+    setDraggingValue(value);
+    return true;
+  };
+
   const thumbSize = 20;
-  const fillWidth = trackWidth ? clamp(value) * trackWidth : 0;
-  const thumbLeft = trackWidth ? clamp(value) * trackWidth - thumbSize / 2 : 0;
+  const fillWidth = trackWidth ? clamp(displayValue) * trackWidth : 0;
+  const thumbLeft = trackWidth ? clamp(displayValue) * trackWidth - thumbSize / 2 : 0;
 
   return (
     <View style={sliderStyles.container}>
       <View
+        ref={trackRef}
         style={sliderStyles.track}
-        onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-        onStartShouldSetResponder={() => true}
-        onResponderGrant={(event) => handleGesture(event, false)}
-        onResponderMove={(event) => handleGesture(event, false)}
-        onResponderRelease={(event) => handleGesture(event, true)}
+        onLayout={(event) => {
+          const { width } = event.nativeEvent.layout;
+          // Only update trackWidth if not dragging to avoid jumps
+          if (!isDragging) {
+            setTrackWidth(width);
+          }
+        }}
+        onStartShouldSetResponder={handleStartShouldSetResponder}
+        onMoveShouldSetResponder={() => isDragging}
+        onResponderGrant={(event) => {
+          handleGesture(event, false);
+        }}
+        onResponderMove={(event) => {
+          if (isDragging) {
+            handleGesture(event, false);
+          }
+        }}
+        onResponderRelease={(event) => {
+          if (isDragging) {
+            handleGesture(event, true);
+          }
+        }}
         onResponderTerminationRequest={() => false}
-        onResponderTerminate={(event) => handleGesture(event, true)}
+        onResponderTerminate={(event) => {
+          if (isDragging) {
+            handleGesture(event, true);
+            setIsDragging(false);
+          }
+        }}
       >
         <View
           style={[

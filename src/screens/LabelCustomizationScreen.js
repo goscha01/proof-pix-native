@@ -20,6 +20,8 @@ import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
 import { ColorPicker, fromHsv } from 'react-native-color-picker';
 import { useTranslation } from 'react-i18next';
+import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
+import { FEATURES } from '../constants/featurePermissions';
 
 const getLabelSizeOptions = (t) => [
   { key: 'small', label: t('labelCustomization.small') },
@@ -92,7 +94,11 @@ export default function LabelCustomizationScreen({ navigation }) {
     updateLabelMarginVertical,
     updateLabelMarginHorizontal,
     shouldShowWatermark,
+    userPlan,
+    updateUserPlan,
   } = useSettings();
+
+  const { canUse } = useFeaturePermissions();
 
   const [colorModalVisible, setColorModalVisible] = useState(false);
   const [colorModalType, setColorModalType] = useState(null);
@@ -102,6 +108,8 @@ export default function LabelCustomizationScreen({ navigation }) {
   const [hexModalValue, setHexModalValue] = useState('');
   const [hexModalError, setHexModalError] = useState(null);
   const [fontModalVisible, setFontModalVisible] = useState(false);
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [sliderResetKey, setSliderResetKey] = useState(0);
 
   const LABEL_SIZE_OPTIONS = useMemo(() => getLabelSizeOptions(t), [t]);
   const LABEL_CORNER_OPTIONS = useMemo(() => getLabelCornerOptions(t), [t]);
@@ -173,6 +181,11 @@ export default function LabelCustomizationScreen({ navigation }) {
   };
 
   const openColorModal = (type) => {
+    // Check if user has access to custom labels
+    if (!canUse(FEATURES.CUSTOM_LABELS)) {
+      setShowPlanModal(true);
+      return;
+    }
     const currentColor = type === 'background' ? labelBackgroundColor : labelTextColor;
     setColorModalType(type);
     setDraftColor(currentColor);
@@ -338,7 +351,14 @@ export default function LabelCustomizationScreen({ navigation }) {
           </View>
           <TouchableOpacity
             style={styles.fontSelectorButton}
-            onPress={() => setFontModalVisible(true)}
+            onPress={() => {
+              // Check if user has access to custom labels
+              if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                setShowPlanModal(true);
+                return;
+              }
+              setFontModalVisible(true);
+            }}
           >
             <Text style={styles.fontSelectorButtonText}>{t('labelCustomization.chooseFont')}</Text>
           </TouchableOpacity>
@@ -484,6 +504,11 @@ export default function LabelCustomizationScreen({ navigation }) {
                       beforeLabelPosition === key && styles.gridCellSelected
                     ]}
                     onPress={() => {
+                      // Check if user has access to custom labels
+                      if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                        setShowPlanModal(true);
+                        return;
+                      }
                       updateBeforeLabelPosition(key);
                       updateCombinedLabelPosition(key);
                     }}
@@ -500,6 +525,11 @@ export default function LabelCustomizationScreen({ navigation }) {
                       beforeLabelPosition === key && styles.gridCellSelected
                     ]}
                     onPress={() => {
+                      // Check if user has access to custom labels
+                      if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                        setShowPlanModal(true);
+                        return;
+                      }
                       updateBeforeLabelPosition(key);
                       updateCombinedLabelPosition(key);
                     }}
@@ -516,6 +546,11 @@ export default function LabelCustomizationScreen({ navigation }) {
                       beforeLabelPosition === key && styles.gridCellSelected
                     ]}
                     onPress={() => {
+                      // Check if user has access to custom labels
+                      if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                        setShowPlanModal(true);
+                        return;
+                      }
                       updateBeforeLabelPosition(key);
                       updateCombinedLabelPosition(key);
                     }}
@@ -536,6 +571,11 @@ export default function LabelCustomizationScreen({ navigation }) {
                       afterLabelPosition === key && styles.gridCellSelected
                     ]}
                     onPress={() => {
+                      // Check if user has access to custom labels
+                      if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                        setShowPlanModal(true);
+                        return;
+                      }
                       updateAfterLabelPosition(key);
                       updateCombinedLabelPosition(key);
                     }}
@@ -552,6 +592,11 @@ export default function LabelCustomizationScreen({ navigation }) {
                       afterLabelPosition === key && styles.gridCellSelected
                     ]}
                     onPress={() => {
+                      // Check if user has access to custom labels
+                      if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                        setShowPlanModal(true);
+                        return;
+                      }
                       updateAfterLabelPosition(key);
                       updateCombinedLabelPosition(key);
                     }}
@@ -568,6 +613,11 @@ export default function LabelCustomizationScreen({ navigation }) {
                       afterLabelPosition === key && styles.gridCellSelected
                     ]}
                     onPress={() => {
+                      // Check if user has access to custom labels
+                      if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                        setShowPlanModal(true);
+                        return;
+                      }
                       updateAfterLabelPosition(key);
                       updateCombinedLabelPosition(key);
                     }}
@@ -593,12 +643,22 @@ export default function LabelCustomizationScreen({ navigation }) {
             </Text>
             <View style={styles.sliderWrapper}>
               <Slider
+                key={`vertical-${sliderResetKey}`}
                 style={styles.slider}
                 minimumValue={0}
                 maximumValue={50}
                 step={1}
                 value={labelMarginVertical}
-                onValueChange={updateLabelMarginVertical}
+                onValueChange={(value) => {
+                  // Check if user has access to custom labels
+                  if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                    setShowPlanModal(true);
+                    // Force slider to reset by updating key
+                    setSliderResetKey(prev => prev + 1);
+                    return;
+                  }
+                  updateLabelMarginVertical(value);
+                }}
                 minimumTrackTintColor={COLORS.PRIMARY}
                 maximumTrackTintColor="#d3d3d3"
                 thumbTintColor={COLORS.PRIMARY}
@@ -614,12 +674,22 @@ export default function LabelCustomizationScreen({ navigation }) {
             </Text>
             <View style={styles.sliderWrapper}>
               <Slider
+                key={`horizontal-${sliderResetKey}`}
                 style={styles.slider}
                 minimumValue={0}
                 maximumValue={50}
                 step={1}
                 value={labelMarginHorizontal}
-                onValueChange={updateLabelMarginHorizontal}
+                onValueChange={(value) => {
+                  // Check if user has access to custom labels
+                  if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                    setShowPlanModal(true);
+                    // Force slider to reset by updating key
+                    setSliderResetKey(prev => prev + 1);
+                    return;
+                  }
+                  updateLabelMarginHorizontal(value);
+                }}
                 minimumTrackTintColor={COLORS.PRIMARY}
                 maximumTrackTintColor="#d3d3d3"
                 thumbTintColor={COLORS.PRIMARY}
@@ -767,6 +837,82 @@ export default function LabelCustomizationScreen({ navigation }) {
               );
             })}
           </ScrollView>
+        </View>
+      </RNModal>
+
+      {/* Plan Selection Modal */}
+      <RNModal
+        visible={showPlanModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowPlanModal(false)}
+      >
+        <View style={styles.planModalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{t('planModal.title')}</Text>
+              <TouchableOpacity
+                onPress={() => setShowPlanModal(false)}
+                style={styles.modalCloseButton}
+              >
+                <Text style={styles.modalCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.modalScrollView}>
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('starter');
+                    setShowPlanModal(false);
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('pro');
+                    setShowPlanModal(false);
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('business');
+                    setShowPlanModal(false);
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('enterprise');
+                    setShowPlanModal(false);
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
+              </View>
+            </ScrollView>
+          </View>
         </View>
       </RNModal>
     </SafeAreaView>
@@ -1174,5 +1320,75 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: COLORS.PRIMARY,
     fontWeight: '700',
+  },
+  // Plan Modal Styles
+  planModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end'
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 20
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.TEXT
+  },
+  modalCloseButton: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  modalCloseText: {
+    fontSize: 24,
+    color: COLORS.GRAY
+  },
+  modalScrollView: {
+    paddingHorizontal: 20,
+    paddingTop: 20
+  },
+  planContainer: {
+    marginBottom: 20
+  },
+  planButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    alignItems: 'center'
+  },
+  planButtonSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  planButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.PRIMARY
+  },
+  planButtonTextSelected: {
+    color: '#000000'
+  },
+  planSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 10
   },
 });
