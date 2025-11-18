@@ -106,6 +106,18 @@ export default function GalleryScreen({ navigation, route }) {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
   
+  // Refs for double tap detection
+  const tapCountRef = useRef({});
+  const lastTapRef = useRef({});
+  
+  // Ref to track selection mode for immediate access in handlers
+  const isSelectionModeRef = useRef(false);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    isSelectionModeRef.current = isSelectionMode;
+  }, [isSelectionMode]);
+  
   // Effect to handle label capture when capturingPhoto state changes
   useEffect(() => {
     if (!capturingPhoto) return;
@@ -354,6 +366,8 @@ export default function GalleryScreen({ navigation, route }) {
         }
       } else {
         // Not in selection mode - enter selection mode (don't show preview)
+        // Update ref immediately so handlers can access it right away
+        isSelectionModeRef.current = true;
         setIsSelectionMode(true);
         // If a photo was long-pressed, select it
         if (photo) {
@@ -2047,9 +2061,44 @@ export default function GalleryScreen({ navigation, route }) {
       const isSelected = currentSelectionMode && currentSelectedPhotos.has(combinedId);
 
       const handleCombinedPress = () => {
-        if (longPressTriggered.current) return;
-        if (currentSelectionMode) {
-          // Toggle selection
+        // Always check selection mode state directly using ref to prevent race conditions
+        // This ensures we get the latest value even if component hasn't re-rendered yet
+        const inSelectionMode = isSelectionModeRef.current || isSelectionMode || currentSelectionMode;
+        
+        // Only block taps if we're NOT in selection mode and a long press was triggered
+        // In selection mode, we want taps to work for selection/double-tap preview
+        if (!inSelectionMode && longPressTriggered.current) return;
+        
+        if (inSelectionMode) {
+          // In selection mode: detect double tap
+          const photoKey = combinedId;
+          const now = Date.now();
+          const DOUBLE_TAP_DELAY = 300; // 300ms window for double tap
+          
+          // Check if this is a double tap (second tap within 300ms)
+          if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
+            // Double tap detected - undo the previous toggle and open preview
+            // The first tap already toggled, so we need to toggle again to undo
+            setSelectedPhotos(prev => {
+              const newSet = new Set(prev);
+              if (newSet.has(combinedId)) {
+                newSet.delete(combinedId);
+              } else {
+                newSet.add(combinedId);
+              }
+              return newSet;
+            });
+            tapCountRef.current[photoKey] = 0;
+            lastTapRef.current[photoKey] = 0;
+            
+            navigation.navigate('PhotoEditor', {
+              beforePhoto: photoSet.before,
+              afterPhoto: photoSet.after
+            });
+            return;
+          }
+          
+          // First tap - toggle selection immediately
           setSelectedPhotos(prev => {
             const newSet = new Set(prev);
             if (newSet.has(combinedId)) {
@@ -2059,12 +2108,26 @@ export default function GalleryScreen({ navigation, route }) {
             }
             return newSet;
           });
-        } else {
-          navigation.navigate('PhotoEditor', {
-            beforePhoto: photoSet.before,
-            afterPhoto: photoSet.after
-          });
+          
+          // Record tap for double tap detection
+          tapCountRef.current[photoKey] = 1;
+          lastTapRef.current[photoKey] = now;
+          
+          // Clear tap count after delay
+          setTimeout(() => {
+            if (tapCountRef.current[photoKey] === 1) {
+              tapCountRef.current[photoKey] = 0;
+              lastTapRef.current[photoKey] = 0;
+            }
+          }, DOUBLE_TAP_DELAY);
+          return;
         }
+        
+        // Not in selection mode: single tap opens preview
+        navigation.navigate('PhotoEditor', {
+          beforePhoto: photoSet.before,
+          afterPhoto: photoSet.after
+        });
       };
 
       return (
@@ -2103,10 +2166,48 @@ export default function GalleryScreen({ navigation, route }) {
     const isSelected = currentSelectionMode && currentSelectedPhotos.has(photo.id);
 
     const handlePress = () => {
-      if (longPressTriggered.current) return;
+      // Always check selection mode state directly using ref to prevent race conditions
+      // This ensures we get the latest value even if component hasn't re-rendered yet
+      const inSelectionMode = isSelectionModeRef.current || isSelectionMode || currentSelectionMode;
       
-      if (currentSelectionMode) {
-        // Toggle selection
+      // Only block taps if we're NOT in selection mode and a long press was triggered
+      // In selection mode, we want taps to work for selection/double-tap preview
+      if (!inSelectionMode && longPressTriggered.current) return;
+      
+      if (inSelectionMode) {
+        // In selection mode: detect double tap
+        const photoKey = photo.id;
+        const now = Date.now();
+        const DOUBLE_TAP_DELAY = 300; // 300ms window for double tap
+        
+        // Check if this is a double tap (second tap within 300ms)
+        if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
+          // Double tap detected - undo the previous toggle and open preview
+          // The first tap already toggled, so we need to toggle again to undo
+          setSelectedPhotos(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(photo.id)) {
+              newSet.delete(photo.id);
+            } else {
+              newSet.add(photo.id);
+            }
+            return newSet;
+          });
+          tapCountRef.current[photoKey] = 0;
+          lastTapRef.current[photoKey] = 0;
+          
+          if (photoType === 'combined') {
+            navigation.navigate('PhotoEditor', {
+              beforePhoto: photoSet.before,
+              afterPhoto: photoSet.after
+            });
+          } else {
+            navigation.navigate('PhotoDetail', { photo });
+          }
+          return;
+        }
+        
+        // First tap - toggle selection immediately
         setSelectedPhotos(prev => {
           const newSet = new Set(prev);
           if (newSet.has(photo.id)) {
@@ -2116,17 +2217,31 @@ export default function GalleryScreen({ navigation, route }) {
           }
           return newSet;
         });
+        
+        // Record tap for double tap detection
+        tapCountRef.current[photoKey] = 1;
+        lastTapRef.current[photoKey] = now;
+        
+        // Clear tap count after delay
+        setTimeout(() => {
+          if (tapCountRef.current[photoKey] === 1) {
+            tapCountRef.current[photoKey] = 0;
+            lastTapRef.current[photoKey] = 0;
+          }
+        }, DOUBLE_TAP_DELAY);
+        return;
+      }
+      
+      // Not in selection mode: single tap opens preview
+      if (photoType === 'combined') {
+        // Combined column - navigate to PhotoEditor to choose format
+        navigation.navigate('PhotoEditor', {
+          beforePhoto: photoSet.before,
+          afterPhoto: photoSet.after
+        });
       } else {
-        if (photoType === 'combined') {
-          // Combined column - navigate to PhotoEditor to choose format
-          navigation.navigate('PhotoEditor', {
-            beforePhoto: photoSet.before,
-            afterPhoto: photoSet.after
-          });
-        } else {
-          // Before or After column - navigate to PhotoDetailScreen with share button
-          navigation.navigate('PhotoDetail', { photo });
-        }
+        // Before or After column - navigate to PhotoDetailScreen with share button
+        navigation.navigate('PhotoDetail', { photo });
       }
     };
 
@@ -2242,6 +2357,8 @@ export default function GalleryScreen({ navigation, route }) {
           onPress={() => {
             if (isSelectionMode) {
               // Deselect all and exit selection mode
+              // Update ref immediately so handlers can access it right away
+              isSelectionModeRef.current = false;
               setIsSelectionMode(false);
               setSelectedPhotos(new Set());
               // Clear long press state
@@ -2252,6 +2369,8 @@ export default function GalleryScreen({ navigation, route }) {
               longPressTriggered.current = false;
             } else {
               // Enter selection mode
+              // Update ref immediately so handlers can access it right away
+              isSelectionModeRef.current = true;
               setIsSelectionMode(true);
             }
           }}
