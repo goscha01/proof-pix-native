@@ -109,6 +109,7 @@ export default function GalleryScreen({ navigation, route }) {
   // Refs for double tap detection
   const tapCountRef = useRef({});
   const lastTapRef = useRef({});
+  const originalSelectionStateRef = useRef({}); // Store original selection state before first tap
   
   // Ref to track selection mode for immediate access in handlers
   const isSelectionModeRef = useRef(false);
@@ -2077,28 +2078,50 @@ export default function GalleryScreen({ navigation, route }) {
           
           // Check if this is a double tap (second tap within 300ms)
           if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
-            // Double tap detected - undo the previous toggle and open preview
-            // The first tap already toggled, so we need to toggle again to undo
+            // Double tap detected - restore original state and open preview
+            // The first tap already toggled, so we need to restore the original state
+            const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
             setSelectedPhotos(prev => {
               const newSet = new Set(prev);
-              if (newSet.has(combinedId)) {
-                newSet.delete(combinedId);
-              } else {
+              if (wasOriginallySelected) {
+                // Restore to selected
                 newSet.add(combinedId);
+              } else {
+                // Restore to unselected
+                newSet.delete(combinedId);
               }
               return newSet;
             });
+            
+            // Get the restored state for navigation (use the original state)
+            const restoredSelected = new Set(selectedPhotos);
+            if (wasOriginallySelected) {
+              restoredSelected.add(combinedId);
+            } else {
+              restoredSelected.delete(combinedId);
+            }
+            
             tapCountRef.current[photoKey] = 0;
             lastTapRef.current[photoKey] = 0;
+            delete originalSelectionStateRef.current[photoKey];
             
             navigation.navigate('PhotoEditor', {
               beforePhoto: photoSet.before,
-              afterPhoto: photoSet.after
+              afterPhoto: photoSet.after,
+              isSelectionMode: isSelectionModeRef.current || isSelectionMode,
+              selectedPhotos: Array.from(restoredSelected),
+              onSelectionChange: (newSelectedPhotos) => {
+                setSelectedPhotos(new Set(newSelectedPhotos));
+              }
             });
             return;
           }
           
-          // First tap - toggle selection immediately
+          // First tap - store original state and toggle selection immediately
+          const wasOriginallySelected = currentSelectedPhotos.has(combinedId);
+          // Store original state separately
+          originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
+          
           setSelectedPhotos(prev => {
             const newSet = new Set(prev);
             if (newSet.has(combinedId)) {
@@ -2182,32 +2205,61 @@ export default function GalleryScreen({ navigation, route }) {
         
         // Check if this is a double tap (second tap within 300ms)
         if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
-          // Double tap detected - undo the previous toggle and open preview
-          // The first tap already toggled, so we need to toggle again to undo
+          // Double tap detected - restore original state and open preview
+          // The first tap already toggled, so we need to restore the original state
+          const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
           setSelectedPhotos(prev => {
             const newSet = new Set(prev);
-            if (newSet.has(photo.id)) {
-              newSet.delete(photo.id);
-            } else {
+            if (wasOriginallySelected) {
+              // Restore to selected
               newSet.add(photo.id);
+            } else {
+              // Restore to unselected
+              newSet.delete(photo.id);
             }
             return newSet;
           });
+          
+          // Get the restored state for navigation (use the original state)
+          const restoredSelected = new Set(selectedPhotos);
+          if (wasOriginallySelected) {
+            restoredSelected.add(photo.id);
+          } else {
+            restoredSelected.delete(photo.id);
+          }
+          
           tapCountRef.current[photoKey] = 0;
           lastTapRef.current[photoKey] = 0;
+          delete originalSelectionStateRef.current[photoKey];
           
           if (photoType === 'combined') {
             navigation.navigate('PhotoEditor', {
               beforePhoto: photoSet.before,
-              afterPhoto: photoSet.after
+              afterPhoto: photoSet.after,
+              isSelectionMode: isSelectionModeRef.current || isSelectionMode,
+              selectedPhotos: Array.from(restoredSelected),
+              onSelectionChange: (newSelectedPhotos) => {
+                setSelectedPhotos(new Set(newSelectedPhotos));
+              }
             });
           } else {
-            navigation.navigate('PhotoDetail', { photo });
+            navigation.navigate('PhotoDetail', { 
+              photo,
+              isSelectionMode: isSelectionModeRef.current || isSelectionMode,
+              selectedPhotos: Array.from(restoredSelected),
+              onSelectionChange: (newSelectedPhotos) => {
+                setSelectedPhotos(new Set(newSelectedPhotos));
+              }
+            });
           }
           return;
         }
         
-        // First tap - toggle selection immediately
+        // First tap - store original state and toggle selection immediately
+        const wasOriginallySelected = currentSelectedPhotos.has(photo.id);
+        // Store original state separately
+        originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
+        
         setSelectedPhotos(prev => {
           const newSet = new Set(prev);
           if (newSet.has(photo.id)) {
@@ -2232,17 +2284,25 @@ export default function GalleryScreen({ navigation, route }) {
         return;
       }
       
-      // Not in selection mode: single tap opens preview
-      if (photoType === 'combined') {
-        // Combined column - navigate to PhotoEditor to choose format
-        navigation.navigate('PhotoEditor', {
-          beforePhoto: photoSet.before,
-          afterPhoto: photoSet.after
-        });
-      } else {
-        // Before or After column - navigate to PhotoDetailScreen with share button
-        navigation.navigate('PhotoDetail', { photo });
-      }
+        // Not in selection mode: single tap opens preview
+        if (photoType === 'combined') {
+          // Combined column - navigate to PhotoEditor to choose format
+          navigation.navigate('PhotoEditor', {
+            beforePhoto: photoSet.before,
+            afterPhoto: photoSet.after,
+            isSelectionMode: false,
+            selectedPhotos: [],
+            onSelectionChange: () => {}
+          });
+        } else {
+          // Before or After column - navigate to PhotoDetailScreen with share button
+          navigation.navigate('PhotoDetail', { 
+            photo,
+            isSelectionMode: false,
+            selectedPhotos: [],
+            onSelectionChange: () => {}
+          });
+        }
     };
 
     return (

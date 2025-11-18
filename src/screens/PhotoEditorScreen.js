@@ -23,7 +23,7 @@ import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
 
 export default function PhotoEditorScreen({ route, navigation }) {
-  const { beforePhoto, afterPhoto } = route.params;
+  const { beforePhoto, afterPhoto, isSelectionMode = false, selectedPhotos = [], onSelectionChange } = route.params;
 
   // Set default template based on PHONE ORIENTATION or CAMERA VIEW MODE
   // Landscape phone position OR landscape camera view → stacked (horizontal split)
@@ -43,6 +43,53 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const [currentPhotoSet, setCurrentPhotoSet] = useState({ before: beforePhoto, after: afterPhoto });
   const [allPhotoSets, setAllPhotoSets] = useState([]);
   const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  
+  // Get selection state for current photo set
+  const getCombinedId = (photoSet) => {
+    return `combined_${photoSet.before.id}`;
+  };
+  
+  // Track selected photos locally
+  const [localSelectedPhotos, setLocalSelectedPhotos] = useState(new Set(selectedPhotos));
+  
+  // Sync with route params when they change
+  useEffect(() => {
+    const newSet = new Set(selectedPhotos);
+    setLocalSelectedPhotos(newSet);
+    const combinedId = getCombinedId(currentPhotoSet);
+    console.log('[PhotoEditorScreen] Selected photos updated:', Array.from(newSet), 'Current combined ID:', combinedId, 'Is selected:', newSet.has(combinedId));
+  }, [selectedPhotos]);
+  
+  // Update selection state when current photo set changes
+  useEffect(() => {
+    if (isSelectionMode) {
+      const combinedId = getCombinedId(currentPhotoSet);
+      const isCurrentlySelected = localSelectedPhotos.has(combinedId);
+      console.log('[PhotoEditorScreen] Current photo set changed:', combinedId, 'Is selected:', isCurrentlySelected);
+    }
+  }, [currentPhotoSet.before.id, isSelectionMode, localSelectedPhotos]);
+  
+  // Get selection state for a specific photo set
+  const getIsSelected = (photoSet) => {
+    return isSelectionMode && localSelectedPhotos.has(getCombinedId(photoSet));
+  };
+  
+  const isSelected = getIsSelected(currentPhotoSet);
+  
+  // Toggle selection for current photo set
+  const toggleSelection = () => {
+    if (!isSelectionMode || !onSelectionChange) return;
+    
+    const combinedId = getCombinedId(currentPhotoSet);
+    const newSelected = new Set(localSelectedPhotos);
+    if (newSelected.has(combinedId)) {
+      newSelected.delete(combinedId);
+    } else {
+      newSelected.add(combinedId);
+    }
+    setLocalSelectedPhotos(newSelected);
+    onSelectionChange(Array.from(newSelected));
+  };
   const combinedRef = useRef(null);
   const templateScrollRef = useRef(null);
   const photoScrollRef = useRef(null);
@@ -483,6 +530,9 @@ export default function PhotoEditorScreen({ route, navigation }) {
     if (!photoSet || !photoSet.before || !photoSet.after) {
       return null;
     }
+    const combinedId = getCombinedId(photoSet);
+    const photoSetIsSelected = getIsSelected(photoSet);
+    console.log('[PhotoEditorScreen] Rendering combined preview:', combinedId, 'Is selected:', photoSetIsSelected, 'Selected photos:', Array.from(localSelectedPhotos));
     let config = getTemplateConfig(templateType, photoSet);
     if (!config) {
       // Guard against undefined (e.g., original not present yet)
@@ -575,6 +625,32 @@ export default function PhotoEditorScreen({ route, navigation }) {
           )}
           {/* Show watermark if enabled */}
           {shouldShowWatermark && <PhotoWatermark />}
+          
+          {/* Checkbox overlay in selection mode */}
+          {isSelectionMode && (
+            <TouchableOpacity
+              style={styles.checkboxOverlay}
+              onPress={() => {
+                if (!onSelectionChange) return;
+                const combinedId = getCombinedId(photoSet);
+                const newSelected = new Set(localSelectedPhotos);
+                if (newSelected.has(combinedId)) {
+                  newSelected.delete(combinedId);
+                } else {
+                  newSelected.add(combinedId);
+                }
+                setLocalSelectedPhotos(newSelected);
+                onSelectionChange(Array.from(newSelected));
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.checkboxContainer, photoSetIsSelected && styles.checkboxSelected]}>
+                {photoSetIsSelected && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
       );
     }
@@ -624,6 +700,24 @@ export default function PhotoEditorScreen({ route, navigation }) {
         </View>
         {/* Show watermark if enabled */}
         {shouldShowWatermark && <PhotoWatermark />}
+        
+        {/* Checkbox overlay in selection mode */}
+        {isSelectionMode && (() => {
+          const photoSetIsSelected = getIsSelected(currentPhotoSet);
+          return (
+            <TouchableOpacity
+              style={styles.checkboxOverlay}
+              onPress={toggleSelection}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.checkboxContainer, photoSetIsSelected && styles.checkboxSelected]}>
+                {photoSetIsSelected && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })()}
       </View>
     );
   };
@@ -830,7 +924,34 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 5
+    elevation: 5,
+    position: 'relative'
+  },
+  checkboxOverlay: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    zIndex: 10
+  },
+  checkboxContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16, // Fully round
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderWidth: 2,
+    borderColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden' // Ensure it stays round
+  },
+  checkboxSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  checkmark: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold'
   },
   halfContainer: {
     flex: 1,

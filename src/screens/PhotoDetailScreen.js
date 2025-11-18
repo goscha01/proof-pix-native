@@ -23,7 +23,7 @@ import PhotoWatermark from '../components/PhotoWatermark';
 const { width, height } = Dimensions.get('window');
 
 export default function PhotoDetailScreen({ route, navigation }) {
-  const { photo } = route.params;
+  const { photo, isSelectionMode = false, selectedPhotos = [], onSelectionChange } = route.params;
   const { deletePhoto, getBeforePhotos, getAfterPhotos, activeProjectId } = usePhotos();
   const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, labelMarginVertical, labelMarginHorizontal, getRooms } = useSettings();
   const [sharing, setSharing] = useState(false);
@@ -36,6 +36,43 @@ export default function PhotoDetailScreen({ route, navigation }) {
   const imageContainerRef = useRef(null);
   const captureViewRef = useRef(null);
   const imageRef = useRef(null);
+  
+  // Track selected photos locally
+  const [localSelectedPhotos, setLocalSelectedPhotos] = useState(new Set(selectedPhotos));
+  
+  // Sync with route params when they change
+  useEffect(() => {
+    const newSet = new Set(selectedPhotos);
+    setLocalSelectedPhotos(newSet);
+    console.log('[PhotoDetailScreen] Selected photos updated:', Array.from(newSet), 'Current photo ID:', currentPhoto.id, 'Is selected:', newSet.has(currentPhoto.id));
+  }, [selectedPhotos]);
+  
+  // Update selection state when current photo changes
+  useEffect(() => {
+    if (isSelectionMode) {
+      const isCurrentlySelected = localSelectedPhotos.has(currentPhoto.id);
+      console.log('[PhotoDetailScreen] Current photo changed:', currentPhoto.id, 'Is selected:', isCurrentlySelected);
+    }
+  }, [currentPhoto.id, isSelectionMode, localSelectedPhotos]);
+  
+  // Toggle selection for current photo
+  const toggleSelection = () => {
+    if (!isSelectionMode || !onSelectionChange) return;
+    
+    const newSelected = new Set(localSelectedPhotos);
+    if (newSelected.has(currentPhoto.id)) {
+      newSelected.delete(currentPhoto.id);
+    } else {
+      newSelected.add(currentPhoto.id);
+    }
+    setLocalSelectedPhotos(newSelected);
+    onSelectionChange(Array.from(newSelected));
+  };
+  
+  // Get selection state for a specific photo
+  const getIsSelected = (photoId) => {
+    return isSelectionMode && localSelectedPhotos.has(photoId);
+  };
 
   // Get all photos for swiping
   useEffect(() => {
@@ -97,6 +134,16 @@ export default function PhotoDetailScreen({ route, navigation }) {
       console.log('[PhotoDetailScreen] Swiping to photo:', newPhoto.id, newPhoto.name, newPhoto.mode, 'at index:', pageIndex);
       setCurrentIndex(pageIndex);
       setCurrentPhoto(newPhoto);
+      
+      // Update selection state for new photo if in selection mode
+      if (isSelectionMode && onSelectionChange) {
+        const newSelected = new Set(localSelectedPhotos);
+        if (newSelected.has(newPhoto.id)) {
+          // Photo is selected
+        } else {
+          // Photo is not selected
+        }
+      }
     } else {
       console.log('[PhotoDetailScreen] Swipe ignored - same index or out of bounds');
     }
@@ -243,6 +290,8 @@ export default function PhotoDetailScreen({ route, navigation }) {
   };
 
   const renderPhoto = (photoToRender = currentPhoto) => {
+    const photoIsSelected = getIsSelected(photoToRender.id);
+    console.log('[PhotoDetailScreen] Rendering photo:', photoToRender.id, 'Is selected:', photoIsSelected, 'Selected photos:', Array.from(localSelectedPhotos));
     // Get the appropriate label position based on photo mode
     const currentLabelPosition = photoToRender.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
     const positions = getLabelPositions(labelMarginVertical, labelMarginHorizontal);
@@ -339,6 +388,31 @@ export default function PhotoDetailScreen({ route, navigation }) {
         {/* Show watermark if enabled */}
         {shouldShowWatermark && (
           <PhotoWatermark style={getWatermarkStyle()} />
+        )}
+        
+        {/* Checkbox overlay in selection mode */}
+        {isSelectionMode && (
+          <TouchableOpacity
+            style={styles.checkboxOverlay}
+            onPress={() => {
+              if (!onSelectionChange) return;
+              const newSelected = new Set(localSelectedPhotos);
+              if (newSelected.has(photoToRender.id)) {
+                newSelected.delete(photoToRender.id);
+              } else {
+                newSelected.add(photoToRender.id);
+              }
+              setLocalSelectedPhotos(newSelected);
+              onSelectionChange(Array.from(newSelected));
+            }}
+            activeOpacity={0.8}
+          >
+            <View style={[styles.checkboxContainer, photoIsSelected && styles.checkboxSelected]}>
+              {photoIsSelected && (
+                <Text style={styles.checkmark}>✓</Text>
+              )}
+            </View>
+          </TouchableOpacity>
         )}
       </View>
     );
@@ -558,6 +632,32 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     height: '100%'
+  },
+  checkboxOverlay: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    zIndex: 10
+  },
+  checkboxContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16, // Fully round
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderWidth: 2,
+    borderColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden' // Ensure it stays round
+  },
+  checkboxSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  checkmark: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold'
   },
   imageContainer: {
     flex: 1,
