@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   Dimensions,
   ScrollView,
   TextInput,
-  Modal
+  Modal,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -43,6 +45,12 @@ export default function FirstLoadScreen({ navigation }) {
   const [userName, setUserName] = useState('');
   const [selection, setSelection] = useState(null); // 'team' or 'individual'
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  const scrollViewRef = useRef(null);
+  const nameInputRef = useRef(null);
+  const inputContainerRef = useRef(null);
+  const formContainerRef = useRef(null);
+  const [inputYPosition, setInputYPosition] = useState(0);
+  const [formYPosition, setFormYPosition] = useState(0);
 
   const changeLanguage = (languageCode) => {
     i18n.changeLanguage(languageCode);
@@ -85,11 +93,44 @@ export default function FirstLoadScreen({ navigation }) {
     }
   };
 
+  const handleFormContainerLayout = (event) => {
+    const { y } = event.nativeEvent.layout;
+    setFormYPosition(y);
+  };
+
+  const handleInputContainerLayout = (event) => {
+    const { y } = event.nativeEvent.layout;
+    setInputYPosition(y);
+  };
+
+  const handleNameInputFocus = () => {
+    // Scroll to show the input field and buttons when keyboard appears
+    // Calculate total Y position: formContainer Y + inputContainer Y
+    const totalY = formYPosition + inputYPosition;
+    setTimeout(() => {
+      if (scrollViewRef.current) {
+        scrollViewRef.current.scrollTo({
+          y: Math.max(0, totalY - 150), // Offset to ensure buttons are visible above keyboard
+          animated: true
+        });
+      }
+    }, 300);
+  };
+
   const renderInitialSelection = () => (
-    <View style={styles.formContainer}>
-      <View style={styles.inputContainer}>
+    <View 
+      ref={formContainerRef}
+      style={styles.formContainer}
+      onLayout={handleFormContainerLayout}
+    >
+      <View 
+        ref={inputContainerRef} 
+        style={styles.inputContainer}
+        onLayout={handleInputContainerLayout}
+      >
         <Text style={styles.inputLabel}>{t('firstLoad.yourName')}</Text>
         <TextInput
+          ref={nameInputRef}
           style={styles.textInput}
           value={userName}
           onChangeText={setUserName}
@@ -97,6 +138,7 @@ export default function FirstLoadScreen({ navigation }) {
           placeholderTextColor="#999"
           autoCapitalize="words"
           autoCorrect={false}
+          onFocus={handleNameInputFocus}
         />
       </View>
 
@@ -160,7 +202,17 @@ export default function FirstLoadScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
 
         {/* Language Selector Button */}
         <TouchableOpacity
@@ -186,7 +238,8 @@ export default function FirstLoadScreen({ navigation }) {
 
         {selection === 'individual' ? renderPlanSelection() : renderInitialSelection()}
 
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Language Selection Modal */}
       <Modal
@@ -240,6 +293,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F2C31B'
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
