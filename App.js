@@ -79,8 +79,8 @@ function AppNavigator() {
         name="PhotoEditor" 
         component={PhotoEditorScreen}
         options={{
-          presentation: 'fullScreenModal',
-          animation: 'slide_from_bottom'
+          presentation: 'modal',
+          animation: 'fade'
         }}
       />
       <Stack.Screen

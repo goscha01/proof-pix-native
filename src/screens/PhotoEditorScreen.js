@@ -11,6 +11,7 @@ import {
   PanResponder,
   Share
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
 import { usePhotos } from '../context/PhotoContext';
@@ -40,7 +41,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
   const combinedRef = useRef(null);
   const templateScrollRef = useRef(null);
-  const { getUnpairedBeforePhotos, getBeforePhotos, getAfterPhotos, activeProjectId } = usePhotos();
+  const { getUnpairedBeforePhotos, getBeforePhotos, getAfterPhotos, activeProjectId, deletePhoto } = usePhotos();
   const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, combinedLabelPosition, labelMarginVertical, labelMarginHorizontal } = useSettings();
   
   // Debug: Log showLabels value
@@ -182,6 +183,38 @@ export default function PhotoEditorScreen({ route, navigation }) {
       const prevTemplate = templates[currentIndex - 1][0];
       setTemplateType(prevTemplate);
     }
+  };
+
+  const handleDelete = async () => {
+    Alert.alert(
+      'Delete Combined Photo',
+      'This will delete both the before and after photos. Are you sure?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Delete both before and after photos
+              await deletePhoto(beforePhoto.id);
+              await deletePhoto(afterPhoto.id);
+              // Navigate back after deletion
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('Home');
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete photos');
+            }
+          }
+        }
+      ]
+    );
   };
 
   // PanResponder for swipe down to close - applies to entire screen
@@ -539,7 +572,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container} {...swipeDownPanResponder.panHandlers}>
+    <SafeAreaView style={styles.container} {...swipeDownPanResponder.panHandlers}>
       {/* Swipe down indicator */}
       <View style={styles.swipeIndicator}>
         <View style={styles.swipeHandle} />
@@ -564,7 +597,9 @@ export default function PhotoEditorScreen({ route, navigation }) {
           <Text style={[styles.subtitle, { color: '#FFC107' }]}>COMBINED</Text>
         </View>
         
-        <View style={{ width: 60 }} />
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+          <Text style={styles.deleteButtonText}>🗑️</Text>
+        </TouchableOpacity>
       </View>
 
       <View style={styles.previewContainer}>
@@ -634,14 +669,14 @@ export default function PhotoEditorScreen({ route, navigation }) {
           <Text style={styles.shareButtonText}>Share</Text>
         )}
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.BACKGROUND
+    backgroundColor: 'white'
   },
   swipeIndicator: {
     position: 'absolute',
@@ -662,7 +697,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    paddingTop: 100
+    paddingTop: 10,
+    marginTop: 50
   },
   backButton: {
     width: 60
@@ -796,5 +832,11 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT,
     fontSize: 18,
     fontWeight: 'bold'
+  },
+  deleteButton: {
+    padding: 8
+  },
+  deleteButtonText: {
+    fontSize: 24
   }
 });
