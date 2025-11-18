@@ -1104,7 +1104,7 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
             <Text style={styles.appName}>ProofPix</Text>
-            <Text style={styles.tierName}>({userPlan.charAt(0).toUpperCase() + userPlan.slice(1)})</Text>
+            <Text style={styles.tierName}>({userPlan === 'Team Member' || userPlan === 'team' ? 'team' : userPlan.charAt(0).toUpperCase() + userPlan.slice(1)})</Text>
         </View>
         <View style={styles.headerRight}>
             <TouchableOpacity style={styles.iconButton} onPress={() => setOpenProjectVisible(true)}>
@@ -1516,7 +1516,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    paddingTop: 10
+    paddingTop: 10,
+    width: width
   },
   headerLeft: {
     flexDirection: 'row',

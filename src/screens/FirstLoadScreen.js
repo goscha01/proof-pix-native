@@ -72,7 +72,7 @@ export default function FirstLoadScreen({ navigation }) {
   const handleSelectTeam = async () => {
     if (!validateName()) return;
     await updateUserInfo(userName.trim());
-    await updateUserPlan('Team Member');
+    await updateUserPlan('team');
     navigation.navigate('JoinTeam');
   };
 
@@ -160,6 +160,17 @@ export default function FirstLoadScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={styles.selectionSubtext}>{t('firstLoad.individualSubtext')}</Text>
       </View>
+
+      <View style={{marginTop: 16}}>
+        <TouchableOpacity
+          style={[styles.selectionButton, styles.languageButton]}
+          onPress={() => setLanguageModalVisible(true)}
+        >
+          <Text style={[styles.selectionButtonText, styles.languageButtonText]}>
+            Choose App Language
+          </Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 
@@ -214,20 +225,10 @@ export default function FirstLoadScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
 
-        {/* Language Selector Button */}
-        <TouchableOpacity
-          style={styles.languageButton}
-          onPress={() => setLanguageModalVisible(true)}
-        >
-          <Text style={styles.languageButtonText}>
-            {getCurrentLanguage().flag} {getCurrentLanguage().name}
-          </Text>
-        </TouchableOpacity>
-
         {selection !== 'individual' && (
           <View style={styles.logoContainer}>
             <Image
-              source={require('../../assets/PP_logo_app.png')}
+              source={require('../../assets/PP_logo.png')}
               style={styles.logo}
               resizeMode="contain"
             />
@@ -430,17 +431,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   languageButton: {
-    alignSelf: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 20,
+    backgroundColor: '#28a745',
+    borderColor: '#1e7e34',
   },
   languageButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
+    color: '#fff',
   },
   modalOverlay: {
     flex: 1,
