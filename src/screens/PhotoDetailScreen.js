@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import {
   View,
   Text,
@@ -8,13 +8,14 @@ import {
   Alert,
   Dimensions,
   Share,
-  ActivityIndicator
+  ActivityIndicator,
+  ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import { usePhotos } from '../context/PhotoContext';
 import { useSettings } from '../context/SettingsContext';
-import { COLORS, PHOTO_MODES, getLabelPositions } from '../constants/rooms';
+import { COLORS, PHOTO_MODES, getLabelPositions, ROOMS } from '../constants/rooms';
 import * as FileSystem from 'expo-file-system/legacy';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
@@ -23,14 +24,83 @@ const { width, height } = Dimensions.get('window');
 
 export default function PhotoDetailScreen({ route, navigation }) {
   const { photo } = route.params;
-  const { deletePhoto } = usePhotos();
-  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, labelMarginVertical, labelMarginHorizontal } = useSettings();
+  const { deletePhoto, getBeforePhotos, getAfterPhotos, activeProjectId } = usePhotos();
+  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, labelMarginVertical, labelMarginHorizontal, getRooms } = useSettings();
   const [sharing, setSharing] = useState(false);
   const [containerLayout, setContainerLayout] = useState(null);
   const [imageSize, setImageSize] = useState(null);
+  const [currentPhoto, setCurrentPhoto] = useState(photo);
+  const [allPhotos, setAllPhotos] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const scrollViewRef = useRef(null);
   const imageContainerRef = useRef(null);
   const captureViewRef = useRef(null);
   const imageRef = useRef(null);
+
+  // Get all photos for swiping
+  useEffect(() => {
+    const rooms = getRooms();
+    const all = [];
+    
+    // Collect photos from all rooms
+    rooms.forEach(room => {
+      const beforePhotos = getBeforePhotos(room.id);
+      const afterPhotos = getAfterPhotos(room.id);
+      all.push(...beforePhotos, ...afterPhotos);
+    });
+    
+    setAllPhotos(all);
+    
+    console.log('[PhotoDetailScreen] All photos loaded:', all.length, 'photos from', rooms.length, 'rooms');
+    console.log('[PhotoDetailScreen] Current photo:', photo.id, photo.name, photo.mode, 'room:', photo.room);
+    console.log('[PhotoDetailScreen] Photo IDs in list:', all.map(p => `${p.id} (${p.name}, ${p.mode})`));
+    
+    // Find current photo index
+    const index = all.findIndex(p => p.id === photo.id);
+    if (index >= 0) {
+      setCurrentIndex(index);
+      setCurrentPhoto(all[index]);
+      console.log('[PhotoDetailScreen] Found photo at index:', index);
+    } else {
+      setCurrentIndex(0);
+      setCurrentPhoto(photo);
+      console.log('[PhotoDetailScreen] Photo not found in list, using index 0');
+    }
+  }, [photo, getBeforePhotos, getAfterPhotos, activeProjectId, getRooms]);
+
+  // Scroll to current index when photos load
+  useEffect(() => {
+    if (scrollViewRef.current && allPhotos.length > 0 && currentIndex >= 0) {
+      console.log('[PhotoDetailScreen] Scrolling to index:', currentIndex, 'of', allPhotos.length);
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          scrollViewRef.current?.scrollTo({
+            x: currentIndex * width,
+            animated: false
+          });
+        }, 100);
+      });
+    }
+  }, [allPhotos.length, currentIndex]);
+
+  // Handle scroll to update current photo
+  const handleScroll = (event) => {
+    const { contentOffset, layoutMeasurement } = event.nativeEvent;
+    const pageWidth = layoutMeasurement.width;
+    const pageIndex = Math.round(contentOffset.x / pageWidth);
+    
+    console.log('[PhotoDetailScreen] Swipe detected - pageIndex:', pageIndex, 'currentIndex:', currentIndex, 'totalPhotos:', allPhotos.length);
+    console.log('[PhotoDetailScreen] Content offset:', contentOffset.x, 'pageWidth:', pageWidth);
+    
+    if (pageIndex >= 0 && pageIndex < allPhotos.length && pageIndex !== currentIndex) {
+      const newPhoto = allPhotos[pageIndex];
+      console.log('[PhotoDetailScreen] Swiping to photo:', newPhoto.id, newPhoto.name, newPhoto.mode, 'at index:', pageIndex);
+      setCurrentIndex(pageIndex);
+      setCurrentPhoto(newPhoto);
+    } else {
+      console.log('[PhotoDetailScreen] Swipe ignored - same index or out of bounds');
+    }
+  };
 
   // Calculate capture view dimensions maintaining aspect ratio
   const captureDimensions = useMemo(() => {
@@ -56,8 +126,22 @@ export default function PhotoDetailScreen({ route, navigation }) {
   }, [imageSize]);
 
   const handleDelete = async () => {
-    await deletePhoto(photo.id);
-    navigation.goBack();
+    await deletePhoto(currentPhoto.id);
+    // If there are more photos, navigate to the next one, otherwise go back
+    if (allPhotos.length > 1) {
+      const newIndex = currentIndex >= allPhotos.length - 1 ? currentIndex - 1 : currentIndex;
+      if (newIndex >= 0) {
+        const nextPhoto = allPhotos[newIndex];
+        setCurrentIndex(newIndex);
+        setCurrentPhoto(nextPhoto);
+        // Update route params to reflect new photo
+        navigation.setParams({ photo: nextPhoto });
+      } else {
+        navigation.goBack();
+      }
+    } else {
+      navigation.goBack();
+    }
   };
 
   const handleShare = async () => {
@@ -67,7 +151,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
       let tempUri;
 
       // If labels or watermark are enabled, capture the view (image + label + watermark)
-      if ((showLabels || shouldShowWatermark) && photo.mode && captureDimensions) {
+      if ((showLabels || shouldShowWatermark) && currentPhoto.mode && captureDimensions) {
         try {
 
           // Capture the hidden view which has exact image dimensions (no white padding)
@@ -77,27 +161,27 @@ export default function PhotoDetailScreen({ route, navigation }) {
           });
           
           // Copy captured image to cache directory to ensure it's temporary
-          const tempFileName = `${photo.room}_${photo.name}_${photo.mode}_labeled_${Date.now()}.jpg`;
+          const tempFileName = `${currentPhoto.room}_${currentPhoto.name}_${currentPhoto.mode}_labeled_${Date.now()}.jpg`;
           tempUri = `${FileSystem.cacheDirectory}${tempFileName}`;
           await FileSystem.copyAsync({ from: capturedUri, to: tempUri });
 
         } catch (error) {
 
           // Fall back to original image if capture fails
-          const tempFileName = `${photo.room}_${photo.name}_${photo.mode}_${Date.now()}.jpg`;
+          const tempFileName = `${currentPhoto.room}_${currentPhoto.name}_${currentPhoto.mode}_${Date.now()}.jpg`;
           tempUri = `${FileSystem.cacheDirectory}${tempFileName}`;
-          await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+          await FileSystem.copyAsync({ from: currentPhoto.uri, to: tempUri });
         }
       } else {
         // Share original image without label - copy to cache directory
-        const tempFileName = `${photo.room}_${photo.name}_${photo.mode}_${Date.now()}.jpg`;
+        const tempFileName = `${currentPhoto.room}_${currentPhoto.name}_${currentPhoto.mode}_${Date.now()}.jpg`;
         tempUri = `${FileSystem.cacheDirectory}${tempFileName}`;
-        await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+        await FileSystem.copyAsync({ from: currentPhoto.uri, to: tempUri });
       }
 
       // Share the image
       const shareOptions = {
-        title: `${photo.mode === 'before' ? 'Before' : 'After'} Photo - ${photo.name}`,
+        title: `${currentPhoto.mode === 'before' ? 'Before' : 'After'} Photo - ${currentPhoto.name}`,
         url: tempUri,
         type: 'image/jpeg'
       };
@@ -158,9 +242,9 @@ export default function PhotoDetailScreen({ route, navigation }) {
     };
   };
 
-  const renderPhoto = () => {
+  const renderPhoto = (photoToRender = currentPhoto) => {
     // Get the appropriate label position based on photo mode
-    const currentLabelPosition = photo.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
+    const currentLabelPosition = photoToRender.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
     const positions = getLabelPositions(labelMarginVertical, labelMarginHorizontal);
     const positionConfig = positions[currentLabelPosition] || positions['left-top'];
 
@@ -235,7 +319,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
       >
         <Image
           ref={imageRef}
-          source={{ uri: photo.uri }}
+          source={{ uri: photoToRender.uri }}
           style={styles.image}
           resizeMode="contain"
           onLoad={(event) => {
@@ -245,9 +329,9 @@ export default function PhotoDetailScreen({ route, navigation }) {
           }}
         />
         {/* Show label overlay for before/after photos if showLabels is true */}
-        {showLabels && photo.mode && (
+        {showLabels && photoToRender.mode && (
           <PhotoLabel
-            label={photo.mode.toUpperCase()}
+            label={photoToRender.mode.toUpperCase()}
             position={currentLabelPosition}
             style={getLabelStyle()}
           />
@@ -271,12 +355,12 @@ export default function PhotoDetailScreen({ route, navigation }) {
         </TouchableOpacity>
 
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>{photo.name}</Text>
+          <Text style={styles.title}>{currentPhoto.name}</Text>
           <Text style={[
             styles.mode,
-            { color: photo.mode === 'before' ? '#4CAF50' : '#2196F3' }
+            { color: currentPhoto.mode === 'before' ? '#4CAF50' : '#2196F3' }
           ]}>
-            {photo.mode.toUpperCase()}
+            {currentPhoto.mode.toUpperCase()}
           </Text>
         </View>
 
@@ -285,10 +369,31 @@ export default function PhotoDetailScreen({ route, navigation }) {
         </TouchableOpacity>
       </View>
 
-      {renderPhoto()}
+      {allPhotos.length > 1 ? (
+        <ScrollView
+          ref={scrollViewRef}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          snapToInterval={width}
+          decelerationRate="fast"
+          scrollEventThrottle={16}
+          onMomentumScrollEnd={handleScroll}
+          directionalLockEnabled={true}
+          bounces={false}
+        >
+          {allPhotos.map((photoItem, index) => (
+            <View key={photoItem.id} style={{ width, height: height - 200 }}>
+              {renderPhoto(photoItem)}
+            </View>
+          ))}
+        </ScrollView>
+      ) : (
+        renderPhoto()
+      )}
 
       {/* Hidden capture view - exact image size, no white padding */}
-      {(showLabels || shouldShowWatermark) && photo.mode && captureDimensions && (
+      {(showLabels || shouldShowWatermark) && currentPhoto.mode && captureDimensions && (
         <View
           ref={captureViewRef}
           style={{
@@ -304,7 +409,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
           collapsable={false}
         >
           <Image
-            source={{ uri: photo.uri }}
+            source={{ uri: currentPhoto.uri }}
             style={{ width: '100%', height: '100%' }}
             resizeMode="cover"
           />
@@ -317,7 +422,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
             const scaleFactor = referenceWidth / screenWidth;
 
             // Get position for the capture view
-            const currentLabelPosition = photo.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
+            const currentLabelPosition = currentPhoto.mode === 'before' ? beforeLabelPosition : afterLabelPosition;
             const capturePositions = getLabelPositions(labelMarginVertical, labelMarginHorizontal);
             const capturePositionConfig = capturePositions[currentLabelPosition] || capturePositions['left-top'];
 
@@ -347,7 +452,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
               <>
                 {showLabels && (
                   <PhotoLabel
-                    label={photo.mode.toUpperCase()}
+                    label={currentPhoto.mode.toUpperCase()}
                     position={currentLabelPosition}
                     style={{
                       ...capturePositionStyle,

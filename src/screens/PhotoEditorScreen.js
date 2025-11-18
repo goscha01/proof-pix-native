@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -40,7 +40,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   const [saving, setSaving] = useState(false);
   const combinedRef = useRef(null);
   const templateScrollRef = useRef(null);
-  const { getUnpairedBeforePhotos } = usePhotos();
+  const { getUnpairedBeforePhotos, getBeforePhotos, getAfterPhotos, activeProjectId } = usePhotos();
   const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, combinedLabelPosition, labelMarginVertical, labelMarginHorizontal } = useSettings();
   
   // Debug: Log showLabels value
@@ -141,18 +141,64 @@ export default function PhotoEditorScreen({ route, navigation }) {
     })();
   }, [beforePhoto]);
 
+  // Get all photo sets for navigation
+  const getAllPhotoSets = useMemo(() => {
+    const beforePhotos = getBeforePhotos();
+    const afterPhotos = getAfterPhotos();
+    const sets = {};
+    
+    beforePhotos.forEach(photo => {
+      sets[photo.id] = {
+        before: photo,
+        after: null
+      };
+    });
+    
+    afterPhotos.forEach(photo => {
+      if (photo.beforePhotoId && sets[photo.beforePhotoId]) {
+        sets[photo.beforePhotoId].after = photo;
+      }
+    });
+    
+    return Object.values(sets).filter(set => set.before && set.after);
+  }, [getBeforePhotos, getAfterPhotos, activeProjectId]);
+
+  // Find current photo set index
+  const currentPhotoSetIndex = useMemo(() => {
+    return getAllPhotoSets.findIndex(set => set.before.id === beforePhoto.id);
+  }, [getAllPhotoSets, beforePhoto.id]);
+
   // PanResponder for swipe gestures
   const handleSwipeChangeTemplate = (direction) => {
     const templates = getAvailableTemplates();
     const currentIndex = templates.findIndex(([key]) => key === templateTypeRef.current);
-    if (direction === 'left' && currentIndex < templates.length - 1) {
-      // Swipe left - next template
-      const nextTemplate = templates[currentIndex + 1][0];
-      setTemplateType(nextTemplate);
-    } else if (direction === 'right' && currentIndex > 0) {
-      // Swipe right - previous template
-      const prevTemplate = templates[currentIndex - 1][0];
-      setTemplateType(prevTemplate);
+    
+    if (direction === 'left') {
+      if (currentIndex < templates.length - 1) {
+        // Swipe left - next template
+        const nextTemplate = templates[currentIndex + 1][0];
+        setTemplateType(nextTemplate);
+      } else if (currentPhotoSetIndex >= 0 && currentPhotoSetIndex < getAllPhotoSets.length - 1) {
+        // On last template, navigate to next photo set
+        const nextPhotoSet = getAllPhotoSets[currentPhotoSetIndex + 1];
+        navigation.replace('PhotoEditor', {
+          beforePhoto: nextPhotoSet.before,
+          afterPhoto: nextPhotoSet.after
+        });
+      }
+    } else if (direction === 'right') {
+      if (currentIndex > 0) {
+        // Swipe right - previous template
+        const prevTemplate = templates[currentIndex - 1][0];
+        setTemplateType(prevTemplate);
+      } else if (currentPhotoSetIndex > 0) {
+        // On first template, navigate to previous photo set
+        const prevPhotoSet = getAllPhotoSets[currentPhotoSetIndex - 1];
+        navigation.replace('PhotoEditor', {
+          beforePhoto: prevPhotoSet.before,
+          afterPhoto: prevPhotoSet.after
+        });
+      }
     }
   };
 
