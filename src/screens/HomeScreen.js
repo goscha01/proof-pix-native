@@ -1107,8 +1107,8 @@ export default function HomeScreen({ navigation }) {
             <Text style={styles.tierName}>({userPlan.charAt(0).toUpperCase() + userPlan.slice(1)})</Text>
         </View>
         <View style={styles.headerRight}>
-            <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('VisionCameraTest')}>
-                <Text style={styles.iconText}>📷</Text>
+            <TouchableOpacity style={styles.iconButton} onPress={() => setOpenProjectVisible(true)}>
+                <Text style={styles.iconText}>📤</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Gallery', { openManage: true })}>
                 <Text style={styles.iconText}>🗂️</Text>

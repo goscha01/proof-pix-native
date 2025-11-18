@@ -286,19 +286,60 @@ class GoogleAuthService {
    */
   async signOutAndRevoke() {
     this.checkAvailability();
+    
+    // Check if user is signed in before attempting revoke
+    let isSignedIn = false;
     try {
-      await GoogleSignin.revokeAccess();
+      const currentUser = await GoogleSignin.getCurrentUser();
+      isSignedIn = currentUser !== null;
+    } catch (error) {
+      console.log('[AUTH] Could not check sign-in status:', error.message);
+    }
+    
+    // Try to revoke access if user is signed in
+    if (isSignedIn) {
+      try {
+        await GoogleSignin.revokeAccess();
+        console.log('[AUTH] Successfully revoked access');
+      } catch (revokeError) {
+        // Handle 400 errors gracefully - they often mean token is already invalid/expired
+        // Error format on iOS: Error Domain=com.google.HTTPStatus Code=400
+        const errorCode = revokeError?.code;
+        const errorDomain = revokeError?.domain;
+        const errorMessage = revokeError?.message || '';
+        const errorString = String(revokeError);
+        
+        // Check for 400 error in various formats
+        const is400Error = errorCode === 400 || 
+                          errorDomain === 'com.google.HTTPStatus' ||
+                          errorMessage.includes('Code=400') ||
+                          errorMessage.includes('HTTPStatus Code=400') ||
+                          errorString.includes('Code=400') ||
+                          errorString.includes('HTTPStatus Code=400');
+        
+        if (is400Error) {
+          console.warn('[AUTH] Revoke access returned 400 (token may already be invalid/expired). Continuing with sign out...');
+        } else {
+          console.warn('[AUTH] Failed to revoke access (non-critical):', errorMessage || errorString);
+        }
+        // Continue with sign out even if revoke fails - revoke is not critical for sign out
+      }
+    } else {
+      console.log('[AUTH] User not signed in, skipping revoke');
+    }
+    
+    // Always attempt to sign out and clear user info
+    try {
       await GoogleSignin.signOut();
       await this.clearUserInfo();
-      console.log('[AUTH] Signed out and revoked all permissions');
-    } catch (error) {
-      console.error('Error during sign out and revoke:', error);
-      // Try to sign out anyway
+      console.log('[AUTH] Signed out successfully');
+    } catch (signOutError) {
+      console.error('[AUTH] Sign out failed:', signOutError);
+      // Still try to clear user info
       try {
-        await GoogleSignin.signOut();
         await this.clearUserInfo();
-      } catch (signOutError) {
-        console.error('Fallback signOut failed:', signOutError);
+      } catch (clearError) {
+        console.error('[AUTH] Failed to clear user info:', clearError);
       }
       throw new Error('Failed to sign out completely.');
     }

@@ -54,10 +54,9 @@ import {
 } from '../services/labelCacheService';
 
 const { width } = Dimensions.get('window');
-const SET_NAME_WIDTH = 80;
 const CONTAINER_PADDING = 32; // 16px on each side
 const PHOTO_SPACING = 16; // 8px between each of the 2 gaps
-const AVAILABLE_WIDTH = width - SET_NAME_WIDTH - CONTAINER_PADDING - PHOTO_SPACING;
+const AVAILABLE_WIDTH = width - CONTAINER_PADDING - PHOTO_SPACING;
 const COLUMN_WIDTH = AVAILABLE_WIDTH / 3;
 
 export default function GalleryScreen({ navigation, route }) {
@@ -95,6 +94,7 @@ export default function GalleryScreen({ navigation, route }) {
     labelLanguage,
     sectionLanguage,
     cleaningServiceEnabled,
+    getRooms,
   } = useSettings();
   const { userMode, teamInfo, isAuthenticated, folderId, proxySessionId, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
@@ -104,6 +104,25 @@ export default function GalleryScreen({ navigation, route }) {
   const [capturingPhoto, setCapturingPhoto] = useState(null); // Photo being captured with label
   const labelCaptureRef = useRef(null); // Ref for label capture view
   const [uploading, setUploading] = useState(false);
+  const [isSelectionMode, setIsSelectionMode] = useState(false);
+  const [selectedPhotos, setSelectedPhotos] = useState(new Set());
+  const [showOnlySelected, setShowOnlySelected] = useState(false); // Filter to show only selected photos
+  const [photoFilter, setPhotoFilter] = useState('all'); // Filter: 'all', 'before', 'after', 'combined'
+  
+  // Refs for double tap detection
+  const tapCountRef = useRef({});
+  const lastTapRef = useRef({});
+  const originalSelectionStateRef = useRef({}); // Store original selection state before first tap
+  const toggleTimeoutRef = useRef({}); // Store timeout IDs for delayed toggles
+  const pendingTogglesRef = useRef(new Set()); // Track photos with pending toggles to prevent visual update
+  
+  // Ref to track selection mode for immediate access in handlers
+  const isSelectionModeRef = useRef(false);
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    isSelectionModeRef.current = isSelectionMode;
+  }, [isSelectionMode]);
   
   // Effect to handle label capture when capturingPhoto state changes
   useEffect(() => {
@@ -198,6 +217,8 @@ export default function GalleryScreen({ navigation, route }) {
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [manageVisible, setManageVisible] = useState(false);
   const [shareOptionsVisible, setShareOptionsVisible] = useState(false);
+  const [uploadSelectedPhotos, setUploadSelectedPhotos] = useState(null); // Store selected photos for upload
+  const [shareSelectedPhotos, setShareSelectedPhotos] = useState(null); // Store selected photos for share
 
   // Cleanup old cache on screen focus (runs periodically)
   useFocusEffect(
@@ -324,12 +345,46 @@ export default function GalleryScreen({ navigation, route }) {
     longPressTriggered.current = false;
     longPressTimer.current = setTimeout(() => {
       longPressTriggered.current = true;
-      if (photoSet) {
-        // Show combined preview with both photos
-        setFullScreenPhotoSet(photoSet);
+      
+      // If in selection mode, just toggle selection and don't show preview
+      // Use a ref or check state directly to avoid closure issues
+      const currentMode = isSelectionMode;
+      if (currentMode) {
+        if (photo) {
+          setSelectedPhotos(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(photo.id)) {
+              newSet.delete(photo.id);
+            } else {
+              newSet.add(photo.id);
+            }
+            return newSet;
+          });
+        } else if (photoSet && photoSet.before) {
+          const combinedId = `combined_${photoSet.before.id}`;
+          setSelectedPhotos(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(combinedId)) {
+              newSet.delete(combinedId);
+            } else {
+              newSet.add(combinedId);
+            }
+            return newSet;
+          });
+        }
       } else {
-        // Show single photo
-        setFullScreenPhoto(photo);
+        // Not in selection mode - enter selection mode (don't show preview)
+        // Update ref immediately so handlers can access it right away
+        isSelectionModeRef.current = true;
+        setIsSelectionMode(true);
+        // If a photo was long-pressed, select it
+        if (photo) {
+          setSelectedPhotos(new Set([photo.id]));
+        } else if (photoSet && photoSet.before) {
+          const combinedId = `combined_${photoSet.before.id}`;
+          setSelectedPhotos(new Set([combinedId]));
+        }
+        // Don't show preview when entering selection mode via long press
       }
     }, 300);
   };
@@ -466,7 +521,18 @@ export default function GalleryScreen({ navigation, route }) {
     setShareOptionsVisible(false); // Close the modal immediately
     // Don't set sharing to true yet - we'll show it when we start preparing
     
-    const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+    // Check if we're sharing selected photos
+    let sourcePhotos;
+    if (shareSelectedPhotos) {
+      // Use selected photos
+      sourcePhotos = shareSelectedPhotos.individual;
+      // Reset the selected photos flag after using it
+      setShareSelectedPhotos(null);
+    } else {
+      // Use all photos from project
+      sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+    }
+    
     if (sourcePhotos.length === 0) {
         Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
         setSharing(false);
@@ -1115,7 +1181,18 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const handleShareProject = async () => {
-    const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+    // Check if we're sharing selected photos
+    let sourcePhotos;
+    if (shareSelectedPhotos) {
+      // Use selected photos
+      sourcePhotos = shareSelectedPhotos.individual;
+      // Reset the selected photos flag after using it
+      setShareSelectedPhotos(null);
+    } else {
+      // Use all photos from project
+      sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+    }
+    
     if (sourcePhotos.length === 0) {
       Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
       return;
@@ -1306,7 +1383,17 @@ export default function GalleryScreen({ navigation, route }) {
 
       if (userMode === 'team_member') {
         // Team Member Upload Logic (same as Pro/Business/Enterprise)
-        const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+        // Check if we're uploading selected photos
+        let sourcePhotos;
+        if (uploadSelectedPhotos) {
+          // Use selected photos
+          sourcePhotos = uploadSelectedPhotos.individual;
+          // Reset the selected photos flag after using it
+          setUploadSelectedPhotos(null);
+        } else {
+          // Use all photos from project
+          sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+        }
 
         // Build the list based on selected types (before/after)
         const items = sourcePhotos.filter(p =>
@@ -1581,8 +1668,17 @@ export default function GalleryScreen({ navigation, route }) {
       const activeProject = activeProjectId ? projects.find(p => p.id === activeProjectId) : null;
       const projectUploadId = activeProject?.uploadId || null;
       const albumName = createAlbumName(userName, new Date(), projectUploadId);
-      // Scope uploads to the active project if one is selected
-      const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+      // Scope uploads to the active project if one is selected, or use selected photos
+      let sourcePhotos;
+      if (uploadSelectedPhotos) {
+        // Use selected photos
+        sourcePhotos = uploadSelectedPhotos.individual;
+        // Reset the selected photos flag after using it
+        setUploadSelectedPhotos(null);
+      } else {
+        // Use all photos from project
+        sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+      }
 
       // Build the list based on selected types (before/after)
       const items = sourcePhotos.filter(p =>
@@ -1964,6 +2060,161 @@ export default function GalleryScreen({ navigation, route }) {
     }
   };
 
+  // Get selected photos (individual and combined)
+  const getSelectedPhotos = () => {
+    const selected = [];
+    if (!getRooms || typeof getRooms !== 'function') {
+      console.warn('[GalleryScreen] getRooms is not available');
+      return selected;
+    }
+    const rooms = getRooms();
+    if (!rooms || !Array.isArray(rooms)) {
+      console.warn('[GalleryScreen] getRooms returned invalid data');
+      return selected;
+    }
+    
+    rooms.forEach(room => {
+      const sets = getPhotoSets(room.id);
+      sets.forEach(set => {
+        // Check individual photos
+        if (set.before && selectedPhotos.has(set.before.id)) {
+          selected.push(set.before);
+        }
+        if (set.after && selectedPhotos.has(set.after.id)) {
+          selected.push(set.after);
+        }
+        // Check combined photo
+        const combinedId = `combined_${set.before.id}`;
+        if (selectedPhotos.has(combinedId)) {
+          // For combined, we'll handle it separately
+        }
+      });
+    });
+    
+    return selected;
+  };
+
+  // Get selected photo sets (for combined photos)
+  const getSelectedPhotoSets = () => {
+    const selected = [];
+    if (!getRooms || typeof getRooms !== 'function') {
+      console.warn('[GalleryScreen] getRooms is not available');
+      return selected;
+    }
+    const rooms = getRooms();
+    if (!rooms || !Array.isArray(rooms)) {
+      console.warn('[GalleryScreen] getRooms returned invalid data');
+      return selected;
+    }
+    
+    rooms.forEach(room => {
+      const sets = getPhotoSets(room.id);
+      sets.forEach(set => {
+        const combinedId = `combined_${set.before.id}`;
+        if (selectedPhotos.has(combinedId)) {
+          selected.push(set);
+        }
+      });
+    });
+    
+    return selected;
+  };
+
+  // Handle upload selected photos
+  const handleUploadSelected = async () => {
+    const selected = getSelectedPhotos();
+    const selectedSets = getSelectedPhotoSets();
+    
+    if (selected.length === 0 && selectedSets.length === 0) {
+      Alert.alert(t('gallery.noPhotosTitle'), 'No photos selected');
+      return;
+    }
+
+    // Use the same upload logic but with filtered photos
+    // For now, we'll use the existing handleUploadPhotos but filter the photos
+    // This is a simplified approach - you may need to adjust based on your upload logic
+    setManageVisible(false);
+    // TODO: Implement upload for selected photos
+    Alert.alert('Info', 'Upload selected photos functionality will be implemented');
+  };
+
+  // Handle share selected photos
+  const handleShareSelected = async () => {
+    const selected = getSelectedPhotos();
+    const selectedSets = getSelectedPhotoSets();
+    
+    if (selected.length === 0 && selectedSets.length === 0) {
+      Alert.alert(t('gallery.noPhotosTitle'), 'No photos selected');
+      return;
+    }
+
+    // Store selected photos for share logic to use
+    setShareSelectedPhotos({ individual: selected, sets: selectedSets });
+    setManageVisible(false);
+    
+    // Use the same share flow but with selected photos
+    // The share logic will check shareSelectedPhotos and use it instead of all photos
+    await handleShareProject();
+  };
+
+  // Handle delete selected photos
+  const handleDeleteSelected = async () => {
+    const selected = getSelectedPhotos();
+    const selectedSets = getSelectedPhotoSets();
+    
+    if (selected.length === 0 && selectedSets.length === 0) {
+      Alert.alert(t('gallery.noPhotosTitle'), 'No photos selected');
+      return;
+    }
+
+    Alert.alert(
+      t('gallery.deleteAllTitle'),
+      `Delete ${selected.length + selectedSets.length} selected photo(s)?`,
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Delete individual photos
+              for (const photo of selected) {
+                await deletePhoto(photo.id);
+              }
+              // Delete combined photo sets
+              for (const set of selectedSets) {
+                if (set.before) await deletePhoto(set.before.id);
+                if (set.after) await deletePhoto(set.after.id);
+              }
+              // Clear selection
+              setSelectedPhotos(new Set());
+              isSelectionModeRef.current = false;
+              setIsSelectionMode(false);
+              setShowOnlySelected(false); // Clear filter when deleting selected
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete some photos');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Handle preview selected photos - filter gallery to show only selected photos
+  const handlePreviewSelected = () => {
+    const selected = getSelectedPhotos();
+    const selectedSets = getSelectedPhotoSets();
+    
+    if (selected.length === 0 && selectedSets.length === 0) {
+      Alert.alert(t('gallery.noPhotosTitle'), 'No photos selected');
+      return;
+    }
+
+    setManageVisible(false);
+    // Filter gallery to show only selected photos (same gallery view, just filtered)
+    setShowOnlySelected(true);
+  };
+
   // Group photos by room and create photo sets
   // Combined photos are created dynamically, not saved
   const getPhotoSets = (roomId) => {
@@ -1998,7 +2249,7 @@ export default function GalleryScreen({ navigation, route }) {
     </View>
   );
 
-  const renderPhotoCard = (photo, borderColor, photoType, photoSet, isLast = false) => {
+  const renderPhotoCard = (photo, borderColor, photoType, photoSet, isLast, currentSelectionMode, currentSelectedPhotos) => {
     // For combined thumbnail, show split preview based on phone orientation OR camera view mode - tap to retake after
     if (photoType === 'combined' && !photo && photoSet.before && photoSet.after) {
       const phoneOrientation = photoSet.before.orientation || 'portrait';
@@ -2010,48 +2261,276 @@ export default function GalleryScreen({ navigation, route }) {
       // For thumbnails, both should be stacked to fit the square aspect ratio.
       const useStackedLayout = isTrueLandscape || isLetterbox;
 
+      const combinedId = `combined_${photoSet.before.id}`;
+      const isSelected = currentSelectionMode && currentSelectedPhotos.has(combinedId);
+
+      const handleCombinedPress = () => {
+        // Always check selection mode state directly using ref to prevent race conditions
+        // This ensures we get the latest value even if component hasn't re-rendered yet
+        const inSelectionMode = isSelectionModeRef.current || isSelectionMode || currentSelectionMode;
+        
+        // Only block taps if we're NOT in selection mode and a long press was triggered
+        // In selection mode, we want taps to work for selection/double-tap preview
+        if (!inSelectionMode && longPressTriggered.current) return;
+        
+        if (inSelectionMode) {
+          // In selection mode: detect double tap
+          const photoKey = combinedId;
+          const now = Date.now();
+          const DOUBLE_TAP_DELAY = 300; // 300ms window for double tap
+          
+        // Check if this is a double tap (second tap within 300ms)
+        if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
+          console.log('[GalleryScreen] Double tap detected for combined photo:', combinedId);
+          // Double tap detected - cancel any pending toggle and open preview
+          // Cancel the pending toggle from first tap
+          if (toggleTimeoutRef.current[photoKey]) {
+            clearTimeout(toggleTimeoutRef.current[photoKey]);
+            delete toggleTimeoutRef.current[photoKey];
+          }
+          
+          const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
+          console.log('[GalleryScreen] Original selection state:', wasOriginallySelected);
+          
+          // Get the original state for navigation (don't change state, just use original)
+          const restoredSelected = new Set(currentSelectedPhotos);
+          // Make sure the photo is in the correct state for navigation
+          if (wasOriginallySelected) {
+            restoredSelected.add(combinedId);
+          } else {
+            restoredSelected.delete(combinedId);
+          }
+          
+          // Clean up
+          tapCountRef.current[photoKey] = 0;
+          lastTapRef.current[photoKey] = 0;
+          delete originalSelectionStateRef.current[photoKey];
+          pendingTogglesRef.current.delete(combinedId);
+          
+          // Get all selected combined photo sets for swiping
+          const selectedSets = getSelectedPhotoSets();
+          console.log('[GalleryScreen] Navigating to PhotoEditor with', selectedSets.length, 'selected sets');
+          
+          // Navigate immediately (no state change needed, checkbox stays as is)
+          navigation.navigate('PhotoEditor', {
+            beforePhoto: photoSet.before,
+            afterPhoto: photoSet.after,
+            isSelectionMode: isSelectionModeRef.current || isSelectionMode,
+            selectedPhotos: Array.from(restoredSelected),
+            allPhotoSets: selectedSets,
+            onSelectionChange: (newSelectedPhotos) => {
+              setSelectedPhotos(new Set(newSelectedPhotos));
+            }
+          });
+          return;
+        }
+        
+        // First tap - store original state, don't toggle yet
+        const wasOriginallySelected = currentSelectedPhotos.has(combinedId);
+        originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
+        
+        // Record tap for double tap detection
+        tapCountRef.current[photoKey] = 1;
+        lastTapRef.current[photoKey] = now;
+        
+        // Schedule toggle after delay (only if no second tap comes)
+        toggleTimeoutRef.current[photoKey] = setTimeout(() => {
+          // Only toggle if this wasn't a double tap (tapCount is still 1)
+          if (tapCountRef.current[photoKey] === 1) {
+            setSelectedPhotos(prev => {
+              const newSet = new Set(prev);
+              if (newSet.has(combinedId)) {
+                newSet.delete(combinedId);
+              } else {
+                newSet.add(combinedId);
+              }
+              return newSet;
+            });
+          }
+          
+          // Clear tap count after delay
+          tapCountRef.current[photoKey] = 0;
+          lastTapRef.current[photoKey] = 0;
+          delete originalSelectionStateRef.current[photoKey];
+          delete toggleTimeoutRef.current[photoKey];
+          pendingTogglesRef.current.delete(combinedId);
+        }, DOUBLE_TAP_DELAY); // Wait full delay to confirm it's a single tap
+        return;
+      }
+      
+      // Not in selection mode: single tap opens preview
+        navigation.navigate('PhotoEditor', {
+          beforePhoto: photoSet.before,
+          afterPhoto: photoSet.after
+        });
+      };
+
       return (
         <TouchableOpacity
-          key={photoType}
-          style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast]}
-          onPress={() => {
-            if (longPressTriggered.current) return;
-            navigation.navigate('PhotoEditor', {
-              beforePhoto: photoSet.before,
-              afterPhoto: photoSet.after
-            });
-          }}
+          style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast, isSelected && styles.photoCardSelected]}
+          onPress={handleCombinedPress}
           onLongPress={() => handleLongPressStart(null, photoSet)}
         >
           <View style={[styles.combinedThumbnail, useStackedLayout ? styles.stackedThumbnail : styles.sideBySideThumbnail]}>
             <Image source={{ uri: photoSet.before.uri }} style={styles.halfImage} resizeMode="cover" />
             <Image source={{ uri: photoSet.after.uri }} style={styles.halfImage} resizeMode="cover" />
           </View>
+          
+          {/* Checkbox overlay - only show in selection mode */}
+          {currentSelectionMode && (
+            <View style={[styles.photoCheckboxContainer, styles.photoCheckboxGrid, isSelected && styles.photoCheckboxSelected]}>
+              {isSelected && (
+                <Text style={styles.photoCheckmark}>✓</Text>
+              )}
+            </View>
+          )}
+          
+          {/* Mode label */}
+          <View style={[styles.modeLabel, { backgroundColor: borderColor }]}>
+            <Text style={styles.modeLabelText}>
+              {t('camera.combined', { lng: labelLanguage })}
+            </Text>
+          </View>
         </TouchableOpacity>
       );
     }
 
-    if (!photo) return <View key={photoType} style={[styles.photoCard, isLast && styles.photoCardLast]}>{renderDummyCard('—')}</View>;
+    if (!photo) return <View style={[styles.photoCard, isLast && styles.photoCardLast]}>{renderDummyCard('—')}</View>;
+
+    const isSelected = currentSelectionMode && currentSelectedPhotos.has(photo.id);
 
     const handlePress = () => {
-      if (longPressTriggered.current) return;
+      // Always check selection mode state directly using ref to prevent race conditions
+      // This ensures we get the latest value even if component hasn't re-rendered yet
+      const inSelectionMode = isSelectionModeRef.current || isSelectionMode || currentSelectionMode;
       
-      if (photoType === 'combined') {
-        // Combined column - navigate to PhotoEditor to choose format
-        navigation.navigate('PhotoEditor', {
-          beforePhoto: photoSet.before,
-          afterPhoto: photoSet.after
-        });
-      } else {
-        // Before or After column - navigate to PhotoDetailScreen with share button
-        navigation.navigate('PhotoDetail', { photo });
+      // Only block taps if we're NOT in selection mode and a long press was triggered
+      // In selection mode, we want taps to work for selection/double-tap preview
+      if (!inSelectionMode && longPressTriggered.current) return;
+      
+      if (inSelectionMode) {
+        // In selection mode: detect double tap
+        const photoKey = photo.id;
+        const now = Date.now();
+        const DOUBLE_TAP_DELAY = 300; // 300ms window for double tap
+        
+        // Check if this is a double tap (second tap within 300ms)
+        if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
+          console.log('[GalleryScreen] Double tap detected for photo:', photo.id);
+          // Double tap detected - cancel any pending toggle and open preview
+          // Cancel the pending toggle from first tap
+          if (toggleTimeoutRef.current[photoKey]) {
+            clearTimeout(toggleTimeoutRef.current[photoKey]);
+            delete toggleTimeoutRef.current[photoKey];
+          }
+          
+          const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
+          console.log('[GalleryScreen] Original selection state:', wasOriginallySelected);
+          
+          // Get the original state for navigation (don't change state, just use original)
+          const restoredSelected = new Set(currentSelectedPhotos);
+          // Make sure the photo is in the correct state for navigation
+          if (wasOriginallySelected) {
+            restoredSelected.add(photo.id);
+          } else {
+            restoredSelected.delete(photo.id);
+          }
+          
+          // Clean up
+          tapCountRef.current[photoKey] = 0;
+          lastTapRef.current[photoKey] = 0;
+          delete originalSelectionStateRef.current[photoKey];
+          pendingTogglesRef.current.delete(photo.id);
+          
+          // Navigate immediately (no state change needed, checkbox stays as is)
+          if (photoType === 'combined') {
+            // Get all selected combined photo sets for swiping
+            const selectedSets = getSelectedPhotoSets();
+            console.log('[GalleryScreen] Navigating to PhotoEditor with', selectedSets.length, 'selected sets');
+            navigation.navigate('PhotoEditor', {
+              beforePhoto: photoSet.before,
+              afterPhoto: photoSet.after,
+              isSelectionMode: isSelectionModeRef.current || isSelectionMode,
+              selectedPhotos: Array.from(restoredSelected),
+              allPhotoSets: selectedSets,
+              onSelectionChange: (newSelectedPhotos) => {
+                setSelectedPhotos(new Set(newSelectedPhotos));
+              }
+            });
+          } else {
+            // Get all selected individual photos for swiping
+            const selected = getSelectedPhotos();
+            console.log('[GalleryScreen] Navigating to PhotoDetail with', selected.length, 'selected photos');
+            navigation.navigate('PhotoDetail', { 
+              photo,
+              isSelectionMode: isSelectionModeRef.current || isSelectionMode,
+              selectedPhotos: Array.from(restoredSelected),
+              allPhotos: selected,
+              onSelectionChange: (newSelectedPhotos) => {
+                setSelectedPhotos(new Set(newSelectedPhotos));
+              }
+            });
+          }
+          return;
+        }
+        
+        // First tap - store original state, don't toggle yet
+        const wasOriginallySelected = currentSelectedPhotos.has(photo.id);
+        originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
+        
+        // Record tap for double tap detection
+        tapCountRef.current[photoKey] = 1;
+        lastTapRef.current[photoKey] = now;
+        
+        // Schedule toggle after delay (only if no second tap comes)
+        toggleTimeoutRef.current[photoKey] = setTimeout(() => {
+          // Only toggle if this wasn't a double tap (tapCount is still 1)
+          if (tapCountRef.current[photoKey] === 1) {
+            setSelectedPhotos(prev => {
+              const newSet = new Set(prev);
+              if (newSet.has(photo.id)) {
+                newSet.delete(photo.id);
+              } else {
+                newSet.add(photo.id);
+              }
+              return newSet;
+            });
+          }
+          
+          // Clear tap count after delay
+          tapCountRef.current[photoKey] = 0;
+          lastTapRef.current[photoKey] = 0;
+          delete originalSelectionStateRef.current[photoKey];
+          delete toggleTimeoutRef.current[photoKey];
+          pendingTogglesRef.current.delete(photo.id);
+        }, DOUBLE_TAP_DELAY); // Wait full delay to confirm it's a single tap
+        return;
       }
+      
+        // Not in selection mode: single tap opens preview
+        if (photoType === 'combined') {
+          // Combined column - navigate to PhotoEditor to choose format
+          navigation.navigate('PhotoEditor', {
+            beforePhoto: photoSet.before,
+            afterPhoto: photoSet.after,
+            isSelectionMode: false,
+            selectedPhotos: [],
+            onSelectionChange: () => {}
+          });
+        } else {
+          // Before or After column - navigate to PhotoDetailScreen with share button
+          navigation.navigate('PhotoDetail', { 
+            photo,
+            isSelectionMode: false,
+            selectedPhotos: [],
+            onSelectionChange: () => {}
+          });
+        }
     };
 
     return (
       <TouchableOpacity
-        key={photoType}
-        style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast]}
+        style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast, isSelected && styles.photoCardSelected]}
         onPress={handlePress}
         onLongPress={() => handleLongPressStart(photo, photoType === 'combined' ? photoSet : null)}
       >
@@ -2061,38 +2540,218 @@ export default function GalleryScreen({ navigation, route }) {
           orientation={photo.orientation || photoSet.before?.orientation || 'portrait'}
           size={COLUMN_WIDTH}
         />
+        
+        {/* Checkbox overlay - only show in selection mode */}
+        {currentSelectionMode && (
+          <View style={[styles.photoCheckboxContainer, styles.photoCheckboxGrid, isSelected && styles.photoCheckboxSelected]}>
+            {isSelected && (
+              <Text style={styles.photoCheckmark}>✓</Text>
+            )}
+          </View>
+        )}
+        
+        {/* Mode label */}
+        <View style={[styles.modeLabel, { backgroundColor: borderColor }]}>
+          <Text style={styles.modeLabelText}>
+            {photoType === 'before'
+              ? t('camera.before', { lng: labelLanguage })
+              : photoType === 'after'
+              ? t('camera.after', { lng: labelLanguage })
+              : t('camera.combined', { lng: labelLanguage })}
+          </Text>
+        </View>
       </TouchableOpacity>
     );
   };
 
   const renderPhotoSet = (set, index, roomId) => {
-    const roomDisplayName = t(`rooms.${roomId}`, {
-      lng: sectionLanguage,
-      defaultValue: roomId,
-    });
-
+    // Pass current state values to renderPhotoCard to avoid closure issues
+    // Apply filter based on photoFilter state
+    const showBefore = photoFilter === 'all' || photoFilter === 'before';
+    const showAfter = photoFilter === 'all' || photoFilter === 'after';
+    const showCombined = photoFilter === 'all' || photoFilter === 'combined';
+    
     return (
       <View key={index} style={styles.photoSetRow}>
-        <View style={styles.setNameContainer}>
-          <Text style={styles.setName}>
-            {cleaningServiceEnabled
-              ? `${roomDisplayName} ${index + 1}`
-              : `${t('settings.section', { lng: sectionLanguage })} ${index + 1}`}
-          </Text>
-        </View>
         <View style={styles.threeColumnRow}>
-          {renderPhotoCard(set.before, '#4CAF50', 'before', set, false)}
-          {renderPhotoCard(set.after, '#2196F3', 'after', set, false)}
-          {renderPhotoCard(set.combined, '#FFC107', 'combined', set, true)}
+          {showBefore && renderPhotoCard(set.before, '#4CAF50', 'before', set, false, isSelectionMode, selectedPhotos)}
+          {showAfter && renderPhotoCard(set.after, '#2196F3', 'after', set, false, isSelectionMode, selectedPhotos)}
+          {showCombined && renderPhotoCard(set.combined, '#FFC107', 'combined', set, true, isSelectionMode, selectedPhotos)}
         </View>
       </View>
     );
   };
 
+  // Render photos in rows when filtering by single type
+  const renderFilteredPhotos = (photos, photoType, borderColor) => {
+    const photosPerRow = 3;
+    const rows = [];
+    
+    for (let i = 0; i < photos.length; i += photosPerRow) {
+      const rowPhotos = photos.slice(i, i + photosPerRow);
+      rows.push(
+        <View key={i} style={styles.photoSetRow}>
+          <View style={styles.threeColumnRow}>
+            {rowPhotos.map((photo, idx) => {
+              const photoSet = photo.photoSet || { before: photo, after: null, combined: null };
+              const isLast = idx === rowPhotos.length - 1;
+              // For combined photos, pass null as photo since they're rendered from the set
+              const photoToRender = photoType === 'combined' ? null : photo;
+              // Use unique key: photo ID for individual photos, combined ID for combined photos
+              const uniqueKey = photoType === 'combined' ? `combined_${photoSet.before?.id || idx}` : (photo.id || `photo_${idx}`);
+              return (
+                <View key={uniqueKey}>
+                  {renderPhotoCard(photoToRender, borderColor, photoType, photoSet, isLast, isSelectionMode, selectedPhotos)}
+                </View>
+              );
+            })}
+            {/* Fill remaining slots if row is not full */}
+            {rowPhotos.length < photosPerRow && Array.from({ length: photosPerRow - rowPhotos.length }).map((_, idx) => (
+              <View key={`empty-${idx}`} style={{ width: COLUMN_WIDTH, marginRight: 8 }} />
+            ))}
+          </View>
+        </View>
+      );
+    }
+    
+    return rows;
+  };
+
   const renderRoomSection = (room) => {
-    const sets = getPhotoSets(room.id);
+    let sets = getPhotoSets(room.id);
+    
+    // When in preview selected mode, show only selected thumbnails in rows
+    if (showOnlySelected) {
+      const selectedThumbnails = [];
+      
+      sets.forEach(set => {
+        const combinedId = `combined_${set.before?.id}`;
+        
+        // Add before photo if selected
+        if (set.before && selectedPhotos.has(set.before.id)) {
+          selectedThumbnails.push({
+            ...set.before,
+            photoSet: set,
+            photoType: 'before',
+            borderColor: '#4CAF50'
+          });
+        }
+        
+        // Add after photo if selected
+        if (set.after && selectedPhotos.has(set.after.id)) {
+          selectedThumbnails.push({
+            ...set.after,
+            photoSet: set,
+            photoType: 'after',
+            borderColor: '#2196F3'
+          });
+        }
+        
+        // Add combined photo if selected
+        if (set.before && set.after && selectedPhotos.has(combinedId)) {
+          selectedThumbnails.push({
+            id: combinedId,
+            uri: null,
+            photoSet: set,
+            photoType: 'combined',
+            borderColor: '#FFC107'
+          });
+        }
+      });
+      
+      if (selectedThumbnails.length === 0) return null;
+      
+      // Render selected thumbnails in rows
+      const photosPerRow = 3;
+      const rows = [];
+      
+      for (let i = 0; i < selectedThumbnails.length; i += photosPerRow) {
+        const rowPhotos = selectedThumbnails.slice(i, i + photosPerRow);
+        rows.push(
+          <View key={i} style={styles.photoSetRow}>
+            <View style={styles.threeColumnRow}>
+              {rowPhotos.map((item, idx) => {
+                const isLast = idx === rowPhotos.length - 1;
+                const photoToRender = item.photoType === 'combined' ? null : item;
+                const uniqueKey = item.photoType === 'combined' 
+                  ? `combined_${item.photoSet.before?.id || idx}` 
+                  : (item.id || `photo_${i}_${idx}`);
+                return (
+                  <View key={uniqueKey}>
+                    {renderPhotoCard(photoToRender, item.borderColor, item.photoType, item.photoSet, isLast, isSelectionMode, selectedPhotos)}
+                  </View>
+                );
+              })}
+              {/* Fill remaining slots if row is not full */}
+              {rowPhotos.length < photosPerRow && Array.from({ length: photosPerRow - rowPhotos.length }).map((_, idx) => (
+                <View key={`empty-${idx}`} style={{ width: COLUMN_WIDTH, marginRight: 8 }} />
+              ))}
+            </View>
+          </View>
+        );
+      }
+      
+      return (
+        <View key={room.id} style={styles.roomSection}>
+          <View style={styles.roomHeader}>
+            <Text style={styles.roomIcon}>{room.icon}</Text>
+            <Text style={styles.roomName}>
+              {t(`rooms.${room.id}`, { lng: sectionLanguage, defaultValue: room.name })}
+            </Text>
+          </View>
+          {rows}
+        </View>
+      );
+    }
+    
     if (sets.length === 0) return null;
 
+    // When filtering by a single type, show photos in rows
+    if (photoFilter === 'before' || photoFilter === 'after' || photoFilter === 'combined') {
+      let filteredPhotos = [];
+      let borderColor = '#4CAF50';
+      let photoType = 'before';
+      
+      if (photoFilter === 'before') {
+        filteredPhotos = sets
+          .filter(set => set.before)
+          .map(set => ({ ...set.before, photoSet: set }));
+        borderColor = '#4CAF50';
+        photoType = 'before';
+      } else if (photoFilter === 'after') {
+        filteredPhotos = sets
+          .filter(set => set.after)
+          .map(set => ({ ...set.after, photoSet: set }));
+        borderColor = '#2196F3';
+        photoType = 'after';
+      } else if (photoFilter === 'combined') {
+        filteredPhotos = sets
+          .filter(set => set.before && set.after)
+          .map(set => ({ 
+            id: `combined_${set.before.id}`,
+            uri: null, // Combined photos don't have URIs, they're rendered dynamically
+            photoSet: set 
+          }));
+        borderColor = '#FFC107';
+        photoType = 'combined';
+      }
+      
+      if (filteredPhotos.length === 0) return null;
+      
+      return (
+        <View key={room.id} style={styles.roomSection}>
+          <View style={styles.roomHeader}>
+            <Text style={styles.roomIcon}>{room.icon}</Text>
+            <Text style={styles.roomName}>
+              {t(`rooms.${room.id}`, { lng: sectionLanguage, defaultValue: room.name })}
+            </Text>
+          </View>
+          {renderFilteredPhotos(filteredPhotos, photoType, borderColor)}
+        </View>
+      );
+    }
+
+    // Default: show all columns (before, after, combined)
     return (
       <View key={room.id} style={styles.roomSection}>
         <View style={styles.roomHeader}>
@@ -2141,10 +2800,52 @@ export default function GalleryScreen({ navigation, route }) {
       </View>
 
       {/* Active project name under the title */}
-      <View style={styles.projectNameContainer}>
+      <View style={[styles.projectNameContainer, isSelectionMode && styles.projectNameContainerSelectionMode]}>
         <Text style={styles.projectNameText}>
           {(projects?.find?.(p => p.id === activeProjectId)?.name) || t('gallery.noProjectSelected')}
         </Text>
+        {showOnlySelected && (
+          <TouchableOpacity
+            style={[styles.selectButton, { backgroundColor: '#9E9E9E', marginRight: 10 }]}
+            activeOpacity={0.7}
+            onPress={() => {
+              setShowOnlySelected(false);
+            }}
+          >
+            <Text style={[styles.selectButtonText, { color: 'white' }]}>
+              ✕ Show All
+            </Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={[styles.selectButton, isSelectionMode && styles.selectButtonActive]}
+          activeOpacity={0.7}
+          onPress={() => {
+            if (isSelectionMode) {
+              // Deselect all and exit selection mode
+              // Update ref immediately so handlers can access it right away
+              isSelectionModeRef.current = false;
+              setIsSelectionMode(false);
+              setSelectedPhotos(new Set());
+              setShowOnlySelected(false); // Clear filter when exiting selection mode
+              // Clear long press state
+              if (longPressTimer.current) {
+                clearTimeout(longPressTimer.current);
+                longPressTimer.current = null;
+              }
+              longPressTriggered.current = false;
+            } else {
+              // Enter selection mode
+              // Update ref immediately so handlers can access it right away
+              isSelectionModeRef.current = true;
+              setIsSelectionMode(true);
+            }
+          }}
+        >
+          <Text style={styles.selectButtonText}>
+            {isSelectionMode ? t('common.deselectAll') : t('gallery.selectPhotos')}
+          </Text>
+        </TouchableOpacity>
         <UploadIndicatorLine 
           uploadStatus={uploadStatus}
           onPress={() => setShowUploadDetails(true)}
@@ -2152,16 +2853,42 @@ export default function GalleryScreen({ navigation, route }) {
       </View>
 
       <View style={styles.columnHeaders}>
-        <View style={styles.setNamePlaceholder} />
-        <Text style={[styles.columnHeader, { color: '#4CAF50' }]}>
-          {t('camera.before', { lng: labelLanguage })}
-        </Text>
-        <Text style={[styles.columnHeader, { color: '#2196F3' }]}>
-          {t('camera.after', { lng: labelLanguage })}
-        </Text>
-        <Text style={[styles.columnHeader, { color: '#FFC107', marginRight: 0 }]}>
-          {t('camera.combined', { lng: labelLanguage })}
-        </Text>
+        <TouchableOpacity
+          style={[styles.filterButton, photoFilter === 'all' && styles.filterButtonActive]}
+          onPress={() => setPhotoFilter('all')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, photoFilter === 'all' && styles.filterButtonTextActive]}>
+            {t('common.all', { lng: labelLanguage, defaultValue: 'All' })}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, photoFilter === 'before' && styles.filterButtonActive]}
+          onPress={() => setPhotoFilter('before')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, { color: '#4CAF50' }, photoFilter === 'before' && styles.filterButtonTextActive]}>
+            {t('camera.before', { lng: labelLanguage })}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, photoFilter === 'after' && styles.filterButtonActive]}
+          onPress={() => setPhotoFilter('after')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, { color: '#2196F3' }, photoFilter === 'after' && styles.filterButtonTextActive]}>
+            {t('camera.after', { lng: labelLanguage })}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, photoFilter === 'combined' && styles.filterButtonActive, { marginRight: 0 }]}
+          onPress={() => setPhotoFilter('combined')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, { color: '#FFC107' }, photoFilter === 'combined' && styles.filterButtonTextActive]}>
+            {t('camera.combined', { lng: labelLanguage })}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {photos.length === 0 || !activeProjectId ? (
@@ -2178,7 +2905,7 @@ export default function GalleryScreen({ navigation, route }) {
         </View>
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-          {ROOMS.map(room => renderRoomSection(room))}
+          {(getRooms && typeof getRooms === 'function' ? getRooms() : ROOMS).map(room => renderRoomSection(room))}
         </ScrollView>
       )}
 
@@ -2274,7 +3001,7 @@ export default function GalleryScreen({ navigation, route }) {
       {/* Share Project button at bottom - only show if photos exist and project is selected */}
       {photos.length > 0 && activeProjectId && (
         <TouchableOpacity
-          style={[styles.deleteAllButtonBottom, { backgroundColor: '#F2C31B' }]}
+          style={[styles.deleteAllButtonBottom, { backgroundColor: '#F2C31B', marginTop: 20, marginBottom: 30 }]}
           onPress={() => setManageVisible(true)}
         >
           <Text style={[styles.deleteAllButtonBottomText, { color: '#000' }]}>
@@ -2765,60 +3492,137 @@ export default function GalleryScreen({ navigation, route }) {
               <View style={{ marginTop: 4 }} />
 
               <View style={styles.actionsList}>
-                {/* Upload All (primary) */}
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}
-                  onPress={() => {
-                    setManageVisible(false);
-                    handleUploadPhotos();
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>
-                    📤 {t('gallery.uploadAll')}
-                  </Text>
-                </TouchableOpacity>
+                {selectedPhotos.size > 0 ? (
+                  // Show selected photos actions
+                  <>
+                    {/* Upload Selected (primary) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handleUploadSelected();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>
+                        📤 Upload Selected ({selectedPhotos.size})
+                      </Text>
+                    </TouchableOpacity>
 
-                {/* Share All (light blue) */}
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionWide, styles.actionInfo]}
-                  onPress={() => {
-                    setManageVisible(false);
-                    handleShareProject();
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, styles.actionInfoText]}>
-                    🔗 {t('gallery.shareAll')}
-                  </Text>
-                </TouchableOpacity>
+                    {/* Share Selected (light blue) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionInfo]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handleShareSelected();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionInfoText]}>
+                        🔗 Share Selected ({selectedPhotos.size})
+                      </Text>
+                    </TouchableOpacity>
 
-                {/* Delete All (red) */}
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
-                  onPress={() => {
-                    setManageVisible(false);
-                    // Delete immediately without confirmation
-                    handleDeleteAllConfirmed();
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>
-                    🗑️ {t('gallery.deleteAll')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                    {/* Delete Selected (red) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handleDeleteSelected();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>
+                        🗑️ Delete Selected ({selectedPhotos.size})
+                      </Text>
+                    </TouchableOpacity>
 
-              {/* Select Photos - separated with gap */}
-              <View style={[styles.actionsList, { marginTop: 16 }]}>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionWide, { backgroundColor: '#22A45D' }]}
-                  onPress={() => {
-                    setManageVisible(false);
-                    navigation.navigate('PhotoSelection');
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, { color: 'white' }]}>
-                    ☑️ {t('gallery.selectPhotos')}
-                  </Text>
-                </TouchableOpacity>
+                    {/* Preview Selected */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, { backgroundColor: '#2196F3' }]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handlePreviewSelected();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, { color: 'white' }]}>
+                        👁️ Preview Selected ({selectedPhotos.size})
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Deselect */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, { backgroundColor: '#9E9E9E' }]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        // Clear selection and exit selection mode
+                        setSelectedPhotos(new Set());
+                        isSelectionModeRef.current = false;
+                        setIsSelectionMode(false);
+                        setShowOnlySelected(false); // Clear filter when deselecting
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, { color: 'white' }]}>
+                        ✕ Deselect
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  // Show normal actions when no photos selected
+                  <>
+                    {/* Upload All (primary) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handleUploadPhotos();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>
+                        📤 {t('gallery.uploadAll')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Share All (light blue) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionInfo]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handleShareProject();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionInfoText]}>
+                        🔗 {t('gallery.shareAll')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Delete All (red) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        // Delete immediately without confirmation
+                        handleDeleteAllConfirmed();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>
+                        🗑️ {t('gallery.deleteAll')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Select Photos (green) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, { backgroundColor: '#4CAF50' }]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        // Activate selection mode
+                        isSelectionModeRef.current = true;
+                        setIsSelectionMode(true);
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, { color: 'white' }]}>
+                        ✓ {t('gallery.selectPhotos')}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
 
               <View style={styles.optionsActionsRowCenter}>
@@ -3008,6 +3812,9 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT
   },
   projectNameContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 8,
     marginTop: -6,
@@ -3018,7 +3825,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: COLORS.TEXT,
     opacity: 0.7,
-    fontWeight: '500'
+    fontWeight: '500',
+    flex: 1
+  },
+  selectButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: COLORS.PRIMARY,
+    marginLeft: 12,
+    minWidth: 80,
+    alignItems: 'center'
+  },
+  selectButtonActive: {
+    backgroundColor: '#FF6B6B'
+  },
+  selectButtonText: {
+    color: 'white',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  projectNameContainerSelectionMode: {
+    backgroundColor: '#E8F5E9'
+  },
+  selectionModeIndicator: {
+    fontSize: 10,
+    color: COLORS.PRIMARY,
+    fontWeight: 'bold',
+    marginRight: 8
   },
   uploadButton: {
     width: 40,
@@ -3058,10 +3892,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: 2,
     borderBottomColor: COLORS.BORDER
   },
-  setNamePlaceholder: {
-    width: 80,
-    marginRight: 8
-  },
   columnHeader: {
     flex: 1,
     marginRight: 8,
@@ -3071,6 +3901,36 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     flexShrink: 1,
     numberOfLines: 1
+  },
+  filterButton: {
+    flex: 0,
+    minWidth: 70,
+    marginRight: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0'
+  },
+  filterButtonActive: {
+    backgroundColor: '#E3F2FD',
+    borderColor: '#2196F3',
+    borderWidth: 2
+  },
+  filterButtonText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: COLORS.GRAY,
+    textAlign: 'center',
+    flexShrink: 1,
+    numberOfLines: 1
+  },
+  filterButtonTextActive: {
+    color: '#2196F3',
+    fontWeight: 'bold'
   },
   scrollView: {
     flex: 1
@@ -3103,16 +3963,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 12
   },
-  setNameContainer: {
-    width: 80,
-    marginRight: 8,
-    justifyContent: 'center'
-  },
-  setName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: COLORS.TEXT
-  },
   threeColumnRow: {
     flex: 1,
     flexDirection: 'row',
@@ -3125,7 +3975,8 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     overflow: 'hidden',
     backgroundColor: 'white',
-    marginRight: 8
+    marginRight: 8,
+    position: 'relative'
   },
   cardImage: {
     width: '100%',
@@ -3155,6 +4006,50 @@ const styles = StyleSheet.create({
     flex: 1,
     borderWidth: 1,
     borderColor: COLORS.PRIMARY
+  },
+  modeLabel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    alignItems: 'center'
+  },
+  modeLabelText: {
+    color: 'white',
+    fontSize: 10,
+    fontWeight: 'bold'
+  },
+  photoCheckboxContainer: {
+    width: 28,
+    height: 28,
+    borderRadius: 14, // Fully round
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderWidth: 2,
+    borderColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden' // Ensure it stays round
+  },
+  photoCheckboxGrid: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    zIndex: 10
+  },
+  photoCheckboxSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  photoCheckmark: {
+    color: 'white',
+    fontSize: 18,
+    fontWeight: 'bold'
+  },
+  photoCardSelected: {
+    borderWidth: 4,
+    opacity: 0.8
   },
   dummyCard: {
     width: '100%',

@@ -22,8 +22,6 @@ import HomeScreen from './src/screens/HomeScreen';
 import CameraScreen from './src/screens/CameraScreen';
 import PhotoEditorScreen from './src/screens/PhotoEditorScreen';
 import GalleryScreen from './src/screens/GalleryScreen';
-import PhotoSelectionScreen from './src/screens/PhotoSelectionScreen';
-import SelectedPhotosGalleryScreen from './src/screens/SelectedPhotosGalleryScreen';
 import PhotoDetailScreen from './src/screens/PhotoDetailScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LabelCustomizationScreen from './src/screens/LabelCustomizationScreen';
@@ -81,31 +79,13 @@ function AppNavigator() {
         name="PhotoEditor" 
         component={PhotoEditorScreen}
         options={{
-          presentation: 'fullScreenModal',
-          animation: 'slide_from_bottom'
+          presentation: 'modal',
+          animation: 'fade'
         }}
       />
       <Stack.Screen
         name="Gallery"
         component={GalleryScreen}
-        options={{
-          presentation: 'fullScreenModal',
-          animation: 'slide_from_bottom',
-          animationDuration: 300
-        }}
-      />
-      <Stack.Screen
-        name="PhotoSelection"
-        component={PhotoSelectionScreen}
-        options={{
-          presentation: 'fullScreenModal',
-          animation: 'slide_from_bottom',
-          animationDuration: 300
-        }}
-      />
-      <Stack.Screen
-        name="SelectedPhotosGallery"
-        component={SelectedPhotosGalleryScreen}
         options={{
           presentation: 'fullScreenModal',
           animation: 'slide_from_bottom',

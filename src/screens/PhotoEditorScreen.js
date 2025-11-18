@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from 'react';
+import React, { useRef, useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,8 +9,10 @@ import {
   ActivityIndicator,
   ScrollView,
   PanResponder,
-  Share
+  Share,
+  Dimensions
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { captureRef } from 'react-native-view-shot';
 import * as FileSystem from 'expo-file-system/legacy';
 import { usePhotos } from '../context/PhotoContext';
@@ -21,7 +23,7 @@ import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
 
 export default function PhotoEditorScreen({ route, navigation }) {
-  const { beforePhoto, afterPhoto } = route.params;
+  const { beforePhoto, afterPhoto, isSelectionMode = false, selectedPhotos = [], onSelectionChange, allPhotoSets: providedPhotoSets } = route.params;
 
   // Set default template based on PHONE ORIENTATION or CAMERA VIEW MODE
   // Landscape phone position OR landscape camera view → stacked (horizontal split)
@@ -38,10 +40,62 @@ export default function PhotoEditorScreen({ route, navigation }) {
 
   const [templateType, setTemplateType] = useState(getDefaultTemplate());
   const [saving, setSaving] = useState(false);
+  const [currentPhotoSet, setCurrentPhotoSet] = useState({ before: beforePhoto, after: afterPhoto });
+  const [allPhotoSets, setAllPhotoSets] = useState([]);
+  const [currentPhotoIndex, setCurrentPhotoIndex] = useState(0);
+  
+  // Get selection state for current photo set
+  const getCombinedId = (photoSet) => {
+    return `combined_${photoSet.before.id}`;
+  };
+  
+  // Track selected photos locally
+  const [localSelectedPhotos, setLocalSelectedPhotos] = useState(new Set(selectedPhotos));
+  
+  // Sync with route params when they change
+  useEffect(() => {
+    const newSet = new Set(selectedPhotos);
+    setLocalSelectedPhotos(newSet);
+    const combinedId = getCombinedId(currentPhotoSet);
+    console.log('[PhotoEditorScreen] Selected photos updated:', Array.from(newSet), 'Current combined ID:', combinedId, 'Is selected:', newSet.has(combinedId));
+  }, [selectedPhotos]);
+  
+  // Update selection state when current photo set changes
+  useEffect(() => {
+    if (isSelectionMode) {
+      const combinedId = getCombinedId(currentPhotoSet);
+      const isCurrentlySelected = localSelectedPhotos.has(combinedId);
+      console.log('[PhotoEditorScreen] Current photo set changed:', combinedId, 'Is selected:', isCurrentlySelected);
+    }
+  }, [currentPhotoSet.before.id, isSelectionMode, localSelectedPhotos]);
+  
+  // Get selection state for a specific photo set
+  const getIsSelected = (photoSet) => {
+    return isSelectionMode && localSelectedPhotos.has(getCombinedId(photoSet));
+  };
+  
+  const isSelected = getIsSelected(currentPhotoSet);
+  
+  // Toggle selection for current photo set
+  const toggleSelection = () => {
+    if (!isSelectionMode || !onSelectionChange) return;
+    
+    const combinedId = getCombinedId(currentPhotoSet);
+    const newSelected = new Set(localSelectedPhotos);
+    if (newSelected.has(combinedId)) {
+      newSelected.delete(combinedId);
+    } else {
+      newSelected.add(combinedId);
+    }
+    setLocalSelectedPhotos(newSelected);
+    onSelectionChange(Array.from(newSelected));
+  };
   const combinedRef = useRef(null);
   const templateScrollRef = useRef(null);
-  const { getUnpairedBeforePhotos } = usePhotos();
-  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, combinedLabelPosition, labelMarginVertical, labelMarginHorizontal } = useSettings();
+  const photoScrollRef = useRef(null);
+  const { getUnpairedBeforePhotos, getBeforePhotos, getAfterPhotos, activeProjectId, deletePhoto } = usePhotos();
+  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, combinedLabelPosition, labelMarginVertical, labelMarginHorizontal, getRooms } = useSettings();
+  const { width, height } = Dimensions.get('window');
   
   // Debug: Log showLabels value
   const templateTypeRef = useRef(templateType);
@@ -84,11 +138,11 @@ export default function PhotoEditorScreen({ route, navigation }) {
       try {
         const dir = FileSystem.documentDirectory;
         if (!dir) return;
-        const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
-        const projectId = beforePhoto.projectId;
+        const safeName = (currentPhotoSet.before.name || 'Photo').replace(/\s+/g, '_');
+        const projectId = currentPhotoSet.before.projectId;
         const projectIdSuffix = projectId ? `_P${projectId}` : '';
-        const prefixStack = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
-        const prefixSide = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
+        const prefixStack = `${currentPhotoSet.before.room}_${safeName}_COMBINED_BASE_STACK_`;
+        const prefixSide = `${currentPhotoSet.before.room}_${safeName}_COMBINED_BASE_SIDE_`;
         const entries = await FileSystem.readDirectoryAsync(dir);
         // Helper function to extract timestamp from filename
         const extractTimestamp = (filename) => {
@@ -139,12 +193,120 @@ export default function PhotoEditorScreen({ route, navigation }) {
       } catch (e) {
       }
     })();
-  }, [beforePhoto]);
+  }, [currentPhotoSet]);
 
-  // PanResponder for swipe gestures
+  // Get all photo sets for navigation
+  useEffect(() => {
+    // If photo sets are provided via route params (e.g., from selection mode), use those
+    if (providedPhotoSets && Array.isArray(providedPhotoSets) && providedPhotoSets.length > 0) {
+      setAllPhotoSets(providedPhotoSets);
+      const index = providedPhotoSets.findIndex(set => set.before?.id === beforePhoto.id);
+      if (index >= 0) {
+        setCurrentPhotoIndex(index);
+        setCurrentPhotoSet(providedPhotoSets[index]);
+        console.log('[PhotoEditorScreen] Using provided photo sets:', providedPhotoSets.length, 'Found set at index:', index);
+      } else {
+        setCurrentPhotoIndex(0);
+        setCurrentPhotoSet({ before: beforePhoto, after: afterPhoto });
+        console.log('[PhotoEditorScreen] Photo set not found in provided list, using index 0');
+      }
+      return;
+    }
+
+    // Otherwise, load all photo sets from all rooms
+    if (!getRooms || typeof getRooms !== 'function') {
+      console.warn('[PhotoEditorScreen] getRooms is not available');
+      setAllPhotoSets([{ before: beforePhoto, after: afterPhoto }]);
+      setCurrentPhotoIndex(0);
+      setCurrentPhotoSet({ before: beforePhoto, after: afterPhoto });
+      return;
+    }
+
+    const rooms = getRooms();
+    if (!rooms || !Array.isArray(rooms)) {
+      console.warn('[PhotoEditorScreen] getRooms returned invalid data');
+      setAllPhotoSets([{ before: beforePhoto, after: afterPhoto }]);
+      setCurrentPhotoIndex(0);
+      setCurrentPhotoSet({ before: beforePhoto, after: afterPhoto });
+      return;
+    }
+
+    const sets = {};
+    
+    // Collect photo sets from all rooms
+    rooms.forEach(room => {
+      const beforePhotos = getBeforePhotos(room.id);
+      const afterPhotos = getAfterPhotos(room.id);
+      
+      beforePhotos.forEach(photo => {
+        sets[photo.id] = {
+          before: photo,
+          after: null
+        };
+      });
+      
+      afterPhotos.forEach(photo => {
+        if (photo.beforePhotoId && sets[photo.beforePhotoId]) {
+          sets[photo.beforePhotoId].after = photo;
+        }
+      });
+    });
+    
+    const allSets = Object.values(sets).filter(set => set.before && set.after);
+    setAllPhotoSets(allSets);
+    
+    // Find current photo set index
+    const index = allSets.findIndex(set => set.before.id === beforePhoto.id);
+    if (index >= 0) {
+      setCurrentPhotoIndex(index);
+      setCurrentPhotoSet(allSets[index]);
+    } else {
+      setCurrentPhotoIndex(0);
+      setCurrentPhotoSet({ before: beforePhoto, after: afterPhoto });
+    }
+  }, [beforePhoto, afterPhoto, getBeforePhotos, getAfterPhotos, activeProjectId, getRooms, providedPhotoSets]);
+
+  // Scroll to current photo index when photo sets load
+  useEffect(() => {
+    if (photoScrollRef.current && allPhotoSets.length > 0 && currentPhotoIndex >= 0) {
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          photoScrollRef.current?.scrollTo({
+            x: currentPhotoIndex * width,
+            animated: false
+          });
+        }, 100);
+      });
+    }
+  }, [allPhotoSets.length, currentPhotoIndex, width]);
+
+  // Handle photo scroll to update current photo set
+  const handlePhotoScroll = (event) => {
+    const { contentOffset, layoutMeasurement } = event.nativeEvent;
+    const pageWidth = layoutMeasurement.width;
+    const pageIndex = Math.round(contentOffset.x / pageWidth);
+    
+    if (pageIndex >= 0 && pageIndex < allPhotoSets.length && pageIndex !== currentPhotoIndex) {
+      const newPhotoSet = allPhotoSets[pageIndex];
+      // Update immediately for faster response
+      setCurrentPhotoIndex(pageIndex);
+      setCurrentPhotoSet(newPhotoSet);
+      // Update template type based on new photo set
+      const phoneOrientation = newPhotoSet.before.orientation || 'portrait';
+      const cameraViewMode = newPhotoSet.before.cameraViewMode || 'portrait';
+      if (phoneOrientation === 'landscape' || cameraViewMode === 'landscape') {
+        setTemplateType('original-stack');
+      } else {
+        setTemplateType('original-side');
+      }
+    }
+  };
+
+  // PanResponder for swipe gestures - ONLY for template selector (lower 20%)
   const handleSwipeChangeTemplate = (direction) => {
     const templates = getAvailableTemplates();
     const currentIndex = templates.findIndex(([key]) => key === templateTypeRef.current);
+    
     if (direction === 'left' && currentIndex < templates.length - 1) {
       // Swipe left - next template
       const nextTemplate = templates[currentIndex + 1][0];
@@ -156,13 +318,46 @@ export default function PhotoEditorScreen({ route, navigation }) {
     }
   };
 
-  const panResponder = useRef(
+  const handleDelete = async () => {
+    Alert.alert(
+      'Delete Combined Photo',
+      'This will delete both the before and after photos. Are you sure?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel'
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Delete both before and after photos
+              await deletePhoto(currentPhotoSet.before.id);
+              await deletePhoto(currentPhotoSet.after.id);
+              // Navigate back after deletion
+              if (navigation.canGoBack()) {
+                navigation.goBack();
+              } else {
+                navigation.navigate('Home');
+              }
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete photos');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // PanResponder for swipe down to close - applies to entire screen
+  const swipeDownPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
         const { dy, dx } = gestureState;
-        // Activate for downward swipes or strong horizontal swipes
-        return Math.abs(dy) > 10 || Math.abs(dx) > 10;
+        // Only activate for primarily vertical downward swipes
+        return dy > 10 && Math.abs(dy) > Math.abs(dx);
       },
       onPanResponderRelease: (evt, gestureState) => {
         const { dy, dx } = gestureState;
@@ -174,11 +369,25 @@ export default function PhotoEditorScreen({ route, navigation }) {
           } else {
             navigation.navigate('Home');
           }
-          return;
         }
+      }
+    })
+  ).current;
+
+  // PanResponder ONLY for template selector area (lower 20%) - for horizontal swipes to change templates
+  const templatePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const { dx } = gestureState;
+        // Only activate for horizontal swipes in template area
+        return Math.abs(dx) > 10;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const { dx } = gestureState;
         
-        // Swipe left/right to change template
-        if (Math.abs(dx) > 80 && Math.abs(dy) < 50) {
+        // Swipe left/right to change template (only in template selector area)
+        if (Math.abs(dx) > 80) {
           if (dx < 0) {
             handleSwipeChangeTemplate('left');
           } else if (dx > 0) {
@@ -193,9 +402,9 @@ export default function PhotoEditorScreen({ route, navigation }) {
   // Letterbox mode (landscape camera view) → ALL templates available
   // Landscape phone position → only stacked templates
   // Portrait phone position AND portrait camera view → only side-by-side templates
-  const getOriginalTemplateConfigs = () => {
-    const phoneOrientation = beforePhoto.orientation || 'portrait';
-    const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
+  const getOriginalTemplateConfigs = (photoSet = currentPhotoSet) => {
+    const phoneOrientation = photoSet.before.orientation || 'portrait';
+    const cameraViewMode = photoSet.before.cameraViewMode || 'portrait';
     const isLandscape = phoneOrientation === 'landscape' || cameraViewMode === 'landscape';
     // Base sizes for preview (used only for container sizing when showing original image)
     const portraitW = 1080;
@@ -213,25 +422,25 @@ export default function PhotoEditorScreen({ route, navigation }) {
     return { ...configs, preferredKey };
   };
 
-  const getTemplateConfig = (key) => {
-    const originals = getOriginalTemplateConfigs();
+  const getTemplateConfig = (key, photoSet = currentPhotoSet) => {
+    const originals = getOriginalTemplateConfigs(photoSet);
     if (key === 'original-stack' || key === 'original-side') return originals[key];
     return TEMPLATE_CONFIGS[key];
   };
 
   // Choose a safe default template key based on orientation
-  const getFallbackTemplateKey = () => {
-    const phoneOrientation = beforePhoto.orientation || 'portrait';
-    const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
+  const getFallbackTemplateKey = (photoSet = currentPhotoSet) => {
+    const phoneOrientation = photoSet.before.orientation || 'portrait';
+    const cameraViewMode = photoSet.before.cameraViewMode || 'portrait';
     const isLandscape = phoneOrientation === 'landscape' || cameraViewMode === 'landscape';
     return isLandscape ? TEMPLATE_TYPES.STACK_PORTRAIT : TEMPLATE_TYPES.SIDE_BY_SIDE_LANDSCAPE;
   };
 
-  const getAvailableTemplates = () => {
-    const phoneOrientation = beforePhoto.orientation || 'portrait';
-    const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
+  const getAvailableTemplates = (photoSet = currentPhotoSet) => {
+    const phoneOrientation = photoSet.before.orientation || 'portrait';
+    const cameraViewMode = photoSet.before.cameraViewMode || 'portrait';
     const allTemplates = Object.entries(TEMPLATE_CONFIGS);
-    const originals = getOriginalTemplateConfigs();
+    const originals = getOriginalTemplateConfigs(photoSet);
     // Build base list filtered by layout
     let filtered;
     if (cameraViewMode === 'landscape') {
@@ -316,14 +525,14 @@ export default function PhotoEditorScreen({ route, navigation }) {
       });
 
       // Copy to cache directory (temporary, not permanent storage)
-      const tempFileName = `${beforePhoto.room}_${beforePhoto.name}_COMBINED_${templateType}_${Date.now()}.jpg`;
+      const tempFileName = `${currentPhotoSet.before.room}_${currentPhotoSet.before.name}_COMBINED_${templateType}_${Date.now()}.jpg`;
       const tempUri = `${FileSystem.cacheDirectory}${tempFileName}`;
       await FileSystem.copyAsync({ from: uri, to: tempUri });
 
       // Share the image
       const shareOptions = {
-        title: `Combined Photo - ${beforePhoto.name}`,
-        message: `Check out this before/after comparison from ${beforePhoto.room}!`,
+        title: `Combined Photo - ${currentPhotoSet.before.name}`,
+        message: `Check out this before/after comparison from ${currentPhotoSet.before.room}!`,
         url: tempUri,
         type: 'image/jpeg'
       };
@@ -349,11 +558,18 @@ export default function PhotoEditorScreen({ route, navigation }) {
     }
   };
 
-  const renderCombinedPreview = () => {
-    let config = getTemplateConfig(templateType);
+  const renderCombinedPreview = (photoSetParam) => {
+    const photoSet = photoSetParam || currentPhotoSet;
+    if (!photoSet || !photoSet.before || !photoSet.after) {
+      return null;
+    }
+    const combinedId = getCombinedId(photoSet);
+    const photoSetIsSelected = getIsSelected(photoSet);
+    console.log('[PhotoEditorScreen] Rendering combined preview:', combinedId, 'Is selected:', photoSetIsSelected, 'Selected photos:', Array.from(localSelectedPhotos));
+    let config = getTemplateConfig(templateType, photoSet);
     if (!config) {
       // Guard against undefined (e.g., original not present yet)
-      config = TEMPLATE_CONFIGS[getFallbackTemplateKey()];
+      config = TEMPLATE_CONFIGS[getFallbackTemplateKey(photoSet)];
     }
     const isStack = config.layout === 'stack';
     const isSideBySide = config.layout === 'sidebyside';
@@ -442,6 +658,32 @@ export default function PhotoEditorScreen({ route, navigation }) {
           )}
           {/* Show watermark if enabled */}
           {shouldShowWatermark && <PhotoWatermark />}
+          
+          {/* Checkbox overlay in selection mode */}
+          {isSelectionMode && (
+            <TouchableOpacity
+              style={styles.checkboxOverlay}
+              onPress={() => {
+                if (!onSelectionChange) return;
+                const combinedId = getCombinedId(photoSet);
+                const newSelected = new Set(localSelectedPhotos);
+                if (newSelected.has(combinedId)) {
+                  newSelected.delete(combinedId);
+                } else {
+                  newSelected.add(combinedId);
+                }
+                setLocalSelectedPhotos(newSelected);
+                onSelectionChange(Array.from(newSelected));
+              }}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.checkboxContainer, photoSetIsSelected && styles.checkboxSelected]}>
+                {photoSetIsSelected && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
       );
     }
@@ -460,7 +702,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
       >
         <View style={styles.halfContainer}>
           <Image
-            source={{ uri: beforePhoto.uri }}
+            source={{ uri: photoSet.before.uri }}
             style={styles.halfImage}
             resizeMode="cover"
             onError={(error) => {
@@ -476,7 +718,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
 
         <View style={[styles.halfContainer, isStack && styles.topBorder, isSideBySide && styles.leftBorder]}>
           <Image
-            source={{ uri: afterPhoto.uri }}
+            source={{ uri: photoSet.after.uri }}
             style={styles.halfImage}
             resizeMode="cover"
             onError={(error) => {
@@ -491,12 +733,30 @@ export default function PhotoEditorScreen({ route, navigation }) {
         </View>
         {/* Show watermark if enabled */}
         {shouldShowWatermark && <PhotoWatermark />}
+        
+        {/* Checkbox overlay in selection mode */}
+        {isSelectionMode && (() => {
+          const photoSetIsSelected = getIsSelected(currentPhotoSet);
+          return (
+            <TouchableOpacity
+              style={styles.checkboxOverlay}
+              onPress={toggleSelection}
+              activeOpacity={0.8}
+            >
+              <View style={[styles.checkboxContainer, photoSetIsSelected && styles.checkboxSelected]}>
+                {photoSetIsSelected && (
+                  <Text style={styles.checkmark}>✓</Text>
+                )}
+              </View>
+            </TouchableOpacity>
+          );
+        })()}
       </View>
     );
   };
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
+    <SafeAreaView style={styles.container} {...swipeDownPanResponder.panHandlers}>
       {/* Swipe down indicator */}
       <View style={styles.swipeIndicator}>
         <View style={styles.swipeHandle} />
@@ -517,40 +777,45 @@ export default function PhotoEditorScreen({ route, navigation }) {
         </TouchableOpacity>
         
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>{beforePhoto.name}</Text>
+          <Text style={styles.title}>{currentPhotoSet.before.name}</Text>
           <Text style={[styles.subtitle, { color: '#FFC107' }]}>COMBINED</Text>
         </View>
         
-        <View style={{ width: 60 }} />
+        <TouchableOpacity style={styles.deleteButton} onPress={handleDelete}>
+          <Text style={styles.deleteButtonText}>🗑️</Text>
+        </TouchableOpacity>
       </View>
 
+      {/* Upper part - Photo swiping area */}
       <View style={styles.previewContainer}>
-        {renderCombinedPreview()}
-        
-        {/* Swipe indicators */}
-        <View style={styles.swipeIndicators}>
-          <Text style={styles.swipeHint}>← Swipe to change format →</Text>
-          {(() => {
-            const templates = getAvailableTemplates();
-            const currentIndex = templates.findIndex(([key]) => key === templateType);
-            return (
-              <View style={styles.dotsContainer}>
-                {templates.map(([key], index) => (
-                  <View
-                    key={key}
-                    style={[
-                      styles.dot,
-                      index === currentIndex && styles.dotActive
-                    ]}
-                  />
-                ))}
+        {allPhotoSets.length > 1 ? (
+          <ScrollView
+            ref={photoScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            decelerationRate="fast"
+            scrollEventThrottle={1}
+            onScroll={handlePhotoScroll}
+            directionalLockEnabled={true}
+            bounces={false}
+          >
+            {allPhotoSets.map((photoSet, index) => (
+              <View key={photoSet.before.id} style={{ width, flex: 1 }}>
+                <View style={styles.previewContent}>
+                  {renderCombinedPreview(photoSet)}
+                </View>
               </View>
-            );
-          })()}
-        </View>
+            ))}
+          </ScrollView>
+        ) : (
+          <View style={styles.previewContent}>
+            {renderCombinedPreview()}
+          </View>
+        )}
       </View>
 
-      <View style={styles.templateSelector}>
+      <View style={styles.templateSelector} {...templatePanResponder.panHandlers}>
         <Text style={styles.selectorTitle}>Choose Template:</Text>
         <ScrollView
           ref={templateScrollRef}
@@ -591,14 +856,14 @@ export default function PhotoEditorScreen({ route, navigation }) {
           <Text style={styles.shareButtonText}>Share</Text>
         )}
       </TouchableOpacity>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: COLORS.BACKGROUND
+    backgroundColor: 'white'
   },
   swipeIndicator: {
     position: 'absolute',
@@ -619,7 +884,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    paddingTop: 60
+    paddingTop: 10,
+    marginTop: 50
   },
   backButton: {
     width: 60
@@ -646,6 +912,11 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   previewContainer: {
+    flex: 1,
+    width: '100%',
+    position: 'relative'
+  },
+  previewContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
@@ -686,7 +957,34 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 5
+    elevation: 5,
+    position: 'relative'
+  },
+  checkboxOverlay: {
+    position: 'absolute',
+    top: 20,
+    right: 20,
+    zIndex: 10
+  },
+  checkboxContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 16, // Fully round
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderWidth: 2,
+    borderColor: 'white',
+    justifyContent: 'center',
+    alignItems: 'center',
+    overflow: 'hidden' // Ensure it stays round
+  },
+  checkboxSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  checkmark: {
+    color: 'white',
+    fontSize: 20,
+    fontWeight: 'bold'
   },
   halfContainer: {
     flex: 1,
@@ -753,5 +1051,11 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT,
     fontSize: 18,
     fontWeight: 'bold'
+  },
+  deleteButton: {
+    padding: 8
+  },
+  deleteButtonText: {
+    fontSize: 24
   }
 });
