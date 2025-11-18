@@ -272,18 +272,16 @@ export default function GalleryScreen({ navigation, route }) {
   const [showSharePlanModal, setShowSharePlanModal] = useState(false);
   const [isDropboxConnected, setIsDropboxConnected] = useState(false);
 
-  // Debug: Track when showSharePlanModal changes
-  useEffect(() => {
-    console.log('[GALLERY] showSharePlanModal changed to:', showSharePlanModal);
-  }, [showSharePlanModal]);
+  // Debug: Track when showSharePlanModal changes (removed to prevent excessive logging)
 
   // For starter users, archive should always be checked
   useEffect(() => {
-    if (!canUse(FEATURES.ADVANCED_TEMPLATES) && !shareAsArchive) {
+    const hasAdvancedTemplates = canUse(FEATURES.ADVANCED_TEMPLATES);
+    if (!hasAdvancedTemplates && !shareAsArchive) {
       console.log('[GALLERY] Starter user - forcing archive to be checked');
       setShareAsArchive(true);
     }
-  }, [shareAsArchive, canUse]);
+  }, [shareAsArchive, userPlan]);
   const [selectedFormats, setSelectedFormats] = useState(() => {
     // Default: only square formats enabled by default
     const initial = {};
@@ -676,23 +674,269 @@ export default function GalleryScreen({ navigation, route }) {
     const projectName = projects.find(p => p.id === activeProjectId)?.name || 'Shared-Photos';
     const tempFiles = []; // Track temporary files for cleanup
     
+    // Calculate settings hash once for all photos (needed for both ZIP and non-ZIP paths)
+    const settingsHash = calculateSettingsHash({
+        showLabels,
+        beforeLabelPosition,
+        afterLabelPosition,
+        labelBackgroundColor,
+        labelTextColor,
+        labelSize,
+        labelFontFamily,
+        labelMarginVertical,
+        labelMarginHorizontal,
+    });
+    
+    console.log(`[GALLERY] Settings hash calculated: ${settingsHash}, showLabels: ${showLabels}`);
+    
+    // Check cache for all photos first to determine if we need to show loading
+    // Also store cache results to avoid duplicate checks (used for both ZIP and non-ZIP)
+    let needsPreparation = false;
+    const cachedPhotoUris = new Map(); // Map photo ID to cached URI
+    
+    if (showLabels) {
+        console.log('[GALLERY] Checking cache for all photos before showing loading indicator...');
+        for (const item of allItemsToShare) {
+            if (item.mode) {
+                try {
+                    const cachedUri = await getCachedLabeledPhoto(item, settingsHash);
+                    if (cachedUri) {
+                        // Store the cached URI for reuse
+                        cachedPhotoUris.set(item.id, cachedUri);
+                        console.log(`[GALLERY] Photo ${item.id} (${item.mode}) found in cache`);
+                    } else {
+                        needsPreparation = true;
+                        console.log(`[GALLERY] Photo ${item.id} (${item.mode}) needs preparation`);
+                        // Don't break - continue checking all photos to populate cache map
+                    }
+                } catch (error) {
+                    // If cache check fails, assume preparation is needed
+                    needsPreparation = true;
+                    console.log(`[GALLERY] Cache check failed for photo ${item.id}, will prepare`);
+                }
+            }
+        }
+        console.log(`[GALLERY] Cache check complete. Needs preparation: ${needsPreparation}, Cached: ${cachedPhotoUris.size}/${allItemsToShare.length}`);
+    } else {
+        // If labels are disabled, no preparation needed - photos can be shared directly
+        console.log('[GALLERY] Labels disabled - no preparation needed');
+    }
+    
+    // Helper function to capture a photo with label if showLabels is enabled
+    // This is used by both ZIP and non-ZIP sharing paths
+    const capturePhotoWithLabel = async (photo, index) => {
+        console.log(`[GALLERY] capturePhotoWithLabel called for photo ${index + 1}, mode: ${photo.mode}, id: ${photo.id}`);
+        
+        // Check if we already have this photo in cache from the initial check
+        if (showLabels && photo.mode && cachedPhotoUris.has(photo.id)) {
+            const cachedUri = cachedPhotoUris.get(photo.id);
+            console.log(`[GALLERY] ✅ Using cached labeled photo ${index + 1} (${photo.mode}) from initial check: ${cachedUri}`);
+            await updateCacheLastUsed(photo);
+            return cachedUri;
+        }
+        
+        // If not in initial cache check, check cache now (for photos that weren't checked initially)
+        if (showLabels && photo.mode) {
+            try {
+                console.log(`[GALLERY] Checking cache for photo ${index + 1} (${photo.mode}), photoId: ${photo.id}, settingsHash: ${settingsHash}`);
+                const cachedUri = await getCachedLabeledPhoto(photo, settingsHash);
+                if (cachedUri) {
+                    console.log(`[GALLERY] ✅ Using cached labeled photo ${index + 1} (${photo.mode}): ${cachedUri}`);
+                    await updateCacheLastUsed(photo);
+                    return cachedUri;
+                } else {
+                    console.log(`[GALLERY] ❌ No cache found for photo ${index + 1} (${photo.mode}), will prepare now`);
+                }
+            } catch (cacheError) {
+                console.error(`[GALLERY] Error checking cache for photo ${index + 1}:`, cacheError);
+                // Continue with preparation if cache check fails
+            }
+        }
+
+        // Handle combined photos specially - need to find before and after photos
+        if (photo.mode === PHOTO_MODES.COMBINED || photo.mode === 'mix' || photo.mode === 'combined') {
+            // Find the corresponding before and after photos
+            const beforePhoto = photos.find(p => 
+                p.mode === PHOTO_MODES.BEFORE && 
+                p.name === photo.name && 
+                p.room === photo.room &&
+                p.projectId === photo.projectId
+            );
+            const afterPhoto = photos.find(p => 
+                p.mode === PHOTO_MODES.AFTER && 
+                p.beforePhotoId === beforePhoto?.id &&
+                p.projectId === photo.projectId
+            );
+            
+            if (beforePhoto && afterPhoto && showLabels) {
+                // Capture combined view with both labels
+                return new Promise((resolve, reject) => {
+                    // Get dimensions of both photos
+                    Image.getSize(beforePhoto.uri, (beforeWidth, beforeHeight) => {
+                        Image.getSize(afterPhoto.uri, (afterWidth, afterHeight) => {
+                            // Determine layout based on photo orientation
+                            const phoneOrientation = beforePhoto.orientation || 'portrait';
+                            const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
+                            const isLetterbox = beforePhoto.templateType === 'letterbox' || 
+                                              (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
+                            
+                            // Use combined photo dimensions if available, otherwise calculate
+                            Image.getSize(photo.uri, (combinedWidth, combinedHeight) => {
+                                // Set the combined photo to capture (triggers useEffect)
+                                setCapturingPhoto({ 
+                                    photo: {
+                                        ...photo,
+                                        beforePhoto,
+                                        afterPhoto,
+                                        isCombined: true,
+                                        isLetterbox
+                                    }, 
+                                    index, 
+                                    width: combinedWidth, 
+                                    height: combinedHeight, 
+                                    labelPosition: null, // Not used for combined
+                                    resolve, 
+                                    reject 
+                                });
+                            }, (error) => {
+                                // If getSize fails, use before photo dimensions
+                                const totalWidth = beforeWidth * 2; // Side by side
+                                const totalHeight = isLetterbox ? beforeHeight * 2 : beforeHeight; // Stacked or side by side
+                                setCapturingPhoto({ 
+                                    photo: {
+                                        ...photo,
+                                        beforePhoto,
+                                        afterPhoto,
+                                        isCombined: true,
+                                        isLetterbox
+                                    }, 
+                                    index, 
+                                    width: totalWidth, 
+                                    height: totalHeight, 
+                                    labelPosition: null,
+                                    resolve, 
+                                    reject 
+                                });
+                            });
+                        }, (error) => {
+                            // If getSize fails, just copy original combined photo
+                            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                            const tempUri = FileSystem.cacheDirectory + tempFileName;
+                            FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
+                                resolve(tempUri);
+                            }).catch(reject);
+                        });
+                    }, (error) => {
+                        // If getSize fails, just copy original combined photo
+                        const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                        const tempUri = FileSystem.cacheDirectory + tempFileName;
+                        FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
+                            resolve(tempUri);
+                        }).catch(reject);
+                    });
+                });
+            } else {
+                // No labels or couldn't find before/after photos, just copy original
+                const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                const tempUri = FileSystem.cacheDirectory + tempFileName;
+                await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+                return tempUri;
+            }
+        }
+        
+        if (!showLabels || !photo.mode) {
+            // No labels needed, just copy the original
+            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+            const tempUri = FileSystem.cacheDirectory + tempFileName;
+            await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+            return tempUri;
+        }
+        
+        // Need to capture with label - use state-based approach with hidden modal
+        return new Promise((resolve, reject) => {
+            // Get image dimensions first
+            Image.getSize(photo.uri, (width, height) => {
+                // Determine label position based on photo mode
+                let labelPosition;
+                if (photo.mode === PHOTO_MODES.BEFORE) {
+                    labelPosition = beforeLabelPosition || 'top-left';
+                } else if (photo.mode === PHOTO_MODES.AFTER) {
+                    labelPosition = afterLabelPosition || 'top-right';
+                } else {
+                    labelPosition = 'top-left'; // Default for combined
+                }
+                
+                // Set the photo to capture (triggers useEffect to render and capture)
+                setCapturingPhoto({ 
+                    photo, 
+                    index, 
+                    width, 
+                    height, 
+                    labelPosition,
+                    resolve, 
+                    reject 
+                });
+            }, (error) => {
+                // If getSize fails, just copy original
+                const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                const tempUri = FileSystem.cacheDirectory + tempFileName;
+                FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
+                    resolve(tempUri);
+                }).catch(reject);
+            });
+        });
+    };
+    
     try {
         if (shareAsArchive) {
-            // For ZIP, always show loading since we need to copy files
-            setSharing(true);
+            // For ZIP, only show loading if preparation is actually needed
+            // (Copying cached files to ZIP is fast and doesn't need a spinner)
+            if (needsPreparation) {
+                console.log('[GALLERY] Showing loading spinner for ZIP - some photos need preparation');
+                setSharing(true);
+            } else {
+                console.log('[GALLERY] All photos cached for ZIP - skipping loading spinner');
+            }
+            
             // Share as ZIP archive
             const zipFileName = `${projectName.replace(/\s+/g, '_')}_${Date.now()}.zip`;
             const zipPath = FileSystem.cacheDirectory + zipFileName;
             const zip = new JSZip();
             
             for (const item of allItemsToShare) {
+                // Use cached labeled photo if available, otherwise use original
+                let photoUri = item.uri;
+                if (showLabels && cachedPhotoUris.has(item.id)) {
+                    const cachedUri = cachedPhotoUris.get(item.id);
+                    console.log(`[GALLERY] Using cached labeled photo ${item.id} for ZIP: ${cachedUri.substring(0, 80)}...`);
+                    photoUri = cachedUri;
+                    await updateCacheLastUsed(item);
+                } else if (showLabels && item.mode && needsPreparation) {
+                    // Need to prepare this photo with labels
+                    console.log(`[GALLERY] Preparing photo ${item.id} (${item.mode}) for ZIP...`);
+                    const preparedUri = await capturePhotoWithLabel(item, allItemsToShare.indexOf(item));
+                    if (preparedUri) {
+                        photoUri = preparedUri;
+                        // Save to cache for future use
+                        try {
+                            const cachedUri = await saveCachedLabeledPhoto(item, preparedUri, settingsHash);
+                            if (cachedUri) {
+                                console.log(`[GALLERY] ✅ Saved photo ${item.id} to cache: ${cachedUri}`);
+                                cachedPhotoUris.set(item.id, cachedUri);
+                            }
+                        } catch (cacheError) {
+                            console.error(`[GALLERY] Error saving to cache:`, cacheError);
+                        }
+                    }
+                }
+                
                 // Copy photo to temp location first to ensure it's accessible
                 const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
                 const tempUri = FileSystem.cacheDirectory + tempFileName;
-                await FileSystem.copyAsync({ from: item.uri, to: tempUri });
+                await FileSystem.copyAsync({ from: photoUri, to: tempUri });
                 tempFiles.push(tempUri);
                 
-                const filename = item.uri.split('/').pop();
+                const filename = photoUri.split('/').pop();
                 const content = await FileSystem.readAsStringAsync(tempUri, {
                     encoding: FileSystem.EncodingType.Base64,
                 });
@@ -725,21 +969,24 @@ export default function GalleryScreen({ navigation, route }) {
                 const result = await Promise.race([sharePromise, timeoutPromise]);
                 console.log('[GALLERY] ZIP share completed successfully:', result);
             } catch (shareError) {
-                console.error('[GALLERY] ZIP share error caught:', shareError);
-                console.error('[GALLERY] Error message:', shareError?.message);
-                
-                // User cancelled or error occurred - this is fine, just log it
-                if (shareError?.message?.includes('User did not share') || 
+                // Check if user cancelled first - don't log cancellation as error
+                const isUserCancellation = shareError?.message?.includes('User did not share') || 
                     shareError?.message?.includes('cancelled') ||
-                    shareError?.message?.includes('User Cancel')) {
-                    // User cancelled - no need to show error
+                    shareError?.message?.includes('User Cancel') ||
+                    shareError?.code === 'E_USER_CANCELLED';
+                
+                if (isUserCancellation) {
+                    // User cancelled - this is normal, not an error
                     console.log('[GALLERY] User cancelled sharing ZIP');
+                    return; // Exit gracefully
                 } else if (shareError?.message?.includes('timed out')) {
                     // Timeout - show error but don't rethrow
                     console.error('[GALLERY] ZIP share operation timed out');
                     Alert.alert(t('common.error'), 'Share operation took too long. Please try again.');
                 } else {
-                    // Real error - rethrow to be caught by outer catch
+                    // Real error - log and rethrow
+                    console.error('[GALLERY] ZIP share error caught:', shareError);
+                    console.error('[GALLERY] Error message:', shareError?.message);
                     throw shareError;
                 }
             }
@@ -748,55 +995,15 @@ export default function GalleryScreen({ navigation, route }) {
             console.log(`[GALLERY] ========== STARTING SHARING (NOT ARCHIVE) ==========`);
             console.log(`[GALLERY] shareAsArchive: ${shareAsArchive}, allItemsToShare.length: ${allItemsToShare.length}`);
             console.log(`[GALLERY] showLabels: ${showLabels}`);
-            
-            // Calculate settings hash once for all photos
-            const settingsHash = calculateSettingsHash({
-                showLabels,
-                beforeLabelPosition,
-                afterLabelPosition,
-                labelBackgroundColor,
-                labelTextColor,
-                labelSize,
-                labelFontFamily,
-                labelMarginVertical,
-                labelMarginHorizontal,
-            });
-            
-            console.log(`[GALLERY] Settings hash calculated: ${settingsHash}, showLabels: ${showLabels}`);
-            
-            // Check cache for all photos first to determine if we need to show loading
-            // Also store cache results to avoid duplicate checks
-            let needsPreparation = false;
-            const cachedPhotoUris = new Map(); // Map photo ID to cached URI
-            
-            if (showLabels) {
-                console.log('[GALLERY] Checking cache for all photos before showing loading indicator...');
-                for (const item of allItemsToShare) {
-                    if (item.mode) {
-                        try {
-                            const cachedUri = await getCachedLabeledPhoto(item, settingsHash);
-                            if (cachedUri) {
-                                // Store the cached URI for reuse
-                                cachedPhotoUris.set(item.id, cachedUri);
-                                console.log(`[GALLERY] Photo ${item.id} (${item.mode}) found in cache`);
-                            } else {
-                                needsPreparation = true;
-                                console.log(`[GALLERY] Photo ${item.id} (${item.mode}) needs preparation`);
-                                // Don't break - continue checking all photos to populate cache map
-                            }
-                        } catch (error) {
-                            // If cache check fails, assume preparation is needed
-                            needsPreparation = true;
-                            console.log(`[GALLERY] Cache check failed for photo ${item.id}, will prepare`);
-                        }
-                    }
-                }
-                console.log(`[GALLERY] Cache check complete. Needs preparation: ${needsPreparation}, Cached: ${cachedPhotoUris.size}/${allItemsToShare.length}`);
-            }
+            // Note: settingsHash, needsPreparation, and cachedPhotoUris are already calculated above
             
             // Only show loading indicator if preparation is actually needed
+            // Don't show spinner if all photos are cached (fast path)
             if (needsPreparation) {
+                console.log('[GALLERY] Showing loading spinner - some photos need preparation');
                 setSharing(true);
+            } else {
+                console.log('[GALLERY] All photos cached or no labels - skipping loading spinner');
             }
             
             // Process all photos to add labels if needed
@@ -840,172 +1047,7 @@ export default function GalleryScreen({ navigation, route }) {
                 }
             }
 
-            // Helper function to capture a photo with label if showLabels is enabled
-            const capturePhotoWithLabel = async (photo, index) => {
-                    console.log(`[GALLERY] capturePhotoWithLabel called for photo ${index + 1}, mode: ${photo.mode}, id: ${photo.id}`);
-                    
-                    // Check if we already have this photo in cache from the initial check
-                    if (showLabels && photo.mode && cachedPhotoUris.has(photo.id)) {
-                        const cachedUri = cachedPhotoUris.get(photo.id);
-                        console.log(`[GALLERY] ✅ Using cached labeled photo ${index + 1} (${photo.mode}) from initial check: ${cachedUri}`);
-                        await updateCacheLastUsed(photo);
-                        return cachedUri;
-                    }
-                    
-                    // If not in initial cache check, check cache now (for photos that weren't checked initially)
-                    if (showLabels && photo.mode) {
-                        try {
-                            console.log(`[GALLERY] Checking cache for photo ${index + 1} (${photo.mode}), photoId: ${photo.id}, settingsHash: ${settingsHash}`);
-                            const cachedUri = await getCachedLabeledPhoto(photo, settingsHash);
-                            if (cachedUri) {
-                                console.log(`[GALLERY] ✅ Using cached labeled photo ${index + 1} (${photo.mode}): ${cachedUri}`);
-                                await updateCacheLastUsed(photo);
-                                return cachedUri;
-                            } else {
-                                console.log(`[GALLERY] ❌ No cache found for photo ${index + 1} (${photo.mode}), will prepare now`);
-                            }
-                        } catch (cacheError) {
-                            console.error(`[GALLERY] Error checking cache for photo ${index + 1}:`, cacheError);
-                            // Continue with preparation if cache check fails
-                        }
-                    }
-
-                    // Handle combined photos specially - need to find before and after photos
-                    if (photo.mode === PHOTO_MODES.COMBINED || photo.mode === 'mix' || photo.mode === 'combined') {
-                        // Find the corresponding before and after photos
-                        const beforePhoto = photos.find(p => 
-                            p.mode === PHOTO_MODES.BEFORE && 
-                            p.name === photo.name && 
-                            p.room === photo.room &&
-                            p.projectId === photo.projectId
-                        );
-                        const afterPhoto = photos.find(p => 
-                            p.mode === PHOTO_MODES.AFTER && 
-                            p.beforePhotoId === beforePhoto?.id &&
-                            p.projectId === photo.projectId
-                        );
-                        
-                        if (beforePhoto && afterPhoto && showLabels) {
-                            // Capture combined view with both labels
-                            return new Promise((resolve, reject) => {
-                                // Get dimensions of both photos
-                                Image.getSize(beforePhoto.uri, (beforeWidth, beforeHeight) => {
-                                    Image.getSize(afterPhoto.uri, (afterWidth, afterHeight) => {
-                                        // Determine layout based on photo orientation
-                                        const phoneOrientation = beforePhoto.orientation || 'portrait';
-                                        const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
-                                        const isLetterbox = beforePhoto.templateType === 'letterbox' || 
-                                                          (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
-                                        
-                                        // Use combined photo dimensions if available, otherwise calculate
-                                        Image.getSize(photo.uri, (combinedWidth, combinedHeight) => {
-                                            // Set the combined photo to capture (triggers useEffect)
-                                            setCapturingPhoto({ 
-                                                photo: {
-                                                    ...photo,
-                                                    beforePhoto,
-                                                    afterPhoto,
-                                                    isCombined: true,
-                                                    isLetterbox
-                                                }, 
-                                                index, 
-                                                width: combinedWidth, 
-                                                height: combinedHeight, 
-                                                labelPosition: null, // Not used for combined
-                                                resolve, 
-                                                reject 
-                                            });
-                                        }, (error) => {
-                                            // If getSize fails, use before photo dimensions
-                                            const totalWidth = beforeWidth * 2; // Side by side
-                                            const totalHeight = isLetterbox ? beforeHeight * 2 : beforeHeight; // Stacked or side by side
-                                            setCapturingPhoto({ 
-                                                photo: {
-                                                    ...photo,
-                                                    beforePhoto,
-                                                    afterPhoto,
-                                                    isCombined: true,
-                                                    isLetterbox
-                                                }, 
-                                                index, 
-                                                width: totalWidth, 
-                                                height: totalHeight, 
-                                                labelPosition: null,
-                                                resolve, 
-                                                reject 
-                                            });
-                                        });
-                                    }, (error) => {
-                                        // If getSize fails, just copy original combined photo
-                                        const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
-                                        const tempUri = FileSystem.cacheDirectory + tempFileName;
-                                        FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
-                                            resolve(tempUri);
-                                        }).catch(reject);
-                                    });
-                                }, (error) => {
-                                    // If getSize fails, just copy original combined photo
-                                    const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
-                                    const tempUri = FileSystem.cacheDirectory + tempFileName;
-                                    FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
-                                        resolve(tempUri);
-                                    }).catch(reject);
-                                });
-                            });
-                        } else {
-                            // No labels or couldn't find before/after photos, just copy original
-                            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
-                            const tempUri = FileSystem.cacheDirectory + tempFileName;
-                            await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
-                            return tempUri;
-                        }
-                    }
-                    
-                    if (!showLabels || !photo.mode) {
-                        // No labels needed, just copy the original
-                        const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
-                        const tempUri = FileSystem.cacheDirectory + tempFileName;
-                        await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
-                        return tempUri;
-                    }
-                    
-                    // Need to capture with label - use state-based approach with hidden modal
-                    return new Promise((resolve, reject) => {
-                        // Get image dimensions first
-                        Image.getSize(photo.uri, (width, height) => {
-                            // Determine label position based on photo mode
-                            let labelPosition;
-                            if (photo.mode === PHOTO_MODES.BEFORE) {
-                                labelPosition = beforeLabelPosition || 'top-left';
-                            } else if (photo.mode === PHOTO_MODES.AFTER) {
-                                labelPosition = afterLabelPosition || 'top-right';
-                            } else {
-                                labelPosition = 'top-left'; // Default for combined
-                            }
-                            
-                            // Set the photo to capture (triggers useEffect to render and capture)
-                            setCapturingPhoto({ 
-                                photo, 
-                                index, 
-                                width, 
-                                height, 
-                                labelPosition,
-                                resolve, 
-                                reject 
-                            });
-                        }, (error) => {
-                            // If getSize fails, just copy original
-                            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
-                            const tempUri = FileSystem.cacheDirectory + tempFileName;
-                            FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
-                                resolve(tempUri);
-                            }).catch(reject);
-                        });
-                    });
-                };
-                
-                
-                // Process all photos sequentially (important for label capture)
+            // Process all photos sequentially (important for label capture)
                 // Skip this loop if we already have all cached photos (fast path)
                 if (!allCached || urls.length === 0) {
                     console.log(`[GALLERY] Starting to process ${allItemsToShare.length} photos for sharing...`);
