@@ -2367,7 +2367,6 @@ export default function GalleryScreen({ navigation, route }) {
 
       return (
         <TouchableOpacity
-          key={photoType}
           style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast, isSelected && styles.photoCardSelected]}
           onPress={handleCombinedPress}
           onLongPress={() => handleLongPressStart(null, photoSet)}
@@ -2396,7 +2395,7 @@ export default function GalleryScreen({ navigation, route }) {
       );
     }
 
-    if (!photo) return <View key={photoType} style={[styles.photoCard, isLast && styles.photoCardLast]}>{renderDummyCard('—')}</View>;
+    if (!photo) return <View style={[styles.photoCard, isLast && styles.photoCardLast]}>{renderDummyCard('—')}</View>;
 
     const isSelected = currentSelectionMode && currentSelectedPhotos.has(photo.id);
 
@@ -2531,7 +2530,6 @@ export default function GalleryScreen({ navigation, route }) {
 
     return (
       <TouchableOpacity
-        key={photoType}
         style={[styles.photoCard, { borderColor }, isLast && styles.photoCardLast, isSelected && styles.photoCardSelected]}
         onPress={handlePress}
         onLongPress={() => handleLongPressStart(photo, photoType === 'combined' ? photoSet : null)}
@@ -2599,7 +2597,13 @@ export default function GalleryScreen({ navigation, route }) {
               const isLast = idx === rowPhotos.length - 1;
               // For combined photos, pass null as photo since they're rendered from the set
               const photoToRender = photoType === 'combined' ? null : photo;
-              return renderPhotoCard(photoToRender, borderColor, photoType, photoSet, isLast, isSelectionMode, selectedPhotos);
+              // Use unique key: photo ID for individual photos, combined ID for combined photos
+              const uniqueKey = photoType === 'combined' ? `combined_${photoSet.before?.id || idx}` : (photo.id || `photo_${idx}`);
+              return (
+                <View key={uniqueKey}>
+                  {renderPhotoCard(photoToRender, borderColor, photoType, photoSet, isLast, isSelectionMode, selectedPhotos)}
+                </View>
+              );
             })}
             {/* Fill remaining slots if row is not full */}
             {rowPhotos.length < photosPerRow && Array.from({ length: photosPerRow - rowPhotos.length }).map((_, idx) => (
@@ -2616,17 +2620,88 @@ export default function GalleryScreen({ navigation, route }) {
   const renderRoomSection = (room) => {
     let sets = getPhotoSets(room.id);
     
-    // Filter to show only selected photos/sets when in preview mode
+    // When in preview selected mode, show only selected thumbnails in rows
     if (showOnlySelected) {
-      sets = sets.filter(set => {
+      const selectedThumbnails = [];
+      
+      sets.forEach(set => {
         const combinedId = `combined_${set.before?.id}`;
-        // Show set if any part is selected
-        return (
-          (set.before && selectedPhotos.has(set.before.id)) ||
-          (set.after && selectedPhotos.has(set.after.id)) ||
-          selectedPhotos.has(combinedId)
-        );
+        
+        // Add before photo if selected
+        if (set.before && selectedPhotos.has(set.before.id)) {
+          selectedThumbnails.push({
+            ...set.before,
+            photoSet: set,
+            photoType: 'before',
+            borderColor: '#4CAF50'
+          });
+        }
+        
+        // Add after photo if selected
+        if (set.after && selectedPhotos.has(set.after.id)) {
+          selectedThumbnails.push({
+            ...set.after,
+            photoSet: set,
+            photoType: 'after',
+            borderColor: '#2196F3'
+          });
+        }
+        
+        // Add combined photo if selected
+        if (set.before && set.after && selectedPhotos.has(combinedId)) {
+          selectedThumbnails.push({
+            id: combinedId,
+            uri: null,
+            photoSet: set,
+            photoType: 'combined',
+            borderColor: '#FFC107'
+          });
+        }
       });
+      
+      if (selectedThumbnails.length === 0) return null;
+      
+      // Render selected thumbnails in rows
+      const photosPerRow = 3;
+      const rows = [];
+      
+      for (let i = 0; i < selectedThumbnails.length; i += photosPerRow) {
+        const rowPhotos = selectedThumbnails.slice(i, i + photosPerRow);
+        rows.push(
+          <View key={i} style={styles.photoSetRow}>
+            <View style={styles.threeColumnRow}>
+              {rowPhotos.map((item, idx) => {
+                const isLast = idx === rowPhotos.length - 1;
+                const photoToRender = item.photoType === 'combined' ? null : item;
+                const uniqueKey = item.photoType === 'combined' 
+                  ? `combined_${item.photoSet.before?.id || idx}` 
+                  : (item.id || `photo_${i}_${idx}`);
+                return (
+                  <View key={uniqueKey}>
+                    {renderPhotoCard(photoToRender, item.borderColor, item.photoType, item.photoSet, isLast, isSelectionMode, selectedPhotos)}
+                  </View>
+                );
+              })}
+              {/* Fill remaining slots if row is not full */}
+              {rowPhotos.length < photosPerRow && Array.from({ length: photosPerRow - rowPhotos.length }).map((_, idx) => (
+                <View key={`empty-${idx}`} style={{ width: COLUMN_WIDTH, marginRight: 8 }} />
+              ))}
+            </View>
+          </View>
+        );
+      }
+      
+      return (
+        <View key={room.id} style={styles.roomSection}>
+          <View style={styles.roomHeader}>
+            <Text style={styles.roomIcon}>{room.icon}</Text>
+            <Text style={styles.roomName}>
+              {t(`rooms.${room.id}`, { lng: sectionLanguage, defaultValue: room.name })}
+            </Text>
+          </View>
+          {rows}
+        </View>
+      );
     }
     
     if (sets.length === 0) return null;
