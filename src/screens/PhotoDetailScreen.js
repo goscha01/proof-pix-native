@@ -23,9 +23,11 @@ import PhotoWatermark from '../components/PhotoWatermark';
 const { width, height } = Dimensions.get('window');
 
 export default function PhotoDetailScreen({ route, navigation }) {
-  const { photo, isSelectionMode = false, selectedPhotos = [], onSelectionChange } = route.params;
+  const { photo, isSelectionMode = false, selectedPhotos = [], onSelectionChange, allPhotos: providedPhotos } = route.params;
   const { deletePhoto, getBeforePhotos, getAfterPhotos, activeProjectId } = usePhotos();
-  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, labelMarginVertical, labelMarginHorizontal, getRooms } = useSettings();
+  const settings = useSettings();
+  const { showLabels, shouldShowWatermark, beforeLabelPosition, afterLabelPosition, labelMarginVertical, labelMarginHorizontal } = settings || {};
+  const getRooms = settings?.getRooms;
   const [sharing, setSharing] = useState(false);
   const [containerLayout, setContainerLayout] = useState(null);
   const [imageSize, setImageSize] = useState(null);
@@ -76,7 +78,41 @@ export default function PhotoDetailScreen({ route, navigation }) {
 
   // Get all photos for swiping
   useEffect(() => {
+    // If photos are provided via route params (e.g., from preview selected), use those
+    if (providedPhotos && Array.isArray(providedPhotos) && providedPhotos.length > 0) {
+      setAllPhotos(providedPhotos);
+      const index = providedPhotos.findIndex(p => p.id === photo.id);
+      if (index >= 0) {
+        setCurrentIndex(index);
+        setCurrentPhoto(providedPhotos[index]);
+        console.log('[PhotoDetailScreen] Using provided photos:', providedPhotos.length, 'Found photo at index:', index);
+      } else {
+        setCurrentIndex(0);
+        setCurrentPhoto(photo);
+        console.log('[PhotoDetailScreen] Photo not found in provided list, using index 0');
+      }
+      return;
+    }
+
+    // Otherwise, load all photos from all rooms
+    // Check if getRooms is available
+    if (!getRooms || typeof getRooms !== 'function') {
+      console.warn('[PhotoDetailScreen] getRooms is not available, using only current photo');
+      setAllPhotos([photo]);
+      setCurrentIndex(0);
+      setCurrentPhoto(photo);
+      return;
+    }
+
     const rooms = getRooms();
+    if (!rooms || !Array.isArray(rooms)) {
+      console.warn('[PhotoDetailScreen] getRooms returned invalid data, using only current photo');
+      setAllPhotos([photo]);
+      setCurrentIndex(0);
+      setCurrentPhoto(photo);
+      return;
+    }
+
     const all = [];
     
     // Collect photos from all rooms
@@ -103,7 +139,7 @@ export default function PhotoDetailScreen({ route, navigation }) {
       setCurrentPhoto(photo);
       console.log('[PhotoDetailScreen] Photo not found in list, using index 0');
     }
-  }, [photo, getBeforePhotos, getAfterPhotos, activeProjectId, getRooms]);
+  }, [photo, getBeforePhotos, getAfterPhotos, activeProjectId, getRooms, providedPhotos]);
 
   // Scroll to current index when photos load
   useEffect(() => {

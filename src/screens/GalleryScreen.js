@@ -94,6 +94,7 @@ export default function GalleryScreen({ navigation, route }) {
     labelLanguage,
     sectionLanguage,
     cleaningServiceEnabled,
+    getRooms,
   } = useSettings();
   const { userMode, teamInfo, isAuthenticated, folderId, proxySessionId, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
@@ -105,6 +106,7 @@ export default function GalleryScreen({ navigation, route }) {
   const [uploading, setUploading] = useState(false);
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
+  const [showOnlySelected, setShowOnlySelected] = useState(false); // Filter to show only selected photos
   
   // Refs for double tap detection
   const tapCountRef = useRef({});
@@ -212,6 +214,8 @@ export default function GalleryScreen({ navigation, route }) {
   const [optionsVisible, setOptionsVisible] = useState(false);
   const [manageVisible, setManageVisible] = useState(false);
   const [shareOptionsVisible, setShareOptionsVisible] = useState(false);
+  const [uploadSelectedPhotos, setUploadSelectedPhotos] = useState(null); // Store selected photos for upload
+  const [shareSelectedPhotos, setShareSelectedPhotos] = useState(null); // Store selected photos for share
 
   // Cleanup old cache on screen focus (runs periodically)
   useFocusEffect(
@@ -514,7 +518,18 @@ export default function GalleryScreen({ navigation, route }) {
     setShareOptionsVisible(false); // Close the modal immediately
     // Don't set sharing to true yet - we'll show it when we start preparing
     
-    const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+    // Check if we're sharing selected photos
+    let sourcePhotos;
+    if (shareSelectedPhotos) {
+      // Use selected photos
+      sourcePhotos = shareSelectedPhotos.individual;
+      // Reset the selected photos flag after using it
+      setShareSelectedPhotos(null);
+    } else {
+      // Use all photos from project
+      sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+    }
+    
     if (sourcePhotos.length === 0) {
         Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
         setSharing(false);
@@ -1163,7 +1178,18 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const handleShareProject = async () => {
-    const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+    // Check if we're sharing selected photos
+    let sourcePhotos;
+    if (shareSelectedPhotos) {
+      // Use selected photos
+      sourcePhotos = shareSelectedPhotos.individual;
+      // Reset the selected photos flag after using it
+      setShareSelectedPhotos(null);
+    } else {
+      // Use all photos from project
+      sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+    }
+    
     if (sourcePhotos.length === 0) {
       Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
       return;
@@ -1354,7 +1380,17 @@ export default function GalleryScreen({ navigation, route }) {
 
       if (userMode === 'team_member') {
         // Team Member Upload Logic (same as Pro/Business/Enterprise)
-        const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+        // Check if we're uploading selected photos
+        let sourcePhotos;
+        if (uploadSelectedPhotos) {
+          // Use selected photos
+          sourcePhotos = uploadSelectedPhotos.individual;
+          // Reset the selected photos flag after using it
+          setUploadSelectedPhotos(null);
+        } else {
+          // Use all photos from project
+          sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+        }
 
         // Build the list based on selected types (before/after)
         const items = sourcePhotos.filter(p =>
@@ -1629,8 +1665,17 @@ export default function GalleryScreen({ navigation, route }) {
       const activeProject = activeProjectId ? projects.find(p => p.id === activeProjectId) : null;
       const projectUploadId = activeProject?.uploadId || null;
       const albumName = createAlbumName(userName, new Date(), projectUploadId);
-      // Scope uploads to the active project if one is selected
-      const sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+      // Scope uploads to the active project if one is selected, or use selected photos
+      let sourcePhotos;
+      if (uploadSelectedPhotos) {
+        // Use selected photos
+        sourcePhotos = uploadSelectedPhotos.individual;
+        // Reset the selected photos flag after using it
+        setUploadSelectedPhotos(null);
+      } else {
+        // Use all photos from project
+        sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
+      }
 
       // Build the list based on selected types (before/after)
       const items = sourcePhotos.filter(p =>
@@ -2012,6 +2057,161 @@ export default function GalleryScreen({ navigation, route }) {
     }
   };
 
+  // Get selected photos (individual and combined)
+  const getSelectedPhotos = () => {
+    const selected = [];
+    if (!getRooms || typeof getRooms !== 'function') {
+      console.warn('[GalleryScreen] getRooms is not available');
+      return selected;
+    }
+    const rooms = getRooms();
+    if (!rooms || !Array.isArray(rooms)) {
+      console.warn('[GalleryScreen] getRooms returned invalid data');
+      return selected;
+    }
+    
+    rooms.forEach(room => {
+      const sets = getPhotoSets(room.id);
+      sets.forEach(set => {
+        // Check individual photos
+        if (set.before && selectedPhotos.has(set.before.id)) {
+          selected.push(set.before);
+        }
+        if (set.after && selectedPhotos.has(set.after.id)) {
+          selected.push(set.after);
+        }
+        // Check combined photo
+        const combinedId = `combined_${set.before.id}`;
+        if (selectedPhotos.has(combinedId)) {
+          // For combined, we'll handle it separately
+        }
+      });
+    });
+    
+    return selected;
+  };
+
+  // Get selected photo sets (for combined photos)
+  const getSelectedPhotoSets = () => {
+    const selected = [];
+    if (!getRooms || typeof getRooms !== 'function') {
+      console.warn('[GalleryScreen] getRooms is not available');
+      return selected;
+    }
+    const rooms = getRooms();
+    if (!rooms || !Array.isArray(rooms)) {
+      console.warn('[GalleryScreen] getRooms returned invalid data');
+      return selected;
+    }
+    
+    rooms.forEach(room => {
+      const sets = getPhotoSets(room.id);
+      sets.forEach(set => {
+        const combinedId = `combined_${set.before.id}`;
+        if (selectedPhotos.has(combinedId)) {
+          selected.push(set);
+        }
+      });
+    });
+    
+    return selected;
+  };
+
+  // Handle upload selected photos
+  const handleUploadSelected = async () => {
+    const selected = getSelectedPhotos();
+    const selectedSets = getSelectedPhotoSets();
+    
+    if (selected.length === 0 && selectedSets.length === 0) {
+      Alert.alert(t('gallery.noPhotosTitle'), 'No photos selected');
+      return;
+    }
+
+    // Use the same upload logic but with filtered photos
+    // For now, we'll use the existing handleUploadPhotos but filter the photos
+    // This is a simplified approach - you may need to adjust based on your upload logic
+    setManageVisible(false);
+    // TODO: Implement upload for selected photos
+    Alert.alert('Info', 'Upload selected photos functionality will be implemented');
+  };
+
+  // Handle share selected photos
+  const handleShareSelected = async () => {
+    const selected = getSelectedPhotos();
+    const selectedSets = getSelectedPhotoSets();
+    
+    if (selected.length === 0 && selectedSets.length === 0) {
+      Alert.alert(t('gallery.noPhotosTitle'), 'No photos selected');
+      return;
+    }
+
+    // Store selected photos for share logic to use
+    setShareSelectedPhotos({ individual: selected, sets: selectedSets });
+    setManageVisible(false);
+    
+    // Use the same share flow but with selected photos
+    // The share logic will check shareSelectedPhotos and use it instead of all photos
+    await handleShareProject();
+  };
+
+  // Handle delete selected photos
+  const handleDeleteSelected = async () => {
+    const selected = getSelectedPhotos();
+    const selectedSets = getSelectedPhotoSets();
+    
+    if (selected.length === 0 && selectedSets.length === 0) {
+      Alert.alert(t('gallery.noPhotosTitle'), 'No photos selected');
+      return;
+    }
+
+    Alert.alert(
+      t('gallery.deleteAllTitle'),
+      `Delete ${selected.length + selectedSets.length} selected photo(s)?`,
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('common.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              // Delete individual photos
+              for (const photo of selected) {
+                await deletePhoto(photo.id);
+              }
+              // Delete combined photo sets
+              for (const set of selectedSets) {
+                if (set.before) await deletePhoto(set.before.id);
+                if (set.after) await deletePhoto(set.after.id);
+              }
+              // Clear selection
+              setSelectedPhotos(new Set());
+              isSelectionModeRef.current = false;
+              setIsSelectionMode(false);
+              setShowOnlySelected(false); // Clear filter when deleting selected
+            } catch (error) {
+              Alert.alert('Error', 'Failed to delete some photos');
+            }
+          }
+        }
+      ]
+    );
+  };
+
+  // Handle preview selected photos - filter gallery to show only selected photos
+  const handlePreviewSelected = () => {
+    const selected = getSelectedPhotos();
+    const selectedSets = getSelectedPhotoSets();
+    
+    if (selected.length === 0 && selectedSets.length === 0) {
+      Alert.alert(t('gallery.noPhotosTitle'), 'No photos selected');
+      return;
+    }
+
+    setManageVisible(false);
+    // Filter gallery to show only selected photos (same gallery view, just filtered)
+    setShowOnlySelected(true);
+  };
+
   // Group photos by room and create photo sets
   // Combined photos are created dynamically, not saved
   const getPhotoSets = (roomId) => {
@@ -2356,7 +2556,21 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const renderRoomSection = (room) => {
-    const sets = getPhotoSets(room.id);
+    let sets = getPhotoSets(room.id);
+    
+    // Filter to show only selected photos/sets when in preview mode
+    if (showOnlySelected) {
+      sets = sets.filter(set => {
+        const combinedId = `combined_${set.before?.id}`;
+        // Show set if any part is selected
+        return (
+          (set.before && selectedPhotos.has(set.before.id)) ||
+          (set.after && selectedPhotos.has(set.after.id)) ||
+          selectedPhotos.has(combinedId)
+        );
+      });
+    }
+    
     if (sets.length === 0) return null;
 
     return (
@@ -2411,6 +2625,19 @@ export default function GalleryScreen({ navigation, route }) {
         <Text style={styles.projectNameText}>
           {(projects?.find?.(p => p.id === activeProjectId)?.name) || t('gallery.noProjectSelected')}
         </Text>
+        {showOnlySelected && (
+          <TouchableOpacity
+            style={[styles.selectButton, { backgroundColor: '#9E9E9E', marginRight: 10 }]}
+            activeOpacity={0.7}
+            onPress={() => {
+              setShowOnlySelected(false);
+            }}
+          >
+            <Text style={[styles.selectButtonText, { color: 'white' }]}>
+              ✕ Show All
+            </Text>
+          </TouchableOpacity>
+        )}
         <TouchableOpacity
           style={[styles.selectButton, isSelectionMode && styles.selectButtonActive]}
           activeOpacity={0.7}
@@ -2421,6 +2648,7 @@ export default function GalleryScreen({ navigation, route }) {
               isSelectionModeRef.current = false;
               setIsSelectionMode(false);
               setSelectedPhotos(new Set());
+              setShowOnlySelected(false); // Clear filter when exiting selection mode
               // Clear long press state
               if (longPressTimer.current) {
                 clearTimeout(longPressTimer.current);
@@ -2471,7 +2699,7 @@ export default function GalleryScreen({ navigation, route }) {
         </View>
       ) : (
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
-          {ROOMS.map(room => renderRoomSection(room))}
+          {(getRooms && typeof getRooms === 'function' ? getRooms() : ROOMS).map(room => renderRoomSection(room))}
         </ScrollView>
       )}
 
@@ -2567,7 +2795,7 @@ export default function GalleryScreen({ navigation, route }) {
       {/* Share Project button at bottom - only show if photos exist and project is selected */}
       {photos.length > 0 && activeProjectId && (
         <TouchableOpacity
-          style={[styles.deleteAllButtonBottom, { backgroundColor: '#F2C31B' }]}
+          style={[styles.deleteAllButtonBottom, { backgroundColor: '#F2C31B', marginTop: 20, marginBottom: 30 }]}
           onPress={() => setManageVisible(true)}
         >
           <Text style={[styles.deleteAllButtonBottomText, { color: '#000' }]}>
@@ -3058,45 +3286,137 @@ export default function GalleryScreen({ navigation, route }) {
               <View style={{ marginTop: 4 }} />
 
               <View style={styles.actionsList}>
-                {/* Upload All (primary) */}
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}
-                  onPress={() => {
-                    setManageVisible(false);
-                    handleUploadPhotos();
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>
-                    📤 {t('gallery.uploadAll')}
-                  </Text>
-                </TouchableOpacity>
+                {selectedPhotos.size > 0 ? (
+                  // Show selected photos actions
+                  <>
+                    {/* Upload Selected (primary) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handleUploadSelected();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>
+                        📤 Upload Selected ({selectedPhotos.size})
+                      </Text>
+                    </TouchableOpacity>
 
-                {/* Share All (light blue) */}
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionWide, styles.actionInfo]}
-                  onPress={() => {
-                    setManageVisible(false);
-                    handleShareProject();
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, styles.actionInfoText]}>
-                    🔗 {t('gallery.shareAll')}
-                  </Text>
-                </TouchableOpacity>
+                    {/* Share Selected (light blue) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionInfo]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handleShareSelected();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionInfoText]}>
+                        🔗 Share Selected ({selectedPhotos.size})
+                      </Text>
+                    </TouchableOpacity>
 
-                {/* Delete All (red) */}
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
-                  onPress={() => {
-                    setManageVisible(false);
-                    // Delete immediately without confirmation
-                    handleDeleteAllConfirmed();
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>
-                    🗑️ {t('gallery.deleteAll')}
-                  </Text>
-                </TouchableOpacity>
+                    {/* Delete Selected (red) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handleDeleteSelected();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>
+                        🗑️ Delete Selected ({selectedPhotos.size})
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Preview Selected */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, { backgroundColor: '#2196F3' }]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handlePreviewSelected();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, { color: 'white' }]}>
+                        👁️ Preview Selected ({selectedPhotos.size})
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Deselect */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, { backgroundColor: '#9E9E9E' }]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        // Clear selection and exit selection mode
+                        setSelectedPhotos(new Set());
+                        isSelectionModeRef.current = false;
+                        setIsSelectionMode(false);
+                        setShowOnlySelected(false); // Clear filter when deselecting
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, { color: 'white' }]}>
+                        ✕ Deselect
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  // Show normal actions when no photos selected
+                  <>
+                    {/* Upload All (primary) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handleUploadPhotos();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>
+                        📤 {t('gallery.uploadAll')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Share All (light blue) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionInfo]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        handleShareProject();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionInfoText]}>
+                        🔗 {t('gallery.shareAll')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Delete All (red) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        // Delete immediately without confirmation
+                        handleDeleteAllConfirmed();
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>
+                        🗑️ {t('gallery.deleteAll')}
+                      </Text>
+                    </TouchableOpacity>
+
+                    {/* Select Photos (green) */}
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionWide, { backgroundColor: '#4CAF50' }]}
+                      onPress={() => {
+                        setManageVisible(false);
+                        // Activate selection mode
+                        isSelectionModeRef.current = true;
+                        setIsSelectionMode(true);
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, { color: 'white' }]}>
+                        ✓ {t('gallery.selectPhotos')}
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                )}
               </View>
 
               <View style={styles.optionsActionsRowCenter}>
