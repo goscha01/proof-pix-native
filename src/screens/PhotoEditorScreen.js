@@ -168,47 +168,30 @@ export default function PhotoEditorScreen({ route, navigation }) {
     return getAllPhotoSets.findIndex(set => set.before.id === beforePhoto.id);
   }, [getAllPhotoSets, beforePhoto.id]);
 
-  // PanResponder for swipe gestures
+  // PanResponder for swipe gestures - ONLY for template selector (lower 20%)
   const handleSwipeChangeTemplate = (direction) => {
     const templates = getAvailableTemplates();
     const currentIndex = templates.findIndex(([key]) => key === templateTypeRef.current);
     
-    if (direction === 'left') {
-      if (currentIndex < templates.length - 1) {
-        // Swipe left - next template
-        const nextTemplate = templates[currentIndex + 1][0];
-        setTemplateType(nextTemplate);
-      } else if (currentPhotoSetIndex >= 0 && currentPhotoSetIndex < getAllPhotoSets.length - 1) {
-        // On last template, navigate to next photo set
-        const nextPhotoSet = getAllPhotoSets[currentPhotoSetIndex + 1];
-        navigation.replace('PhotoEditor', {
-          beforePhoto: nextPhotoSet.before,
-          afterPhoto: nextPhotoSet.after
-        });
-      }
-    } else if (direction === 'right') {
-      if (currentIndex > 0) {
-        // Swipe right - previous template
-        const prevTemplate = templates[currentIndex - 1][0];
-        setTemplateType(prevTemplate);
-      } else if (currentPhotoSetIndex > 0) {
-        // On first template, navigate to previous photo set
-        const prevPhotoSet = getAllPhotoSets[currentPhotoSetIndex - 1];
-        navigation.replace('PhotoEditor', {
-          beforePhoto: prevPhotoSet.before,
-          afterPhoto: prevPhotoSet.after
-        });
-      }
+    if (direction === 'left' && currentIndex < templates.length - 1) {
+      // Swipe left - next template
+      const nextTemplate = templates[currentIndex + 1][0];
+      setTemplateType(nextTemplate);
+    } else if (direction === 'right' && currentIndex > 0) {
+      // Swipe right - previous template
+      const prevTemplate = templates[currentIndex - 1][0];
+      setTemplateType(prevTemplate);
     }
   };
 
-  const panResponder = useRef(
+  // PanResponder for swipe down to close - applies to entire screen
+  const swipeDownPanResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => false,
       onMoveShouldSetPanResponder: (evt, gestureState) => {
         const { dy, dx } = gestureState;
-        // Activate for downward swipes or strong horizontal swipes
-        return Math.abs(dy) > 10 || Math.abs(dx) > 10;
+        // Only activate for primarily vertical downward swipes
+        return dy > 10 && Math.abs(dy) > Math.abs(dx);
       },
       onPanResponderRelease: (evt, gestureState) => {
         const { dy, dx } = gestureState;
@@ -220,11 +203,25 @@ export default function PhotoEditorScreen({ route, navigation }) {
           } else {
             navigation.navigate('Home');
           }
-          return;
         }
+      }
+    })
+  ).current;
+
+  // PanResponder ONLY for template selector area (lower 20%) - for horizontal swipes to change templates
+  const templatePanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (evt, gestureState) => {
+        const { dx } = gestureState;
+        // Only activate for horizontal swipes in template area
+        return Math.abs(dx) > 10;
+      },
+      onPanResponderRelease: (evt, gestureState) => {
+        const { dx } = gestureState;
         
-        // Swipe left/right to change template
-        if (Math.abs(dx) > 80 && Math.abs(dy) < 50) {
+        // Swipe left/right to change template (only in template selector area)
+        if (Math.abs(dx) > 80) {
           if (dx < 0) {
             handleSwipeChangeTemplate('left');
           } else if (dx > 0) {
@@ -542,7 +539,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
   };
 
   return (
-    <View style={styles.container} {...panResponder.panHandlers}>
+    <View style={styles.container} {...swipeDownPanResponder.panHandlers}>
       {/* Swipe down indicator */}
       <View style={styles.swipeIndicator}>
         <View style={styles.swipeHandle} />
@@ -596,7 +593,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
         </View>
       </View>
 
-      <View style={styles.templateSelector}>
+      <View style={styles.templateSelector} {...templatePanResponder.panHandlers}>
         <Text style={styles.selectorTitle}>Choose Template:</Text>
         <ScrollView
           ref={templateScrollRef}
@@ -665,7 +662,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    paddingTop: 60
+    paddingTop: 100
   },
   backButton: {
     width: 60
