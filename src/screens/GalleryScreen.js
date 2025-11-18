@@ -286,6 +286,8 @@ export default function GalleryScreen({ navigation, route }) {
   const combinedCaptureRef = useRef(null);
   const [showUploadDetails, setShowUploadDetails] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [showUploadAlertModal, setShowUploadAlertModal] = useState(false);
+  const [uploadAlertConfig, setUploadAlertConfig] = useState(null);
 
   // Handle navigation parameter to show upload details
   useEffect(() => {
@@ -1201,8 +1203,16 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const handleUploadPhotos = async () => {
+    console.log('[UPLOAD] handleUploadPhotos called');
+    console.log('[UPLOAD] Photos count:', photos.length);
+    console.log('[UPLOAD] User mode:', userMode);
+    console.log('[UPLOAD] User plan:', userPlan);
+    console.log('[UPLOAD] User name:', userName);
+    console.log('[UPLOAD] Team info:', teamInfo);
+    
     // Check if there are photos to upload (always check this first)
     if (photos.length === 0) {
+      console.log('[UPLOAD] No photos to upload, showing alert');
       Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosToUpload'));
       return;
     }
@@ -1213,21 +1223,42 @@ export default function GalleryScreen({ navigation, route }) {
     // Check if at least one upload service is available (Google Drive or Dropbox)
     const hasGoogle = isAuthenticated;
     const hasDropbox = dropboxAuthService.isAuthenticated();
+    console.log('[UPLOAD] Has Google:', hasGoogle);
+    console.log('[UPLOAD] Has Dropbox:', hasDropbox);
     
     if (!hasGoogle && !hasDropbox) {
-      Alert.alert(
-        t('gallery.noUploadServiceTitle'),
-        t('gallery.noUploadServiceMessage'),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('gallery.goToSettings'), onPress: () => navigation.navigate('Settings') }
-        ]
-      );
+      console.log('[UPLOAD] No upload service available, showing custom modal');
+      setUploadAlertConfig({
+        title: t('gallery.noUploadServiceTitle'),
+        message: t('gallery.noUploadServiceMessage'),
+        onGoToSettings: () => {
+          console.log('[UPLOAD] onGoToSettings callback called');
+          console.log('[UPLOAD] Closing modal first');
+          setShowUploadAlertModal(false);
+          // Close modal first, then navigate after a delay to ensure modal is fully closed
+          setTimeout(() => {
+            console.log('[UPLOAD] Executing navigation to Settings');
+            try {
+              // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+              navigation.goBack();
+              setTimeout(() => {
+                console.log('[UPLOAD] Navigating to Settings from parent screen');
+                navigation.navigate('Settings', { scrollToCloudSync: true });
+                console.log('[UPLOAD] Navigation call completed');
+              }, 100);
+            } catch (error) {
+              console.error('[UPLOAD] Navigation error:', error);
+            }
+          }, 300);
+        }
+      });
+      setShowUploadAlertModal(true);
       return;
     }
 
     // Check if user info is configured (required for uploads)
     if (!userName) {
+      console.log('[UPLOAD] User name not configured, showing alert');
       Alert.alert(
         t('gallery.setupRequiredTitle'),
         t('gallery.setupNameMessage'),
@@ -1241,14 +1272,19 @@ export default function GalleryScreen({ navigation, route }) {
 
     // Handle team member upload
     if (userMode === 'team_member') {
+      console.log('[UPLOAD] Team member mode detected');
       if (teamInfo && teamInfo.sessionId && teamInfo.token) {
+        console.log('[UPLOAD] Team info available, setting destinations and opening options');
         // Set default destinations based on available services
         setUploadDestinations({
           google: hasGoogle,
           dropbox: hasDropbox && !hasGoogle // Default to Dropbox if Google not available
         });
+        console.log('[UPLOAD] Upload destinations set:', { google: hasGoogle, dropbox: hasDropbox && !hasGoogle });
         setOptionsVisible(true);
+        return;
       } else {
+        console.log('[UPLOAD] Team info missing, showing alert');
         Alert.alert(t('common.error'), t('gallery.teamInfoMissing'));
       }
       return;
@@ -1257,15 +1293,20 @@ export default function GalleryScreen({ navigation, route }) {
     // For Pro/Business/Enterprise users (individual mode or authenticated without team)
     const shouldUseDirectDrive = userMode === 'individual' || 
       (isAuthenticated && (userPlan === 'pro' || userPlan === 'business' || userPlan === 'enterprise') && !teamInfo);
+    console.log('[UPLOAD] Should use direct drive:', shouldUseDirectDrive);
     
     if (shouldUseDirectDrive) {
+      console.log('[UPLOAD] Direct drive path');
       // If Google is authenticated, try to ensure Google Drive folder exists
       if (hasGoogle) {
+        console.log('[UPLOAD] Google authenticated, finding/creating folder');
         try {
           const userFolderId = await googleDriveService.findOrCreateProofPixFolder();
+          console.log('[UPLOAD] Google folder ID:', userFolderId);
           if (!userFolderId) {
             // If Google folder creation fails, but Dropbox is available, allow Dropbox only
             if (hasDropbox) {
+              console.log('[UPLOAD] Google folder creation failed, falling back to Dropbox');
               setUploadDestinations({
                 google: false,
                 dropbox: true
@@ -1273,10 +1314,12 @@ export default function GalleryScreen({ navigation, route }) {
               setOptionsVisible(true);
               return;
             }
+            console.log('[UPLOAD] Google folder creation failed and no Dropbox, showing error');
             Alert.alert(t('common.error'), t('gallery.driveFolderError'));
             return;
           }
         } catch (error) {
+          console.log('[UPLOAD] Google Drive access error:', error);
           // If Google Drive access fails, but Dropbox is available, allow Dropbox only
           if (hasDropbox) {
             setUploadDestinations({
@@ -1292,12 +1335,15 @@ export default function GalleryScreen({ navigation, route }) {
       }
 
       // Set default destinations based on available services
+      console.log('[UPLOAD] Setting default destinations and opening options');
       setUploadDestinations({
         google: hasGoogle,
         dropbox: hasDropbox && !hasGoogle // Default to Dropbox if Google not available
       });
+      console.log('[UPLOAD] Upload destinations set:', { google: hasGoogle, dropbox: hasDropbox && !hasGoogle });
 
       // Open options modal
+      console.log('[UPLOAD] Opening options modal');
       setOptionsVisible(true);
       return;
     }
@@ -1351,9 +1397,12 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const startUploadWithOptions = async () => {
+    console.log('[UPLOAD] startUploadWithOptions called');
+    console.log('[UPLOAD] Upload destinations:', uploadDestinations);
     try {
       // Check if at least one destination is selected
       if (!uploadDestinations.google && !uploadDestinations.dropbox) {
+        console.log('[UPLOAD] No destination selected, showing alert');
         Alert.alert(
           t('gallery.noDestinationSelected'),
           t('gallery.selectAtLeastOneDestination')
@@ -1362,26 +1411,72 @@ export default function GalleryScreen({ navigation, route }) {
       }
 
       // Check authentication for selected destinations
+      console.log('[UPLOAD] Checking Google authentication:', { selected: uploadDestinations.google, authenticated: isAuthenticated });
       if (uploadDestinations.google && !isAuthenticated) {
-        Alert.alert(
-          t('gallery.googleNotConnected'),
-          t('gallery.googleNotConnectedMessage')
-        );
+        console.log('[UPLOAD] Google not authenticated, showing custom modal');
+        setUploadAlertConfig({
+          title: t('gallery.googleNotConnected'),
+          message: t('gallery.googleNotConnectedMessage'),
+          onGoToSettings: () => {
+            console.log('[UPLOAD] onGoToSettings callback called (from Google check)');
+            console.log('[UPLOAD] Closing modal first');
+            setShowUploadAlertModal(false);
+            setTimeout(() => {
+              console.log('[UPLOAD] Executing navigation to Settings');
+              try {
+                // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                navigation.goBack();
+                setTimeout(() => {
+                  console.log('[UPLOAD] Navigating to Settings from parent screen');
+                  navigation.navigate('Settings', { scrollToCloudSync: true });
+                  console.log('[UPLOAD] Navigation call completed');
+                }, 100);
+              } catch (error) {
+                console.error('[UPLOAD] Navigation error:', error);
+              }
+            }, 300);
+          }
+        });
+        setShowUploadAlertModal(true);
         return;
       }
 
       // Load Dropbox tokens before checking authentication
       await dropboxAuthService.loadStoredTokens();
-      
-      if (uploadDestinations.dropbox && !dropboxAuthService.isAuthenticated()) {
-        Alert.alert(
-          t('gallery.dropboxNotConnected'),
-          t('gallery.dropboxNotConnectedMessage')
-        );
+      const isDropboxAuth = dropboxAuthService.isAuthenticated();
+      console.log('[UPLOAD] Checking Dropbox authentication:', { selected: uploadDestinations.dropbox, authenticated: isDropboxAuth });
+      if (uploadDestinations.dropbox && !isDropboxAuth) {
+        console.log('[UPLOAD] Dropbox not authenticated, showing custom modal');
+        setUploadAlertConfig({
+          title: t('gallery.dropboxNotConnected'),
+          message: t('gallery.dropboxNotConnectedMessage'),
+          onGoToSettings: () => {
+            console.log('[UPLOAD] onGoToSettings callback called (from Dropbox check)');
+            console.log('[UPLOAD] Closing modal first');
+            setShowUploadAlertModal(false);
+            setTimeout(() => {
+              console.log('[UPLOAD] Executing navigation to Settings');
+              try {
+                // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                navigation.goBack();
+                setTimeout(() => {
+                  console.log('[UPLOAD] Navigating to Settings from parent screen');
+                  navigation.navigate('Settings', { scrollToCloudSync: true });
+                  console.log('[UPLOAD] Navigation call completed');
+                }, 100);
+              } catch (error) {
+                console.error('[UPLOAD] Navigation error:', error);
+              }
+            }, 300);
+          }
+        });
+        setShowUploadAlertModal(true);
         return;
       }
 
+      console.log('[UPLOAD] Authentication checks passed, proceeding with upload');
       if (userMode === 'team_member') {
+        console.log('[UPLOAD] Team member upload path');
         // Team Member Upload Logic (same as Pro/Business/Enterprise)
         // Check if we're uploading selected photos
         let sourcePhotos;
@@ -1939,6 +2034,11 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const proceedWithUpload = async (items, albumName, configOverride = null) => {
+    console.log('[UPLOAD] proceedWithUpload called');
+    console.log('[UPLOAD] Items count:', items.length);
+    console.log('[UPLOAD] Album name:', albumName);
+    console.log('[UPLOAD] Config override:', configOverride);
+    console.log('[UPLOAD] Upload destinations:', uploadDestinations);
     try {
       // Close upload options and any upgrade overlay before starting background upload
       setOptionsVisible(false);
@@ -1948,11 +2048,14 @@ export default function GalleryScreen({ navigation, route }) {
 
       // Upload to Google Drive if selected
       if (uploadDestinations.google) {
+        console.log('[UPLOAD] Starting Google Drive upload');
         // Use provided config or fallback to location config (for backward compatibility)
         const config = configOverride || getLocationConfig(location);
+        console.log('[UPLOAD] Google config:', { folderId: config?.folderId, useDirectDrive: config?.useDirectDrive, sessionId: config?.sessionId });
 
         // Check if Google Drive is configured
         if (!config || !config.folderId || (config.useDirectDrive && !config.sessionId)) {
+          console.log('[UPLOAD] Google Drive not configured, showing alert');
           Alert.alert(
             t('gallery.setupRequiredTitle'),
             t('gallery.driveConfigMissing')
@@ -1961,6 +2064,7 @@ export default function GalleryScreen({ navigation, route }) {
         }
 
         // Start background upload to Google Drive
+        console.log('[UPLOAD] Starting background upload to Google Drive');
         const googleUploadId = startBackgroundUpload({
           items,
           config,
@@ -1972,25 +2076,51 @@ export default function GalleryScreen({ navigation, route }) {
           useDirectDrive: config?.useDirectDrive || false, // Pass the flag for proxy server upload
           sessionId: config?.sessionId || null, // Pass the proxy session ID
         });
+        console.log('[UPLOAD] Google Drive upload started, ID:', googleUploadId);
         uploadPromises.push({ type: 'google', uploadId: googleUploadId });
       }
 
       // Upload to Dropbox if selected
       if (uploadDestinations.dropbox) {
+        console.log('[UPLOAD] Starting Dropbox upload');
         // Load Dropbox tokens before checking authentication
         await dropboxAuthService.loadStoredTokens();
         
         // Check if Dropbox is authenticated
-        if (!dropboxAuthService.isAuthenticated()) {
-          Alert.alert(
-            t('gallery.dropboxNotConnected'),
-            t('gallery.dropboxNotConnectedMessage')
-          );
+        const dropboxAuth = dropboxAuthService.isAuthenticated();
+        console.log('[UPLOAD] Dropbox authenticated:', dropboxAuth);
+        if (!dropboxAuth) {
+          console.log('[UPLOAD] Dropbox not authenticated in proceedWithUpload, showing custom modal');
+          setUploadAlertConfig({
+            title: t('gallery.dropboxNotConnected'),
+            message: t('gallery.dropboxNotConnectedMessage'),
+            onGoToSettings: () => {
+              console.log('[UPLOAD] onGoToSettings callback called (from proceedWithUpload)');
+              console.log('[UPLOAD] Closing modal first');
+              setShowUploadAlertModal(false);
+              setTimeout(() => {
+                console.log('[UPLOAD] Executing navigation to Settings');
+                try {
+                  // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                  navigation.goBack();
+                  setTimeout(() => {
+                    console.log('[UPLOAD] Navigating to Settings from parent screen');
+                    navigation.navigate('Settings', { scrollToCloudSync: true });
+                    console.log('[UPLOAD] Navigation call completed');
+                  }, 100);
+                } catch (error) {
+                  console.error('[UPLOAD] Navigation error:', error);
+                }
+              }, 300);
+            }
+          });
+          setShowUploadAlertModal(true);
           return;
         }
 
         // Upload to Dropbox directly (without background service for now)
         // We'll do this in parallel with Google Drive upload
+        console.log('[UPLOAD] Starting Dropbox batch upload');
         const dropboxUploadPromise = uploadPhotoBatchToDropbox(items, {
           albumName,
           location,
@@ -2004,10 +2134,12 @@ export default function GalleryScreen({ navigation, route }) {
         });
 
         uploadPromises.push({ type: 'dropbox', promise: dropboxUploadPromise });
+        console.log('[UPLOAD] Dropbox upload promise added');
       }
 
       // Show upload modal immediately (if Google Drive upload is in progress)
       if (uploadDestinations.google) {
+        console.log('[UPLOAD] Showing upload details modal');
         setShowUploadDetails(true);
       }
 
@@ -2122,10 +2254,14 @@ export default function GalleryScreen({ navigation, route }) {
 
   // Handle upload selected photos
   const handleUploadSelected = async () => {
+    console.log('[UPLOAD] handleUploadSelected called');
     const selected = getSelectedPhotos();
     const selectedSets = getSelectedPhotoSets();
+    console.log('[UPLOAD] Selected photos:', selected.length);
+    console.log('[UPLOAD] Selected sets:', selectedSets.length);
     
     if (selected.length === 0 && selectedSets.length === 0) {
+      console.log('[UPLOAD] No photos selected, showing alert');
       Alert.alert(t('gallery.noPhotosTitle'), 'No photos selected');
       return;
     }
@@ -3211,6 +3347,67 @@ export default function GalleryScreen({ navigation, route }) {
         </View>
       </Modal>
 
+      {/* Upload Alert Modal */}
+      {showUploadAlertModal && uploadAlertConfig && (
+        <Modal
+          visible={showUploadAlertModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowUploadAlertModal(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowUploadAlertModal(false)}>
+            <View style={styles.optionsModalOverlay}>
+              <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                <View style={styles.optionsModalContent}>
+                  <Text style={styles.optionsTitle}>{uploadAlertConfig.title}</Text>
+                  <Text style={[styles.optionsSectionLabel, { marginTop: 8, marginBottom: 24, textAlign: 'center' }]}>
+                    {uploadAlertConfig.message}
+                  </Text>
+                  <View style={styles.optionsActionsRow}>
+                    <TouchableOpacity 
+                      style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} 
+                      onPress={() => setShowUploadAlertModal(false)}
+                    >
+                      <Text style={styles.actionBtnText}>{t('common.cancel')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} 
+                      onPress={() => {
+                        console.log('[UPLOAD] Go to Settings button pressed in custom modal');
+                        console.log('[UPLOAD] uploadAlertConfig:', uploadAlertConfig);
+                        if (uploadAlertConfig && uploadAlertConfig.onGoToSettings) {
+                          uploadAlertConfig.onGoToSettings();
+                        } else {
+                          console.log('[UPLOAD] onGoToSettings not found, navigating directly');
+                          setShowUploadAlertModal(false);
+                          setTimeout(() => {
+                            try {
+                              // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                              navigation.goBack();
+                              setTimeout(() => {
+                                console.log('[UPLOAD] Direct navigation to Settings from parent screen');
+                                navigation.navigate('Settings', { scrollToCloudSync: true });
+                                console.log('[UPLOAD] Direct navigation call completed');
+                              }, 100);
+                            } catch (error) {
+                              console.error('[UPLOAD] Direct navigation error:', error);
+                            }
+                          }, 300);
+                        }
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>
+                        {t('gallery.goToSettings')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
+
       {/* Upload Progress Modal */}
       <Modal
         visible={uploading}
@@ -3279,10 +3476,31 @@ export default function GalleryScreen({ navigation, route }) {
                   if (isAuthenticated) {
                     setUploadDestinations(prev => ({ ...prev, google: !prev.google }));
                   } else {
-                    Alert.alert(
-                      t('gallery.googleNotConnected'),
-                      t('gallery.googleNotConnectedMessage')
-                    );
+                    console.log('[UPLOAD] Google checkbox clicked but not authenticated, showing custom modal');
+                    setUploadAlertConfig({
+                      title: t('gallery.googleNotConnected'),
+                      message: t('gallery.googleNotConnectedMessage'),
+                      onGoToSettings: () => {
+                        console.log('[UPLOAD] onGoToSettings callback called (from Google checkbox)');
+                        console.log('[UPLOAD] Closing modal first');
+                        setShowUploadAlertModal(false);
+                        setTimeout(() => {
+                          console.log('[UPLOAD] Executing navigation to Settings');
+                          try {
+                            // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                            navigation.goBack();
+                            setTimeout(() => {
+                              console.log('[UPLOAD] Navigating to Settings from parent screen');
+                              navigation.navigate('Settings', { scrollToCloudSync: true });
+                              console.log('[UPLOAD] Navigation call completed');
+                            }, 100);
+                          } catch (error) {
+                            console.error('[UPLOAD] Navigation error:', error);
+                          }
+                        }, 300);
+                      }
+                    });
+                    setShowUploadAlertModal(true);
                   }
                 }}
                 disabled={!isAuthenticated}
@@ -3323,10 +3541,31 @@ export default function GalleryScreen({ navigation, route }) {
                   if (connected) {
                     setUploadDestinations(prev => ({ ...prev, dropbox: !prev.dropbox }));
                   } else {
-                    Alert.alert(
-                      t('gallery.dropboxNotConnected'),
-                      t('gallery.dropboxNotConnectedMessage')
-                    );
+                    console.log('[UPLOAD] Dropbox checkbox clicked but not authenticated, showing custom modal');
+                    setUploadAlertConfig({
+                      title: t('gallery.dropboxNotConnected'),
+                      message: t('gallery.dropboxNotConnectedMessage'),
+                      onGoToSettings: () => {
+                        console.log('[UPLOAD] onGoToSettings callback called (from Dropbox checkbox)');
+                        console.log('[UPLOAD] Closing modal first');
+                        setShowUploadAlertModal(false);
+                        setTimeout(() => {
+                          console.log('[UPLOAD] Executing navigation to Settings');
+                          try {
+                            // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                            navigation.goBack();
+                            setTimeout(() => {
+                              console.log('[UPLOAD] Navigating to Settings from parent screen');
+                              navigation.navigate('Settings', { scrollToCloudSync: true });
+                              console.log('[UPLOAD] Navigation call completed');
+                            }, 100);
+                          } catch (error) {
+                            console.error('[UPLOAD] Navigation error:', error);
+                          }
+                        }, 300);
+                      }
+                    });
+                    setShowUploadAlertModal(true);
                   }
                 }}
                 disabled={!isDropboxConnected}
@@ -3442,7 +3681,10 @@ export default function GalleryScreen({ navigation, route }) {
               <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setOptionsVisible(false)}>
                 <Text style={styles.actionBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} onPress={startUploadWithOptions}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} onPress={() => {
+                console.log('[UPLOAD] Start Upload button pressed');
+                startUploadWithOptions();
+              }}>
                 <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>{t('gallery.startUpload')}</Text>
               </TouchableOpacity>
             </View>
@@ -3571,6 +3813,7 @@ export default function GalleryScreen({ navigation, route }) {
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}
                       onPress={() => {
+                        console.log('[UPLOAD] Upload All button pressed from manage menu');
                         setManageVisible(false);
                         handleUploadPhotos();
                       }}

@@ -26,6 +26,7 @@ import { createAlbumName } from '../services/uploadService';
 import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import RoomEditor from '../components/RoomEditor';
+import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 60) / 2; // 2 columns with padding
@@ -49,7 +50,8 @@ export default function HomeScreen({ navigation }) {
   const [selectedProjects, setSelectedProjects] = useState(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const { projects, getPhotosByProject, deleteProject, setActiveProject, activeProjectId, createProject, photos } = usePhotos();
-  const { userName, location, getRooms, userPlan, cleaningServiceEnabled, sectionLanguage } = useSettings();
+  const { userName, location, getRooms, userPlan, cleaningServiceEnabled, sectionLanguage, updateUserPlan } = useSettings();
+  const { exceedsLimit } = useFeaturePermissions();
   const { uploadStatus, cancelUpload, cancelAllUploads } = useBackgroundUpload();
   const [newProjectVisible, setNewProjectVisible] = useState(false);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
@@ -60,6 +62,7 @@ export default function HomeScreen({ navigation }) {
   const [newProjectName, setNewProjectName] = useState('');
   const [pendingCameraAfterCreate, setPendingCameraAfterCreate] = useState(false);
   const [combinedBaseUris, setCombinedBaseUris] = useState({}); // Cache for combined base image URIs
+  const [showPlanModal, setShowPlanModal] = useState(false);
 
   // Get rooms from settings (custom or default)
   const { customRooms, saveCustomRooms, resetCustomRooms } = useSettings();
@@ -699,6 +702,14 @@ export default function HomeScreen({ navigation }) {
       );
       return;
     }
+    
+    // Check if starter tier user already has a project
+    // Starter users can only have 1 project
+    if (exceedsLimit('maxProjects', projects.length)) {
+      setShowPlanModal(true);
+      return;
+    }
+    
     const base = createAlbumName(userName) || `Project`;
     const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[^a-z0-9_\- ]/gi, '_');
     const existing = projects.map(p => p.name);
@@ -717,6 +728,13 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleCreateProject = async () => {
+    // Double-check: if limit exceeded, show plan modal
+    if (exceedsLimit('maxProjects', projects.length)) {
+      setNewProjectVisible(false);
+      setShowPlanModal(true);
+      return;
+    }
+    
     try {
       const safeName = (newProjectName || 'Project').replace(/[^\p{L}\p{N}_\- ]/gu, '_');
       const proj = await createProject(safeName);
@@ -1502,6 +1520,82 @@ export default function HomeScreen({ navigation }) {
         editRoom={contextMenuRoom}
         mode={roomEditorMode}
       />
+
+      {/* Plan Selection Modal */}
+      <Modal
+        visible={showPlanModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowPlanModal(false)}
+      >
+        <View style={styles.planModalOverlay}>
+          <View style={styles.planModalContent}>
+            <View style={styles.planModalHeader}>
+              <Text style={styles.planModalTitle}>{t('planModal.title')}</Text>
+              <TouchableOpacity
+                onPress={() => setShowPlanModal(false)}
+                style={styles.planModalCloseButton}
+              >
+                <Text style={styles.planModalCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.planModalScrollView}>
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('starter');
+                    setShowPlanModal(false);
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('pro');
+                    setShowPlanModal(false);
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('business');
+                    setShowPlanModal(false);
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('enterprise');
+                    setShowPlanModal(false);
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1931,5 +2025,75 @@ const styles = StyleSheet.create({
   },
   contextMenuTextDanger: {
     color: '#FF4444',
+  },
+  // Plan Modal Styles
+  planModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end'
+  },
+  planModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 20
+  },
+  planModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER
+  },
+  planModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.TEXT
+  },
+  planModalCloseButton: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  planModalCloseText: {
+    fontSize: 24,
+    color: COLORS.GRAY
+  },
+  planModalScrollView: {
+    paddingHorizontal: 20,
+    paddingTop: 20
+  },
+  planContainer: {
+    marginBottom: 20
+  },
+  planButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    alignItems: 'center'
+  },
+  planButtonSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  planButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.PRIMARY
+  },
+  planButtonTextSelected: {
+    color: '#000000'
+  },
+  planSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 10
   },
 });

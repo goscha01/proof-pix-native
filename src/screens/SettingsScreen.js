@@ -224,7 +224,7 @@ function hsvToHex({ h = 0, s = 0, v = 0 }) {
     .toUpperCase()}`;
 }
 
-export default function SettingsScreen({ navigation }) {
+export default function SettingsScreen({ navigation, route }) {
   const {
     showLabels,
     toggleLabels,
@@ -567,6 +567,8 @@ export default function SettingsScreen({ navigation }) {
   const sectionLanguageLayouts = useRef({});
   const watermarkTextInputRef = useRef(null);
   const watermarkLinkInputRef = useRef(null);
+  const mainScrollViewRef = useRef(null);
+  const cloudSyncSectionRef = useRef(null);
 
   const isTeamMember = userMode === 'team_member';
   const [canSwitchBack, setCanSwitchBack] = useState(false);
@@ -1128,6 +1130,79 @@ export default function SettingsScreen({ navigation }) {
     }
   }, [sectionLanguageModalVisible, sectionLanguage]);
 
+  // Handle navigation to Cloud and Sync section
+  useFocusEffect(
+    useCallback(() => {
+      const params = route?.params;
+      console.log('[SETTINGS] useFocusEffect triggered, params:', params);
+      console.log('[SETTINGS] scrollToCloudSync param:', params?.scrollToCloudSync);
+      console.log('[SETTINGS] cloudSyncSectionRef.current:', !!cloudSyncSectionRef.current);
+      console.log('[SETTINGS] mainScrollViewRef.current:', !!mainScrollViewRef.current);
+      
+      // Only process if scrollToCloudSync is explicitly true (not undefined)
+      if (params?.scrollToCloudSync === true && cloudSyncSectionRef.current && mainScrollViewRef.current) {
+        console.log('[SETTINGS] Scrolling to Cloud and Sync section');
+        // Wait longer for the layout to complete after navigation
+        setTimeout(() => {
+          cloudSyncSectionRef.current.measureLayout(
+            mainScrollViewRef.current,
+            (x, y) => {
+              console.log('[SETTINGS] Cloud Sync section position:', { x, y });
+              if (y > 0) {
+                setTimeout(() => {
+                  console.log('[SETTINGS] Scrolling to y:', y - 20);
+                  mainScrollViewRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true });
+                  // Clear the param after scrolling with a delay
+                  setTimeout(() => {
+                    navigation.setParams({ scrollToCloudSync: undefined });
+                    console.log('[SETTINGS] Param cleared');
+                  }, 500);
+                }, 150);
+              } else {
+                console.log('[SETTINGS] Invalid y position, retrying...');
+                // Retry after a longer delay if position is invalid
+                setTimeout(() => {
+                  cloudSyncSectionRef.current.measureLayout(
+                    mainScrollViewRef.current,
+                    (x, y) => {
+                      if (y > 0) {
+                        console.log('[SETTINGS] Retry - Cloud Sync section position:', { x, y });
+                        mainScrollViewRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true });
+                        navigation.setParams({ scrollToCloudSync: undefined });
+                      }
+                    },
+                    (error) => {
+                      console.log('[SETTINGS] Retry measureLayout error:', error);
+                    }
+                  );
+                }, 500);
+              }
+            },
+            (error) => {
+              console.log('[SETTINGS] measureLayout error:', error);
+              // Retry on error
+              setTimeout(() => {
+                if (cloudSyncSectionRef.current && mainScrollViewRef.current) {
+                  cloudSyncSectionRef.current.measureLayout(
+                    mainScrollViewRef.current,
+                    (x, y) => {
+                      if (y > 0) {
+                        console.log('[SETTINGS] Retry after error - position:', { x, y });
+                        mainScrollViewRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true });
+                        navigation.setParams({ scrollToCloudSync: undefined });
+                      }
+                    },
+                    () => {}
+                  );
+                }
+              }, 500);
+            }
+          );
+        }, 400);
+      }
+    }, [route, navigation])
+  );
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -1141,7 +1216,10 @@ export default function SettingsScreen({ navigation }) {
         <View style={{ width: 60 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        ref={mainScrollViewRef}
+        style={styles.content}
+      >
         {/* Language Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
@@ -1504,7 +1582,11 @@ export default function SettingsScreen({ navigation }) {
         )}
 
         {/* Admin Setup Section */}
-        <View style={styles.section}>
+        <View 
+          ref={cloudSyncSectionRef}
+          style={styles.section}
+          onLayout={() => {}}
+        >
           <Text style={styles.sectionTitle}>{t('settings.cloudTeamSync')}</Text>
 
           {/* Show current plan above buttons */}

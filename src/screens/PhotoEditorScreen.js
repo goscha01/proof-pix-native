@@ -51,15 +51,25 @@ export default function PhotoEditorScreen({ route, navigation }) {
   
   // Track selected photos locally
   const [localSelectedPhotos, setLocalSelectedPhotos] = useState(new Set(selectedPhotos));
+  const selectedPhotosRef = useRef(selectedPhotos);
   
   // Sync with route params when they change
   useEffect(() => {
-    const newSet = new Set(selectedPhotos);
-    setLocalSelectedPhotos(newSet);
-    const combinedId = getCombinedId(currentPhotoSet);
-    console.log('[PhotoEditorScreen] Selected photos updated:', Array.from(newSet), 'Current combined ID:', combinedId, 'Is selected:', newSet.has(combinedId));
+    // Only update if the array contents actually changed
+    const prevArray = selectedPhotosRef.current;
+    const hasChanged = prevArray.length !== selectedPhotos.length || 
+                       prevArray.some((id, idx) => id !== selectedPhotos[idx]);
+    
+    if (hasChanged) {
+      selectedPhotosRef.current = selectedPhotos;
+      const newSet = new Set(selectedPhotos);
+      setLocalSelectedPhotos(newSet);
+      const combinedId = getCombinedId(currentPhotoSet);
+      console.log('[PhotoEditorScreen] Selected photos updated:', Array.from(newSet), 'Current combined ID:', combinedId, 'Is selected:', newSet.has(combinedId));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedPhotos]);
-  
+
   // Update selection state when current photo set changes
   useEffect(() => {
     if (isSelectionMode) {
@@ -67,7 +77,7 @@ export default function PhotoEditorScreen({ route, navigation }) {
       const isCurrentlySelected = localSelectedPhotos.has(combinedId);
       console.log('[PhotoEditorScreen] Current photo set changed:', combinedId, 'Is selected:', isCurrentlySelected);
     }
-  }, [currentPhotoSet.before.id, isSelectionMode, localSelectedPhotos]);
+  }, [currentPhotoSet.before.id, isSelectionMode]);
   
   // Get selection state for a specific photo set
   const getIsSelected = (photoSet) => {

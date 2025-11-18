@@ -56,11 +56,11 @@ export const TIER_ROLES = {
     features: [
       FEATURES.PHOTO_EXPORT,
       FEATURES.BULK_DELETE,
-      FEATURES.MULTIPLE_PROJECTS, // Limited
+      // No MULTIPLE_PROJECTS - starter can only have 1 project
       // No cloud sync, no team features, no watermark customization, no label customization
     ],
     limits: {
-      maxProjects: 3,
+      maxProjects: 1,
       maxPhotosPerProject: 100,
       maxTeamMembers: 0,
       maxCloudAccounts: 0,
