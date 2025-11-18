@@ -112,6 +112,8 @@ export default function GalleryScreen({ navigation, route }) {
   const tapCountRef = useRef({});
   const lastTapRef = useRef({});
   const originalSelectionStateRef = useRef({}); // Store original selection state before first tap
+  const toggleTimeoutRef = useRef({}); // Store timeout IDs for delayed toggles
+  const pendingTogglesRef = useRef(new Set()); // Track photos with pending toggles to prevent visual update
   
   // Ref to track selection mode for immediate access in handlers
   const isSelectionModeRef = useRef(false);
@@ -2276,80 +2278,86 @@ export default function GalleryScreen({ navigation, route }) {
           const now = Date.now();
           const DOUBLE_TAP_DELAY = 300; // 300ms window for double tap
           
-          // Check if this is a double tap (second tap within 300ms)
-          if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
-            // Double tap detected - restore original state and open preview
-            // The first tap already toggled, so we need to restore the original state
-            const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
-            setSelectedPhotos(prev => {
-              const newSet = new Set(prev);
-              if (wasOriginallySelected) {
-                // Restore to selected
-                newSet.add(combinedId);
-              } else {
-                // Restore to unselected
-                newSet.delete(combinedId);
-              }
-              return newSet;
-            });
-            
-            // Get the restored state for navigation (use the original state)
-            const restoredSelected = new Set(selectedPhotos);
-            if (wasOriginallySelected) {
-              restoredSelected.add(combinedId);
-            } else {
-              restoredSelected.delete(combinedId);
-            }
-            
-            tapCountRef.current[photoKey] = 0;
-            lastTapRef.current[photoKey] = 0;
-            delete originalSelectionStateRef.current[photoKey];
-            
-            // Get all selected combined photo sets for swiping
-            const selectedSets = getSelectedPhotoSets();
-            navigation.navigate('PhotoEditor', {
-              beforePhoto: photoSet.before,
-              afterPhoto: photoSet.after,
-              isSelectionMode: isSelectionModeRef.current || isSelectionMode,
-              selectedPhotos: Array.from(restoredSelected),
-              allPhotoSets: selectedSets, // Pass only selected sets for swiping
-              onSelectionChange: (newSelectedPhotos) => {
-                setSelectedPhotos(new Set(newSelectedPhotos));
-              }
-            });
-            return;
+        // Check if this is a double tap (second tap within 300ms)
+        if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
+          console.log('[GalleryScreen] Double tap detected for combined photo:', combinedId);
+          // Double tap detected - cancel any pending toggle and open preview
+          // Cancel the pending toggle from first tap
+          if (toggleTimeoutRef.current[photoKey]) {
+            clearTimeout(toggleTimeoutRef.current[photoKey]);
+            delete toggleTimeoutRef.current[photoKey];
           }
           
-          // First tap - store original state and toggle selection immediately
-          const wasOriginallySelected = currentSelectedPhotos.has(combinedId);
-          // Store original state separately
-          originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
+          const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
+          console.log('[GalleryScreen] Original selection state:', wasOriginallySelected);
           
-          setSelectedPhotos(prev => {
-            const newSet = new Set(prev);
-            if (newSet.has(combinedId)) {
-              newSet.delete(combinedId);
-            } else {
-              newSet.add(combinedId);
+          // Get the original state for navigation (don't change state, just use original)
+          const restoredSelected = new Set(currentSelectedPhotos);
+          // Make sure the photo is in the correct state for navigation
+          if (wasOriginallySelected) {
+            restoredSelected.add(combinedId);
+          } else {
+            restoredSelected.delete(combinedId);
+          }
+          
+          // Clean up
+          tapCountRef.current[photoKey] = 0;
+          lastTapRef.current[photoKey] = 0;
+          delete originalSelectionStateRef.current[photoKey];
+          pendingTogglesRef.current.delete(combinedId);
+          
+          // Get all selected combined photo sets for swiping
+          const selectedSets = getSelectedPhotoSets();
+          console.log('[GalleryScreen] Navigating to PhotoEditor with', selectedSets.length, 'selected sets');
+          
+          // Navigate immediately (no state change needed, checkbox stays as is)
+          navigation.navigate('PhotoEditor', {
+            beforePhoto: photoSet.before,
+            afterPhoto: photoSet.after,
+            isSelectionMode: isSelectionModeRef.current || isSelectionMode,
+            selectedPhotos: Array.from(restoredSelected),
+            allPhotoSets: selectedSets,
+            onSelectionChange: (newSelectedPhotos) => {
+              setSelectedPhotos(new Set(newSelectedPhotos));
             }
-            return newSet;
           });
-          
-          // Record tap for double tap detection
-          tapCountRef.current[photoKey] = 1;
-          lastTapRef.current[photoKey] = now;
-          
-          // Clear tap count after delay
-          setTimeout(() => {
-            if (tapCountRef.current[photoKey] === 1) {
-              tapCountRef.current[photoKey] = 0;
-              lastTapRef.current[photoKey] = 0;
-            }
-          }, DOUBLE_TAP_DELAY);
           return;
         }
         
-        // Not in selection mode: single tap opens preview
+        // First tap - store original state, don't toggle yet
+        const wasOriginallySelected = currentSelectedPhotos.has(combinedId);
+        originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
+        
+        // Record tap for double tap detection
+        tapCountRef.current[photoKey] = 1;
+        lastTapRef.current[photoKey] = now;
+        
+        // Schedule toggle after delay (only if no second tap comes)
+        toggleTimeoutRef.current[photoKey] = setTimeout(() => {
+          // Only toggle if this wasn't a double tap (tapCount is still 1)
+          if (tapCountRef.current[photoKey] === 1) {
+            setSelectedPhotos(prev => {
+              const newSet = new Set(prev);
+              if (newSet.has(combinedId)) {
+                newSet.delete(combinedId);
+              } else {
+                newSet.add(combinedId);
+              }
+              return newSet;
+            });
+          }
+          
+          // Clear tap count after delay
+          tapCountRef.current[photoKey] = 0;
+          lastTapRef.current[photoKey] = 0;
+          delete originalSelectionStateRef.current[photoKey];
+          delete toggleTimeoutRef.current[photoKey];
+          pendingTogglesRef.current.delete(combinedId);
+        }, DOUBLE_TAP_DELAY); // Wait full delay to confirm it's a single tap
+        return;
+      }
+      
+      // Not in selection mode: single tap opens preview
         navigation.navigate('PhotoEditor', {
           beforePhoto: photoSet.before,
           afterPhoto: photoSet.after
@@ -2408,42 +2416,43 @@ export default function GalleryScreen({ navigation, route }) {
         
         // Check if this is a double tap (second tap within 300ms)
         if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
-          // Double tap detected - restore original state and open preview
-          // The first tap already toggled, so we need to restore the original state
-          const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
-          setSelectedPhotos(prev => {
-            const newSet = new Set(prev);
-            if (wasOriginallySelected) {
-              // Restore to selected
-              newSet.add(photo.id);
-            } else {
-              // Restore to unselected
-              newSet.delete(photo.id);
-            }
-            return newSet;
-          });
+          console.log('[GalleryScreen] Double tap detected for photo:', photo.id);
+          // Double tap detected - cancel any pending toggle and open preview
+          // Cancel the pending toggle from first tap
+          if (toggleTimeoutRef.current[photoKey]) {
+            clearTimeout(toggleTimeoutRef.current[photoKey]);
+            delete toggleTimeoutRef.current[photoKey];
+          }
           
-          // Get the restored state for navigation (use the original state)
-          const restoredSelected = new Set(selectedPhotos);
+          const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
+          console.log('[GalleryScreen] Original selection state:', wasOriginallySelected);
+          
+          // Get the original state for navigation (don't change state, just use original)
+          const restoredSelected = new Set(currentSelectedPhotos);
+          // Make sure the photo is in the correct state for navigation
           if (wasOriginallySelected) {
             restoredSelected.add(photo.id);
           } else {
             restoredSelected.delete(photo.id);
           }
           
+          // Clean up
           tapCountRef.current[photoKey] = 0;
           lastTapRef.current[photoKey] = 0;
           delete originalSelectionStateRef.current[photoKey];
+          pendingTogglesRef.current.delete(photo.id);
           
+          // Navigate immediately (no state change needed, checkbox stays as is)
           if (photoType === 'combined') {
             // Get all selected combined photo sets for swiping
             const selectedSets = getSelectedPhotoSets();
+            console.log('[GalleryScreen] Navigating to PhotoEditor with', selectedSets.length, 'selected sets');
             navigation.navigate('PhotoEditor', {
               beforePhoto: photoSet.before,
               afterPhoto: photoSet.after,
               isSelectionMode: isSelectionModeRef.current || isSelectionMode,
               selectedPhotos: Array.from(restoredSelected),
-              allPhotoSets: selectedSets, // Pass only selected sets for swiping
+              allPhotoSets: selectedSets,
               onSelectionChange: (newSelectedPhotos) => {
                 setSelectedPhotos(new Set(newSelectedPhotos));
               }
@@ -2451,11 +2460,12 @@ export default function GalleryScreen({ navigation, route }) {
           } else {
             // Get all selected individual photos for swiping
             const selected = getSelectedPhotos();
+            console.log('[GalleryScreen] Navigating to PhotoDetail with', selected.length, 'selected photos');
             navigation.navigate('PhotoDetail', { 
               photo,
               isSelectionMode: isSelectionModeRef.current || isSelectionMode,
               selectedPhotos: Array.from(restoredSelected),
-              allPhotos: selected, // Pass only selected photos for swiping
+              allPhotos: selected,
               onSelectionChange: (newSelectedPhotos) => {
                 setSelectedPhotos(new Set(newSelectedPhotos));
               }
@@ -2464,32 +2474,36 @@ export default function GalleryScreen({ navigation, route }) {
           return;
         }
         
-        // First tap - store original state and toggle selection immediately
+        // First tap - store original state, don't toggle yet
         const wasOriginallySelected = currentSelectedPhotos.has(photo.id);
-        // Store original state separately
         originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
-        
-        setSelectedPhotos(prev => {
-          const newSet = new Set(prev);
-          if (newSet.has(photo.id)) {
-            newSet.delete(photo.id);
-          } else {
-            newSet.add(photo.id);
-          }
-          return newSet;
-        });
         
         // Record tap for double tap detection
         tapCountRef.current[photoKey] = 1;
         lastTapRef.current[photoKey] = now;
         
-        // Clear tap count after delay
-        setTimeout(() => {
+        // Schedule toggle after delay (only if no second tap comes)
+        toggleTimeoutRef.current[photoKey] = setTimeout(() => {
+          // Only toggle if this wasn't a double tap (tapCount is still 1)
           if (tapCountRef.current[photoKey] === 1) {
-            tapCountRef.current[photoKey] = 0;
-            lastTapRef.current[photoKey] = 0;
+            setSelectedPhotos(prev => {
+              const newSet = new Set(prev);
+              if (newSet.has(photo.id)) {
+                newSet.delete(photo.id);
+              } else {
+                newSet.add(photo.id);
+              }
+              return newSet;
+            });
           }
-        }, DOUBLE_TAP_DELAY);
+          
+          // Clear tap count after delay
+          tapCountRef.current[photoKey] = 0;
+          lastTapRef.current[photoKey] = 0;
+          delete originalSelectionStateRef.current[photoKey];
+          delete toggleTimeoutRef.current[photoKey];
+          pendingTogglesRef.current.delete(photo.id);
+        }, DOUBLE_TAP_DELAY); // Wait full delay to confirm it's a single tap
         return;
       }
       
