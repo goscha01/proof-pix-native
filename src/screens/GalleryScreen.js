@@ -2920,21 +2920,6 @@ export default function GalleryScreen({ navigation, route }) {
                 </TouchableOpacity>
               </View>
 
-              {/* Select Photos - separated with gap */}
-              <View style={[styles.actionsList, { marginTop: 16 }]}>
-                <TouchableOpacity
-                  style={[styles.actionBtn, styles.actionWide, { backgroundColor: '#22A45D' }]}
-                  onPress={() => {
-                    setManageVisible(false);
-                    navigation.navigate('PhotoSelection');
-                  }}
-                >
-                  <Text style={[styles.actionBtnText, { color: 'white' }]}>
-                    ☑️ {t('gallery.selectPhotos')}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
               <View style={styles.optionsActionsRowCenter}>
                 <TouchableOpacity style={[styles.actionBtn, styles.actionWide, styles.actionCancel]} onPress={() => setManageVisible(false)}>
                   <Text style={styles.actionBtnText}>{t('common.close')}</Text>
