@@ -107,6 +107,7 @@ export default function GalleryScreen({ navigation, route }) {
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
   const [showOnlySelected, setShowOnlySelected] = useState(false); // Filter to show only selected photos
+  const [photoFilter, setPhotoFilter] = useState('all'); // Filter: 'all', 'before', 'after', 'combined'
   
   // Refs for double tap detection
   const tapCountRef = useRef({});
@@ -2567,15 +2568,49 @@ export default function GalleryScreen({ navigation, route }) {
 
   const renderPhotoSet = (set, index, roomId) => {
     // Pass current state values to renderPhotoCard to avoid closure issues
+    // Apply filter based on photoFilter state
+    const showBefore = photoFilter === 'all' || photoFilter === 'before';
+    const showAfter = photoFilter === 'all' || photoFilter === 'after';
+    const showCombined = photoFilter === 'all' || photoFilter === 'combined';
+    
     return (
       <View key={index} style={styles.photoSetRow}>
         <View style={styles.threeColumnRow}>
-          {renderPhotoCard(set.before, '#4CAF50', 'before', set, false, isSelectionMode, selectedPhotos)}
-          {renderPhotoCard(set.after, '#2196F3', 'after', set, false, isSelectionMode, selectedPhotos)}
-          {renderPhotoCard(set.combined, '#FFC107', 'combined', set, true, isSelectionMode, selectedPhotos)}
+          {showBefore && renderPhotoCard(set.before, '#4CAF50', 'before', set, false, isSelectionMode, selectedPhotos)}
+          {showAfter && renderPhotoCard(set.after, '#2196F3', 'after', set, false, isSelectionMode, selectedPhotos)}
+          {showCombined && renderPhotoCard(set.combined, '#FFC107', 'combined', set, true, isSelectionMode, selectedPhotos)}
         </View>
       </View>
     );
+  };
+
+  // Render photos in rows when filtering by single type
+  const renderFilteredPhotos = (photos, photoType, borderColor) => {
+    const photosPerRow = 3;
+    const rows = [];
+    
+    for (let i = 0; i < photos.length; i += photosPerRow) {
+      const rowPhotos = photos.slice(i, i + photosPerRow);
+      rows.push(
+        <View key={i} style={styles.photoSetRow}>
+          <View style={styles.threeColumnRow}>
+            {rowPhotos.map((photo, idx) => {
+              const photoSet = photo.photoSet || { before: photo, after: null, combined: null };
+              const isLast = idx === rowPhotos.length - 1;
+              // For combined photos, pass null as photo since they're rendered from the set
+              const photoToRender = photoType === 'combined' ? null : photo;
+              return renderPhotoCard(photoToRender, borderColor, photoType, photoSet, isLast, isSelectionMode, selectedPhotos);
+            })}
+            {/* Fill remaining slots if row is not full */}
+            {rowPhotos.length < photosPerRow && Array.from({ length: photosPerRow - rowPhotos.length }).map((_, idx) => (
+              <View key={`empty-${idx}`} style={{ width: COLUMN_WIDTH, marginRight: 8 }} />
+            ))}
+          </View>
+        </View>
+      );
+    }
+    
+    return rows;
   };
 
   const renderRoomSection = (room) => {
@@ -2596,6 +2631,52 @@ export default function GalleryScreen({ navigation, route }) {
     
     if (sets.length === 0) return null;
 
+    // When filtering by a single type, show photos in rows
+    if (photoFilter === 'before' || photoFilter === 'after' || photoFilter === 'combined') {
+      let filteredPhotos = [];
+      let borderColor = '#4CAF50';
+      let photoType = 'before';
+      
+      if (photoFilter === 'before') {
+        filteredPhotos = sets
+          .filter(set => set.before)
+          .map(set => ({ ...set.before, photoSet: set }));
+        borderColor = '#4CAF50';
+        photoType = 'before';
+      } else if (photoFilter === 'after') {
+        filteredPhotos = sets
+          .filter(set => set.after)
+          .map(set => ({ ...set.after, photoSet: set }));
+        borderColor = '#2196F3';
+        photoType = 'after';
+      } else if (photoFilter === 'combined') {
+        filteredPhotos = sets
+          .filter(set => set.before && set.after)
+          .map(set => ({ 
+            id: `combined_${set.before.id}`,
+            uri: null, // Combined photos don't have URIs, they're rendered dynamically
+            photoSet: set 
+          }));
+        borderColor = '#FFC107';
+        photoType = 'combined';
+      }
+      
+      if (filteredPhotos.length === 0) return null;
+      
+      return (
+        <View key={room.id} style={styles.roomSection}>
+          <View style={styles.roomHeader}>
+            <Text style={styles.roomIcon}>{room.icon}</Text>
+            <Text style={styles.roomName}>
+              {t(`rooms.${room.id}`, { lng: sectionLanguage, defaultValue: room.name })}
+            </Text>
+          </View>
+          {renderFilteredPhotos(filteredPhotos, photoType, borderColor)}
+        </View>
+      );
+    }
+
+    // Default: show all columns (before, after, combined)
     return (
       <View key={room.id} style={styles.roomSection}>
         <View style={styles.roomHeader}>
@@ -2697,15 +2778,42 @@ export default function GalleryScreen({ navigation, route }) {
       </View>
 
       <View style={styles.columnHeaders}>
-        <Text style={[styles.columnHeader, { color: '#4CAF50' }]}>
-          {t('camera.before', { lng: labelLanguage })}
-        </Text>
-        <Text style={[styles.columnHeader, { color: '#2196F3' }]}>
-          {t('camera.after', { lng: labelLanguage })}
-        </Text>
-        <Text style={[styles.columnHeader, { color: '#FFC107', marginRight: 0 }]}>
-          {t('camera.combined', { lng: labelLanguage })}
-        </Text>
+        <TouchableOpacity
+          style={[styles.filterButton, photoFilter === 'all' && styles.filterButtonActive]}
+          onPress={() => setPhotoFilter('all')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, photoFilter === 'all' && styles.filterButtonTextActive]}>
+            {t('common.all', { lng: labelLanguage, defaultValue: 'All' })}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, photoFilter === 'before' && styles.filterButtonActive]}
+          onPress={() => setPhotoFilter('before')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, { color: '#4CAF50' }, photoFilter === 'before' && styles.filterButtonTextActive]}>
+            {t('camera.before', { lng: labelLanguage })}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, photoFilter === 'after' && styles.filterButtonActive]}
+          onPress={() => setPhotoFilter('after')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, { color: '#2196F3' }, photoFilter === 'after' && styles.filterButtonTextActive]}>
+            {t('camera.after', { lng: labelLanguage })}
+          </Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.filterButton, photoFilter === 'combined' && styles.filterButtonActive, { marginRight: 0 }]}
+          onPress={() => setPhotoFilter('combined')}
+          activeOpacity={0.7}
+        >
+          <Text style={[styles.filterButtonText, { color: '#FFC107' }, photoFilter === 'combined' && styles.filterButtonTextActive]}>
+            {t('camera.combined', { lng: labelLanguage })}
+          </Text>
+        </TouchableOpacity>
       </View>
 
       {photos.length === 0 || !activeProjectId ? (
@@ -3718,6 +3826,36 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     flexShrink: 1,
     numberOfLines: 1
+  },
+  filterButton: {
+    flex: 0,
+    minWidth: 70,
+    marginRight: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: '#F5F5F5',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#E0E0E0'
+  },
+  filterButtonActive: {
+    backgroundColor: '#E3F2FD',
+    borderColor: '#2196F3',
+    borderWidth: 2
+  },
+  filterButtonText: {
+    fontSize: 9,
+    fontWeight: 'bold',
+    color: COLORS.GRAY,
+    textAlign: 'center',
+    flexShrink: 1,
+    numberOfLines: 1
+  },
+  filterButtonTextActive: {
+    color: '#2196F3',
+    fontWeight: 'bold'
   },
   scrollView: {
     flex: 1
