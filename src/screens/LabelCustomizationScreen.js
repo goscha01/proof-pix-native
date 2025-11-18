@@ -297,73 +297,6 @@ export default function LabelCustomizationScreen({ navigation }) {
           {t('labelCustomization.description')}
         </Text>
 
-        {/* Background Color */}
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>{t('labelCustomization.backgroundColor')}</Text>
-            <Text style={styles.settingDescription}>
-              {labelBackgroundColor?.toUpperCase()}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.customSelectorButton}
-            onPress={() => openColorModal('background')}
-          >
-            <View
-              style={[
-                styles.colorPreviewSwatch,
-                { backgroundColor: labelBackgroundColor },
-              ]}
-            />
-            <Text style={styles.customSelectorButtonText}>{t('labelCustomization.pickColor')}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Text Color */}
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>{t('labelCustomization.textColor')}</Text>
-            <Text style={styles.settingDescription}>
-              {labelTextColor?.toUpperCase()}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.customSelectorButton}
-            onPress={() => openColorModal('text')}
-          >
-            <View
-              style={[
-                styles.colorPreviewSwatch,
-                { backgroundColor: labelTextColor },
-              ]}
-            />
-            <Text style={styles.customSelectorButtonText}>{t('labelCustomization.pickColor')}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Font Style */}
-        <View style={styles.settingRow}>
-          <View style={styles.settingInfo}>
-            <Text style={styles.settingLabel}>{t('labelCustomization.fontStyle')}</Text>
-            <Text style={styles.settingDescription}>
-              {currentFontOption?.label}
-            </Text>
-          </View>
-          <TouchableOpacity
-            style={styles.fontSelectorButton}
-            onPress={() => {
-              // Check if user has access to custom labels
-              if (!canUse(FEATURES.CUSTOM_LABELS)) {
-                setShowPlanModal(true);
-                return;
-              }
-              setFontModalVisible(true);
-            }}
-          >
-            <Text style={styles.fontSelectorButtonText}>{t('labelCustomization.chooseFont')}</Text>
-          </TouchableOpacity>
-        </View>
-
         {/* Corner Style */}
         <View style={styles.settingRowStacked}>
           <View style={styles.cornerControlsRow}>
@@ -441,6 +374,73 @@ export default function LabelCustomizationScreen({ navigation }) {
               );
             })}
           </View>
+        </View>
+
+        {/* Background Color */}
+        <View style={styles.settingRow}>
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>{t('labelCustomization.backgroundColor')}</Text>
+            <Text style={styles.settingDescription}>
+              {labelBackgroundColor?.toUpperCase()}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.customSelectorButton}
+            onPress={() => openColorModal('background')}
+          >
+            <View
+              style={[
+                styles.colorPreviewSwatch,
+                { backgroundColor: labelBackgroundColor },
+              ]}
+            />
+            <Text style={styles.customSelectorButtonText}>{t('labelCustomization.pickColor')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Text Color */}
+        <View style={styles.settingRow}>
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>{t('labelCustomization.textColor')}</Text>
+            <Text style={styles.settingDescription}>
+              {labelTextColor?.toUpperCase()}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.customSelectorButton}
+            onPress={() => openColorModal('text')}
+          >
+            <View
+              style={[
+                styles.colorPreviewSwatch,
+                { backgroundColor: labelTextColor },
+              ]}
+            />
+            <Text style={styles.customSelectorButtonText}>{t('labelCustomization.pickColor')}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Font Style */}
+        <View style={styles.settingRow}>
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>{t('labelCustomization.fontStyle')}</Text>
+            <Text style={styles.settingDescription}>
+              {currentFontOption?.label}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.fontSelectorButton}
+            onPress={() => {
+              // Check if user has access to custom labels
+              if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                setShowPlanModal(true);
+                return;
+              }
+              setFontModalVisible(true);
+            }}
+          >
+            <Text style={styles.fontSelectorButtonText}>{t('labelCustomization.chooseFont')}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Label Position */}
