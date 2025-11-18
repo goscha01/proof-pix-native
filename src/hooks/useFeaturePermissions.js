@@ -103,3 +103,6 @@ export const useFeaturePermissions = () => {
 
 export default useFeaturePermissions;
 
+// Re-export FEATURES for convenience
+export { FEATURES } from '../constants/featurePermissions';
+

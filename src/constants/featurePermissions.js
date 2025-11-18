@@ -57,13 +57,13 @@ export const TIER_ROLES = {
       FEATURES.PHOTO_EXPORT,
       FEATURES.BULK_DELETE,
       FEATURES.MULTIPLE_PROJECTS, // Limited
-      FEATURES.CUSTOM_LABELS,
+      // No cloud sync, no team features, no watermark customization, no label customization
     ],
     limits: {
       maxProjects: 3,
       maxPhotosPerProject: 100,
       maxTeamMembers: 0,
-      maxCloudAccounts: 1,
+      maxCloudAccounts: 0,
     }
   },
   
@@ -74,6 +74,7 @@ export const TIER_ROLES = {
       FEATURES.PHOTO_EXPORT,
       FEATURES.BULK_DELETE,
       FEATURES.GOOGLE_DRIVE_SYNC,
+      FEATURES.DROPBOX_SYNC,
       FEATURES.BACKGROUND_UPLOAD,
       FEATURES.MULTIPLE_PROJECTS,
       FEATURES.UNLIMITED_PROJECTS,
@@ -81,11 +82,12 @@ export const TIER_ROLES = {
       FEATURES.CUSTOM_LABELS,
       FEATURES.ADVANCED_TEMPLATES,
       FEATURES.PROJECT_SHARING,
+      // No team features - everything else
     ],
     limits: {
       maxProjects: -1, // Unlimited
       maxPhotosPerProject: -1, // Unlimited
-      maxTeamMembers: 0,
+      maxTeamMembers: 0, // No team features
       maxCloudAccounts: 1,
     }
   },

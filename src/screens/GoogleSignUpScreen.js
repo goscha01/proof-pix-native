@@ -1,29 +1,85 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAdmin } from '../context/AdminContext';
 import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
 import { useTranslation } from 'react-i18next';
+import dropboxAuthService from '../services/dropboxAuthService';
+import dropboxService from '../services/dropboxService';
 
 export default function GoogleSignUpScreen({ navigation, route }) {
   const { t } = useTranslation();
   const { individualSignIn, adminSignIn } = useAdmin();
   const { plan } = route.params || {};
   const insets = useSafeAreaInsets();
+  const [isSigningInGoogle, setIsSigningInGoogle] = useState(false);
+  const [isSigningInDropbox, setIsSigningInDropbox] = useState(false);
 
   const handleGoogleSignIn = async () => {
-    let result;
-    if (plan === 'business' || plan === 'enterprise') {
-      result = await adminSignIn();
-    } else {
-      result = await individualSignIn();
+    setIsSigningInGoogle(true);
+    try {
+      let result;
+      if (plan === 'business' || plan === 'enterprise') {
+        result = await adminSignIn();
+      } else {
+        result = await individualSignIn();
+      }
+      
+      if (result.success) {
+        navigation.replace('Home');
+      } else {
+        Alert.alert(t('googleSignUp.signInError'), result.error || t('googleSignUp.unexpectedError'));
+      }
+    } finally {
+      setIsSigningInGoogle(false);
     }
-    
-    if (result.success) {
-      navigation.replace('Home');
-    } else {
-      Alert.alert(t('googleSignUp.signInError'), result.error || t('googleSignUp.unexpectedError'));
+  };
+
+  const handleDropboxSignIn = async () => {
+    if (!dropboxAuthService.isConfigured()) {
+      Alert.alert(
+        t('settings.featureUnavailable'),
+        t('settings.dropboxNotConfigured')
+      );
+      return;
+    }
+
+    setIsSigningInDropbox(true);
+    try {
+      const result = await dropboxAuthService.signIn();
+      
+      // Find or create ProofPix folder
+      try {
+        const folderPath = await dropboxService.findOrCreateProofPixFolder();
+        console.log('[DROPBOX] Folder ready:', folderPath);
+      } catch (folderError) {
+        console.error('[DROPBOX] Folder creation error:', folderError);
+        // Don't fail the sign-in if folder creation fails
+      }
+
+      // Update state - reload tokens to ensure state is accurate
+      await dropboxAuthService.loadStoredTokens();
+      const isAuth = dropboxAuthService.isAuthenticated();
+      const userInfo = dropboxAuthService.getUserInfo();
+      
+      if (isAuth && userInfo) {
+        Alert.alert(
+          t('settings.dropboxConnected'),
+          t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
+          [{ text: t('common.ok'), onPress: () => navigation.replace('Home') }]
+        );
+      } else {
+        Alert.alert(t('common.error'), t('settings.dropboxSignInError'));
+      }
+    } catch (error) {
+      console.error('[DROPBOX] Sign-in error:', error);
+      Alert.alert(
+        t('common.error'),
+        error.message || t('settings.dropboxSignInError')
+      );
+    } finally {
+      setIsSigningInDropbox(false);
     }
   };
 
@@ -52,13 +108,31 @@ export default function GoogleSignUpScreen({ navigation, route }) {
         <TouchableOpacity
           style={[styles.button, styles.googleButton]}
           onPress={handleGoogleSignIn}
+          disabled={isSigningInGoogle || isSigningInDropbox}
         >
-          <Text style={[styles.buttonText, styles.googleButtonText]}>{t('googleSignUp.signUpWithGoogle')}</Text>
+          {isSigningInGoogle ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={[styles.buttonText, styles.googleButtonText]}>{t('settings.connectToGoogleAccount')}</Text>
+          )}
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.button, styles.dropboxButton]}
+          onPress={handleDropboxSignIn}
+          disabled={isSigningInGoogle || isSigningInDropbox}
+        >
+          {isSigningInDropbox ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={[styles.buttonText, styles.dropboxButtonText]}>{t('settings.connectToDropbox')}</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity
           style={[styles.button, styles.skipButton]}
           onPress={handleSkip}
+          disabled={isSigningInGoogle || isSigningInDropbox}
         >
           <Text style={styles.buttonText}>{t('googleSignUp.skipForNow')}</Text>
         </TouchableOpacity>
@@ -70,7 +144,7 @@ export default function GoogleSignUpScreen({ navigation, route }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: COLORS.PRIMARY, // Yellow background
   },
   content: {
     flex: 1,
@@ -88,7 +162,7 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 16,
-    color: '#666',
+    color: '#333',
     textAlign: 'center',
     marginBottom: 40,
     lineHeight: 24,
@@ -102,9 +176,12 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   googleButton: {
-    backgroundColor: COLORS.PRIMARY,
+    backgroundColor: '#000000', // Black background
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: '#000000',
+  },
+  dropboxButton: {
+    backgroundColor: '#0061FF', // Dropbox blue
   },
   skipButton: {
     backgroundColor: '#f0f0f0',
@@ -119,13 +196,16 @@ const styles = StyleSheet.create({
   googleButtonText: {
     color: '#fff',
   },
+  dropboxButtonText: {
+    color: '#FFFFFF',
+  },
   backButton: {
     position: 'absolute',
     padding: 10,
     zIndex: 10,
   },
   backButtonText: {
-    color: COLORS.PRIMARY,
+    color: '#000000', // Black arrow
     fontSize: 24,
     fontWeight: 'bold',
     flexShrink: 1,

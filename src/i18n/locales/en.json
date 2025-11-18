@@ -286,6 +286,8 @@
     "signInRequired": "Sign-In Required",
     "connectGoogleFirst": "Please connect to Google first",
     "setUpTeam": "Set Up Team",
+    "multiprofile": "Multiple Profiles",
+    "contactDeveloper": "Please contact {{email}} to enable multiple profiles.",
     "expoGoWarning": "⚠️ Warning: Team features don't work in Expo Go.",
     "expoGoWarningCommand": "Run: npx expo run:android or npx expo run:ios",
     "upgradePlan": "Upgrade Plan",

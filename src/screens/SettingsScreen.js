@@ -36,6 +36,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Modal from 'react-native-modal';
 import ColorPicker from 'react-native-wheel-color-picker';
 import { useTranslation } from 'react-i18next';
+import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
+import { FEATURES } from '../constants/featurePermissions';
 
 const getFontOptions = (t) => [
   {
@@ -280,6 +282,7 @@ export default function SettingsScreen({ navigation }) {
     toggleCleaningServiceEnabled,
   } = useSettings();
 
+  const { canUse, exceedsLimit, getLimit } = useFeaturePermissions();
   const { t, i18n } = useTranslation();
 
   // Memoize translated options
@@ -1254,7 +1257,15 @@ export default function SettingsScreen({ navigation }) {
                 </View>
                 <Switch
                   value={customWatermarkEnabled}
-                  onValueChange={toggleWatermark}
+                  onValueChange={(value) => {
+                    // Starter tier - no watermark removal/customization
+                    if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                      setShowPlanModal(true);
+                      return;
+                    }
+                    toggleWatermark(value);
+                  }}
+                  disabled={!canUse(FEATURES.CUSTOM_WATERMARKS)}
                   trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
                   thumbColor="white"
                 />
@@ -1327,14 +1338,21 @@ export default function SettingsScreen({ navigation }) {
               <TouchableOpacity
                 style={[
                   styles.customizeButton,
-                  !showLabels && styles.customizeButtonDisabled
+                  (!showLabels || !canUse(FEATURES.CUSTOM_LABELS)) && styles.customizeButtonDisabled
                 ]}
-                onPress={() => navigation.navigate('LabelCustomization')}
-                disabled={!showLabels}
+                onPress={() => {
+                  // Starter tier - no customizations
+                  if (!canUse(FEATURES.CUSTOM_LABELS)) {
+                    setShowPlanModal(true);
+                    return;
+                  }
+                  navigation.navigate('LabelCustomization');
+                }}
+                disabled={!showLabels || !canUse(FEATURES.CUSTOM_LABELS)}
               >
                 <Text style={[
                   styles.customizeButtonText,
-                  !showLabels && styles.customizeButtonTextDisabled
+                  (!showLabels || !canUse(FEATURES.CUSTOM_LABELS)) && styles.customizeButtonTextDisabled
                 ]}>{t('settings.customize')}</Text>
               </TouchableOpacity>
             </View>
@@ -1637,196 +1655,235 @@ export default function SettingsScreen({ navigation }) {
                     }
                   </Text>
                   
-                  {/* Determine which buttons are enabled based on plan */}
-                  {(() => {
-                    const isStarter = !userPlan || userPlan === 'starter';
-                    const isPro = userPlan === 'pro';
-                    const isBusiness = userPlan === 'business';
-                    const isEnterprise = userPlan === 'enterprise';
+                  {/* Buttons - Always visible, but functionality depends on tier */}
+                  <>
+                    {/* Connect to Google Account Button - Always visible */}
+                    <TouchableOpacity
+                      style={[
+                        styles.featureButton,
+                        styles.googleSignInButton,
+                        (!canUse(FEATURES.GOOGLE_DRIVE_SYNC) || !isGoogleSignInAvailable || isSigningIn) && styles.googleButtonDisabled
+                      ]}
+                      onPress={async () => {
+                        // Starter tier - show plan popup
+                        if (!canUse(FEATURES.GOOGLE_DRIVE_SYNC)) {
+                          setShowPlanModal(true);
+                          return;
+                        }
+                        
+                        setIsSigningIn(true);
+                        try {
+                          // For Pro, use individual sign-in; for Business/Enterprise, use admin sign-in
+                          if (userPlan === 'pro') {
+                            await individualSignIn();
+                          } else {
+                            await adminSignIn();
+                          }
+                        } catch (error) {
+                          console.error("Error during sign in:", error);
+                        } finally {
+                          setIsSigningIn(false);
+                        }
+                      }}
+                      disabled={!isGoogleSignInAvailable || isSigningIn}
+                    >
+                      {isSigningIn && canUse(FEATURES.GOOGLE_DRIVE_SYNC) ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={[
+                          styles.googleSignInButtonText,
+                          (!canUse(FEATURES.GOOGLE_DRIVE_SYNC) || !isGoogleSignInAvailable) && styles.googleButtonTextDisabled
+                        ]}>
+                          {t('settings.connectToGoogleAccount')}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
                     
-                    const canConnectGoogle = isPro || isBusiness || isEnterprise;
-                    const canSetupTeam = isBusiness || isEnterprise;
+                    {/* Connect to Dropbox Button - Always visible */}
+                    <TouchableOpacity
+                      style={[
+                        styles.featureButton,
+                        styles.dropboxButton,
+                        (!canUse(FEATURES.DROPBOX_SYNC) || isSigningInDropbox) && styles.dropboxButtonDisabled
+                      ]}
+                      onPress={async () => {
+                        // Starter tier - show plan popup
+                        if (!canUse(FEATURES.DROPBOX_SYNC)) {
+                          setShowPlanModal(true);
+                          return;
+                        }
+                        
+                        if (!dropboxAuthService.isConfigured()) {
+                          Alert.alert(
+                            t('settings.featureUnavailable'),
+                            t('settings.dropboxNotConfigured')
+                          );
+                          return;
+                        }
+
+                        setIsSigningInDropbox(true);
+                        try {
+                          const result = await dropboxAuthService.signIn();
+                          
+                          // Find or create ProofPix folder
+                          try {
+                            const folderPath = await dropboxService.findOrCreateProofPixFolder();
+                            console.log('[DROPBOX] Folder ready:', folderPath);
+                          } catch (folderError) {
+                            console.error('[DROPBOX] Folder creation error:', folderError);
+                            // Don't fail the sign-in if folder creation fails
+                          }
+
+                          // Update state - reload tokens to ensure state is accurate
+                          await dropboxAuthService.loadStoredTokens();
+                          const isAuth = dropboxAuthService.isAuthenticated();
+                          const userInfo = dropboxAuthService.getUserInfo();
+                          
+                          setIsDropboxAuthenticated(isAuth);
+                          setDropboxUserInfo(userInfo);
+                          
+                          console.log('[DROPBOX] Sign-in successful!');
+                          console.log('[DROPBOX] User info:', userInfo);
+                          console.log('[DROPBOX] Is authenticated:', isAuth);
+                          
+                          // Show success alert
+                          Alert.alert(
+                            t('settings.dropboxConnected'),
+                            t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
+                            [{ text: t('common.ok') }]
+                          );
+                        } catch (error) {
+                          console.error('[DROPBOX] Sign-in error:', error);
+                          Alert.alert(
+                            t('common.error'),
+                            error.message || t('settings.dropboxSignInError')
+                          );
+                        } finally {
+                          setIsSigningInDropbox(false);
+                        }
+                      }}
+                      disabled={isSigningInDropbox}
+                    >
+                      {isSigningInDropbox ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={[
+                          styles.featureButtonText,
+                          styles.dropboxButtonText,
+                          !canUse(FEATURES.DROPBOX_SYNC) && styles.dropboxButtonTextDisabled
+                        ]}>
+                          {t('settings.connectToDropbox')}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
                     
-                    return (
-                      <>
-                        {/* Connect to Google Account Button */}
-                        <TouchableOpacity
-                          style={[
-                            styles.featureButton,
-                            (!canConnectGoogle || !isGoogleSignInAvailable || isSigningIn) && styles.buttonDisabled
-                          ]}
-                          onPress={async () => {
-                            if (!canConnectGoogle) {
-                              Alert.alert(t('settings.featureUnavailable'), t('settings.googleAccountFeature'));
-                              return;
-                            }
-                            setIsSigningIn(true);
-                            try {
-                              // For Pro, use individual sign-in; for Business/Enterprise, use admin sign-in
-                              if (isPro) {
-                                await individualSignIn();
-                              } else {
-                                await adminSignIn();
-                              }
-                            } catch (error) {
-                              console.error("Error during sign in:", error);
-                            } finally {
-                              setIsSigningIn(false);
-                            }
-                          }}
-                          disabled={!canConnectGoogle || !isGoogleSignInAvailable || isSigningIn}
-                        >
-                          {isSigningIn && canConnectGoogle ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text style={[
-                              styles.featureButtonText,
-                              (!canConnectGoogle || !isGoogleSignInAvailable) && styles.buttonTextDisabled
-                            ]}>
-                              {t('settings.connectToGoogleAccount')}
-                            </Text>
-                          )}
-                        </TouchableOpacity>
+                    {/* Connect Team Button - Always visible */}
+                    <TouchableOpacity
+                      style={[
+                        styles.featureButton,
+                        ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || isSigningIn) && styles.buttonDisabled
+                      ]}
+                      onPress={async () => {
+                        const isStarter = !userPlan || userPlan === 'starter';
+                        const isPro = userPlan === 'pro';
+                        const isBusiness = userPlan === 'business';
+                        const isEnterprise = userPlan === 'enterprise';
                         
-                        {/* Connect to Dropbox Button */}
-                        <TouchableOpacity
-                          style={[
-                            styles.featureButton,
-                            styles.dropboxButton,
-                            (!canConnectGoogle || isSigningIn) && styles.buttonDisabled
-                          ]}
-                          onPress={async () => {
-                            if (!canConnectGoogle) {
-                              Alert.alert(t('settings.featureUnavailable'), t('settings.dropboxAccountFeature'));
-                              return;
-                            }
-                            
-                            if (!dropboxAuthService.isConfigured()) {
-                              Alert.alert(
-                                t('settings.featureUnavailable'),
-                                t('settings.dropboxNotConfigured')
-                              );
-                              return;
-                            }
-
-                            setIsSigningInDropbox(true);
-                            try {
-                              const result = await dropboxAuthService.signIn();
-                              
-                              // Find or create ProofPix folder
-                              try {
-                                const folderPath = await dropboxService.findOrCreateProofPixFolder();
-                                console.log('[DROPBOX] Folder ready:', folderPath);
-                              } catch (folderError) {
-                                console.error('[DROPBOX] Folder creation error:', folderError);
-                                // Don't fail the sign-in if folder creation fails
-                              }
-
-                              // Update state - reload tokens to ensure state is accurate
-                              await dropboxAuthService.loadStoredTokens();
-                              const isAuth = dropboxAuthService.isAuthenticated();
-                              const userInfo = dropboxAuthService.getUserInfo();
-                              
-                              setIsDropboxAuthenticated(isAuth);
-                              setDropboxUserInfo(userInfo);
-                              
-                              console.log('[DROPBOX] Sign-in successful!');
-                              console.log('[DROPBOX] User info:', userInfo);
-                              console.log('[DROPBOX] Is authenticated:', isAuth);
-                              
-                              // Show success alert
-                              Alert.alert(
-                                t('settings.dropboxConnected'),
-                                t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
-                                [{ text: t('common.ok') }]
-                              );
-                            } catch (error) {
-                              console.error('[DROPBOX] Sign-in error:', error);
-                              Alert.alert(
-                                t('common.error'),
-                                error.message || t('settings.dropboxSignInError')
-                              );
-                            } finally {
-                              setIsSigningInDropbox(false);
-                            }
-                          }}
-                          disabled={!canConnectGoogle || isSigningInDropbox}
-                        >
-                          {isSigningInDropbox ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text style={[
-                              styles.featureButtonText,
-                              styles.dropboxButtonText,
-                              !canConnectGoogle && styles.buttonTextDisabled
-                            ]}>
-                              {t('settings.connectToDropbox')}
-                            </Text>
-                          )}
-                        </TouchableOpacity>
+                        // Starter - show plan popup
+                        if (isStarter) {
+                          setShowPlanModal(true);
+                          return;
+                        }
                         
-                        {/* Set Up Team Button */}
-                        <TouchableOpacity
-                          style={[
-                            styles.featureButton,
-                            (!canSetupTeam || isSigningIn) && styles.buttonDisabled
-                          ]}
-                          onPress={async () => {
-                            if (!canSetupTeam) {
-                              Alert.alert(t('settings.featureUnavailable'), t('settings.teamSetupFeature'));
-                              return;
-                            }
-                            if (!isAuthenticated) {
-                              Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
-                              return;
-                            }
-                            await handleSetupTeam();
-                          }}
-                          disabled={!canSetupTeam || isSigningIn}
-                        >
-                          <Text style={[
-                            styles.featureButtonText,
-                            !canSetupTeam && styles.buttonTextDisabled
-                          ]}>
-                            {t('settings.setUpTeam')}
-                          </Text>
-                        </TouchableOpacity>
+                        // Pro - show popup saying not available
+                        if (isPro) {
+                          Alert.alert(
+                            t('settings.featureUnavailable'),
+                            t('settings.teamSetupFeature')
+                          );
+                          return;
+                        }
                         
-                        {!isGoogleSignInAvailable && (canConnectGoogle || canSetupTeam) && (
-                          <View style={styles.expoGoWarning}>
-                            <Text style={styles.expoGoWarningText}>
-                              {t('settings.expoGoWarning')}
-                            </Text>
-                            <Text style={styles.expoGoWarningSubtext}>
-                              {t('settings.expoGoWarningCommand')}
-                            </Text>
-                          </View>
-                        )}
-
-                        {/* Show plan selection option for Starter users */}
-                        {isStarter && (
-                          <>
-                            <TouchableOpacity
-                              style={styles.signInButton}
-                              onPress={() => setShowPlanSelection(true)}
-                            >
-                              <Text style={styles.signInButtonText}>
-                                {t('settings.upgradePlan')}
-                              </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.googleSignInButton}
-                              onPress={() => navigation.navigate('JoinTeam')}
-                            >
-                              <Text style={styles.googleSignInButtonText}>
-                                {t('settings.joinTeam')}
-                              </Text>
-                            </TouchableOpacity>
-                          </>
-                        )}
-                      </>
-                    );
-                  })()}
+                        // Business - check team member limit
+                        if (isBusiness) {
+                          const maxTeamMembers = getLimit('maxTeamMembers', userPlan);
+                          const currentTeamMembers = inviteTokens?.length || 0;
+                          
+                          if (exceedsLimit('maxTeamMembers', currentTeamMembers)) {
+                            Alert.alert(
+                              t('settings.teamLimitReached'),
+                              t('settings.teamLimitMessage', { limit: maxTeamMembers })
+                            );
+                            return;
+                          }
+                          
+                          if (!isAuthenticated) {
+                            Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
+                            return;
+                          }
+                          await handleSetupTeam();
+                          return;
+                        }
+                        
+                        // Enterprise - allow unlimited team members
+                        if (isEnterprise) {
+                          if (!isAuthenticated) {
+                            Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
+                            return;
+                          }
+                          await handleSetupTeam();
+                        }
+                      }}
+                      disabled={isSigningIn}
+                    >
+                      <Text style={[
+                        styles.featureButtonText,
+                        ((!userPlan || userPlan === 'starter') || userPlan === 'pro') && styles.buttonTextDisabled
+                      ]}>
+                        {t('settings.setUpTeam')}
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {/* Multiple Profiles Button - Always visible */}
+                    <TouchableOpacity
+                      style={[
+                        styles.featureButton,
+                        styles.multipleProfilesButton,
+                        ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || userPlan === 'business' || isSigningIn) && styles.multipleProfilesButtonDisabled
+                      ]}
+                      onPress={() => {
+                        // Show popup with developer email
+                        if (userPlan === 'enterprise') {
+                          Alert.alert(
+                            t('settings.multipleProfiles'),
+                            t('settings.contactDeveloper', { email: 'developer@proofpix.com' })
+                          );
+                        } else {
+                          setShowPlanModal(true);
+                        }
+                      }}
+                      disabled={isSigningIn}
+                    >
+                      <Text style={[
+                        styles.featureButtonText,
+                        styles.multipleProfilesButtonText,
+                        ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || userPlan === 'business') && styles.multipleProfilesButtonTextDisabled
+                      ]}>
+                        {t('settings.multiprofile')}
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {!isGoogleSignInAvailable && (canUse(FEATURES.GOOGLE_DRIVE_SYNC) || canUse(FEATURES.TEAM_INVITES)) && (
+                      <View style={styles.expoGoWarning}>
+                        <Text style={styles.expoGoWarningText}>
+                          {t('settings.expoGoWarning')}
+                        </Text>
+                        <Text style={styles.expoGoWarningSubtext}>
+                          {t('settings.expoGoWarningCommand')}
+                        </Text>
+                      </View>
+                    )}
+                  </>
                 </>
               )}
             </>
@@ -1966,158 +2023,217 @@ export default function SettingsScreen({ navigation }) {
               )}
 
               {/* Show all buttons when authenticated, with enable/disable based on plan */}
-              {(() => {
-                const isPro = userPlan === 'pro';
-                const isBusiness = userPlan === 'business';
-                const isEnterprise = userPlan === 'enterprise';
+              <>
+                {/* Keep Connect to Google button visible even after authentication */}
+                <TouchableOpacity
+                  style={[
+                    styles.featureButton,
+                    styles.googleSignInButton,
+                    (!canUse(FEATURES.MULTIPLE_CLOUD_ACCOUNTS) || !isGoogleSignInAvailable || isSigningIn) && styles.googleButtonDisabled
+                  ]}
+                  onPress={async () => {
+                    // Only Enterprise can connect multiple accounts
+                    if (!canUse(FEATURES.MULTIPLE_CLOUD_ACCOUNTS)) {
+                      if (userPlan === 'enterprise') {
+                        // Show developer contact popup
+                        Alert.alert(
+                          t('settings.multipleProfiles'),
+                          t('settings.contactDeveloper', { email: 'developer@proofpix.com' })
+                        );
+                      } else {
+                        setShowPlanModal(true);
+                      }
+                      return;
+                    }
+                    
+                    setIsSigningIn(true);
+                    try {
+                      if (userMode === 'admin') {
+                        await adminSignIn();
+                      } else {
+                        await individualSignIn();
+                      }
+                    } catch (error) {
+                      console.error('Error reconnecting Google account:', error);
+                    } finally {
+                      setIsSigningIn(false);
+                    }
+                  }}
+                  disabled={!isGoogleSignInAvailable || isSigningIn}
+                >
+                  {isSigningIn && canUse(FEATURES.MULTIPLE_CLOUD_ACCOUNTS) ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={[
+                      styles.googleSignInButtonText,
+                      (!canUse(FEATURES.MULTIPLE_CLOUD_ACCOUNTS) || !isGoogleSignInAvailable) && styles.googleButtonTextDisabled
+                    ]}>
+                      {t('settings.connectToGoogleAccount')}
+                    </Text>
+                  )}
+                </TouchableOpacity>
                 
-                const canConnectGoogle = isPro || isBusiness || isEnterprise;
-                const canSetupTeam = isBusiness || isEnterprise;
-                const isAdmin = userMode === 'admin';
-                const connectButtonDisabled = !isEnterprise || !isGoogleSignInAvailable || isSigningIn;
-                
-                return (
-                  <>
-                    {/* Keep Connect button visible even after authentication */}
-                    <TouchableOpacity
-                      style={[
-                        styles.featureButton,
-                        connectButtonDisabled && styles.buttonDisabled
-                      ]}
-                      onPress={async () => {
-                        if (connectButtonDisabled) {
-                          return;
-                        }
-                        setIsSigningIn(true);
+                {/* Connect to Dropbox Button - always shown when authenticated but not connected */}
+                {!isDropboxAuthenticated && (
+                  <TouchableOpacity
+                    style={[
+                      styles.featureButton,
+                      styles.dropboxButton,
+                      (!canUse(FEATURES.DROPBOX_SYNC) || isSigningInDropbox) && styles.dropboxButtonDisabled
+                    ]}
+                    onPress={async () => {
+                      // Check feature access
+                      if (!canUse(FEATURES.DROPBOX_SYNC)) {
+                        setShowPlanModal(true);
+                        return;
+                      }
+                      
+                      if (!dropboxAuthService.isConfigured()) {
+                        Alert.alert(
+                          t('settings.featureUnavailable'),
+                          t('settings.dropboxNotConfigured')
+                        );
+                        return;
+                      }
+
+                      setIsSigningInDropbox(true);
+                      try {
+                        const result = await dropboxAuthService.signIn();
+                        
+                        // Find or create ProofPix folder
                         try {
-                          if (isAdmin) {
-                            await adminSignIn();
-                          } else {
-                            await individualSignIn();
-                          }
-                        } catch (error) {
-                          console.error('Error reconnecting Google account:', error);
-                        } finally {
-                          setIsSigningIn(false);
+                          const folderPath = await dropboxService.findOrCreateProofPixFolder();
+                          console.log('[DROPBOX] Folder ready:', folderPath);
+                        } catch (folderError) {
+                          console.error('[DROPBOX] Folder creation error:', folderError);
+                          // Don't fail the sign-in if folder creation fails
                         }
-                      }}
-                      disabled={connectButtonDisabled}
-                    >
-                      {isSigningIn && !connectButtonDisabled ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={[
-                          styles.featureButtonText,
-                          connectButtonDisabled && styles.buttonTextDisabled
-                        ]}>
-                          {t('settings.connectToGoogleAccount')}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                    
-                    {/* Connect to Dropbox Button - always shown when authenticated */}
-                    {!isDropboxAuthenticated && (
-                      <TouchableOpacity
-                        style={[
-                          styles.featureButton,
-                          styles.dropboxButton,
-                          (!canConnectGoogle || isSigningInDropbox) && styles.buttonDisabled
-                        ]}
-                        onPress={async () => {
-                          if (!canConnectGoogle) {
-                            Alert.alert(t('settings.featureUnavailable'), t('settings.dropboxAccountFeature'));
-                            return;
-                          }
-                          
-                          if (!dropboxAuthService.isConfigured()) {
-                            Alert.alert(
-                              t('settings.featureUnavailable'),
-                              t('settings.dropboxNotConfigured')
-                            );
-                            return;
-                          }
 
-                          setIsSigningInDropbox(true);
-                          try {
-                            const result = await dropboxAuthService.signIn();
-                            
-                            // Find or create ProofPix folder
-                            try {
-                              const folderPath = await dropboxService.findOrCreateProofPixFolder();
-                              console.log('[DROPBOX] Folder ready:', folderPath);
-                            } catch (folderError) {
-                              console.error('[DROPBOX] Folder creation error:', folderError);
-                              // Don't fail the sign-in if folder creation fails
-                            }
-
-                            // Update state - reload tokens to ensure state is accurate
-                            await dropboxAuthService.loadStoredTokens();
-                            const isAuth = dropboxAuthService.isAuthenticated();
-                            const userInfo = dropboxAuthService.getUserInfo();
-                            
-                            setIsDropboxAuthenticated(isAuth);
-                            setDropboxUserInfo(userInfo);
-                            
-                            console.log('[DROPBOX] Sign-in successful!');
-                            console.log('[DROPBOX] User info:', userInfo);
-                            console.log('[DROPBOX] Is authenticated:', isAuth);
-                            
-                            // Show success alert
-                            Alert.alert(
-                              t('settings.dropboxConnected'),
-                              t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
-                              [{ text: t('common.ok') }]
-                            );
-                          } catch (error) {
-                            console.error('[DROPBOX] Sign-in error:', error);
-                            Alert.alert(
-                              t('common.error'),
-                              error.message || t('settings.dropboxSignInError')
-                            );
-                          } finally {
-                            setIsSigningInDropbox(false);
-                          }
-                        }}
-                        disabled={!canConnectGoogle || isSigningInDropbox}
-                      >
-                        {isSigningInDropbox ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={[
-                            styles.featureButtonText,
-                            styles.dropboxButtonText,
-                            !canConnectGoogle && styles.buttonTextDisabled
-                          ]}>
-                            {t('settings.connectToDropbox')}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
+                        // Update state - reload tokens to ensure state is accurate
+                        await dropboxAuthService.loadStoredTokens();
+                        const isAuth = dropboxAuthService.isAuthenticated();
+                        const userInfo = dropboxAuthService.getUserInfo();
+                        
+                        setIsDropboxAuthenticated(isAuth);
+                        setDropboxUserInfo(userInfo);
+                        
+                        console.log('[DROPBOX] Sign-in successful!');
+                        console.log('[DROPBOX] User info:', userInfo);
+                        console.log('[DROPBOX] Is authenticated:', isAuth);
+                        
+                        // Show success alert
+                        Alert.alert(
+                          t('settings.dropboxConnected'),
+                          t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
+                          [{ text: t('common.ok') }]
+                        );
+                      } catch (error) {
+                        console.error('[DROPBOX] Sign-in error:', error);
+                        Alert.alert(
+                          t('common.error'),
+                          error.message || t('settings.dropboxSignInError')
+                        );
+                      } finally {
+                        setIsSigningInDropbox(false);
+                      }
+                    }}
+                    disabled={isSigningInDropbox}
+                  >
+                    {isSigningInDropbox ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={[
+                        styles.featureButtonText,
+                        styles.dropboxButtonText,
+                        !canUse(FEATURES.DROPBOX_SYNC) && styles.dropboxButtonTextDisabled
+                      ]}>
+                        {t('settings.connectToDropbox')}
+                      </Text>
                     )}
+                  </TouchableOpacity>
+                )}
+                
+                {/* Connect Team Button - Always visible when authenticated */}
+                <TouchableOpacity
+                  style={[
+                    styles.featureButton,
+                    ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || isSigningIn) && styles.buttonDisabled
+                  ]}
+                  onPress={async () => {
+                    const isPro = userPlan === 'pro';
+                    const isBusiness = userPlan === 'business';
+                    const isEnterprise = userPlan === 'enterprise';
                     
-                    {/* Set Up Team Button - shown for authenticated Business/Enterprise admins who haven't set up yet */}
-                    {isAdmin && !isSetupComplete() && canSetupTeam && (
-                      <TouchableOpacity
-                        style={[
-                          styles.featureButton,
-                          isSigningIn && styles.buttonDisabled
-                        ]}
-                        onPress={handleSetupTeam}
-                        disabled={isSigningIn}
-                      >
-                        {isSigningIn ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={styles.featureButtonText}>
-                            {t('settings.setUpTeam')}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
+                    // Pro - show popup saying not available
+                    if (isPro) {
+                      Alert.alert(
+                        t('settings.featureUnavailable'),
+                        t('settings.teamSetupFeature')
+                      );
+                      return;
+                    }
                     
-                    {/* Add Location button removed */}
-                  </>
-                );
-              })()}
+                    // Business - check team member limit
+                    if (isBusiness) {
+                      const maxTeamMembers = getLimit('maxTeamMembers', userPlan);
+                      const currentTeamMembers = inviteTokens?.length || 0;
+                      
+                      if (exceedsLimit('maxTeamMembers', currentTeamMembers)) {
+                        Alert.alert(
+                          t('settings.teamLimitReached'),
+                          t('settings.teamLimitMessage', { limit: maxTeamMembers })
+                        );
+                        return;
+                      }
+                      
+                      await handleSetupTeam();
+                      return;
+                    }
+                    
+                    // Enterprise - allow unlimited team members
+                    if (isEnterprise) {
+                      await handleSetupTeam();
+                    }
+                  }}
+                  disabled={isSigningIn}
+                >
+                  <Text style={[
+                    styles.featureButtonText,
+                    ((!userPlan || userPlan === 'starter') || userPlan === 'pro') && styles.buttonTextDisabled
+                  ]}>
+                    {t('settings.setUpTeam')}
+                  </Text>
+                </TouchableOpacity>
+                
+                {/* Multiple Profiles Button - Always visible */}
+                <TouchableOpacity
+                  style={[
+                    styles.featureButton,
+                    styles.multipleProfilesButton,
+                    ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || userPlan === 'business' || isSigningIn) && styles.multipleProfilesButtonDisabled
+                  ]}
+                  onPress={() => {
+                    // Show popup with developer email for Enterprise, plan modal for others
+                    if (userPlan === 'enterprise') {
+                      Alert.alert(
+                        t('settings.multipleProfiles'),
+                        t('settings.contactDeveloper', { email: 'developer@proofpix.com' })
+                      );
+                    } else {
+                      setShowPlanModal(true);
+                    }
+                  }}
+                  disabled={isSigningIn}
+                >
+                  <Text style={[
+                    styles.featureButtonText,
+                    styles.multipleProfilesButtonText,
+                    ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || userPlan === 'business') && styles.multipleProfilesButtonTextDisabled
+                  ]}>
+                    {t('settings.multiprofile')}
+                  </Text>
+                </TouchableOpacity>
+              </>
 
               {userMode === 'admin' && isSetupComplete() && (
                 <>
@@ -2436,7 +2552,7 @@ export default function SettingsScreen({ navigation }) {
                   onPress={() => setShowPlanModal(false)}
                   style={styles.modalCloseButton}
                 >
-                  <Text style={styles.modalCloseText}>Γ£ò</Text>
+                  <Text style={styles.modalCloseText}>×</Text>
                 </TouchableOpacity>
               </View>
 
@@ -2460,9 +2576,6 @@ export default function SettingsScreen({ navigation }) {
                     onPress={async () => {
                       await updateUserPlan('pro');
                       setShowPlanModal(false);
-                      if (!isAuthenticated) {
-                        navigation.navigate('GoogleSignUp', { plan: 'pro' });
-                      }
                     }}
                   >
                     <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
@@ -2476,9 +2589,6 @@ export default function SettingsScreen({ navigation }) {
                     onPress={async () => {
                       await updateUserPlan('business');
                       setShowPlanModal(false);
-                      if (!isAuthenticated) {
-                        navigation.navigate('GoogleSignUp', { plan: 'business' });
-                      }
                     }}
                   >
                     <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
@@ -2492,9 +2602,6 @@ export default function SettingsScreen({ navigation }) {
                     onPress={async () => {
                       await updateUserPlan('enterprise');
                       setShowPlanModal(false);
-                      if (!isAuthenticated) {
-                        navigation.navigate('GoogleSignUp', { plan: 'enterprise' });
-                      }
                     }}
                   >
                     <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
@@ -3019,7 +3126,7 @@ const sliderStyles = StyleSheet.create({
       fontWeight: '600'
     },
     googleSignInButton: {
-      backgroundColor: '#4285F4',
+      backgroundColor: '#000000', // Black background
       borderRadius: 12,
       paddingVertical: 16,
       paddingHorizontal: 20,
@@ -3027,16 +3134,53 @@ const sliderStyles = StyleSheet.create({
       marginBottom: 8
     },
     googleSignInButtonText: {
-      color: 'white',
+      color: '#FFFFFF', // White text
       fontSize: 16,
       fontWeight: '600'
     },
     buttonDisabled: {
-      backgroundColor: '#cccccc',
-      opacity: 0.6
+      // Inactive buttons: white background with yellow border (default for Set Up Team)
+      backgroundColor: '#FFFFFF',
+      borderWidth: 2,
+      borderColor: COLORS.PRIMARY, // Yellow border
+      opacity: 1
     },
     buttonTextDisabled: {
-      color: '#666666'
+      // Inactive button text: yellow (default for Set Up Team)
+      color: COLORS.PRIMARY
+    },
+    googleButtonDisabled: {
+      // Inactive Google button: white background with black border
+      backgroundColor: '#FFFFFF',
+      borderWidth: 2,
+      borderColor: '#000000', // Black border
+      opacity: 1
+    },
+    googleButtonTextDisabled: {
+      // Inactive Google button text: black
+      color: '#000000'
+    },
+    dropboxButtonDisabled: {
+      // Inactive Dropbox button: white background with blue border
+      backgroundColor: '#FFFFFF',
+      borderWidth: 2,
+      borderColor: '#0061FF', // Blue border (Dropbox blue)
+      opacity: 1
+    },
+    dropboxButtonTextDisabled: {
+      // Inactive Dropbox button text: blue
+      color: '#0061FF'
+    },
+    multipleProfilesButtonDisabled: {
+      // Inactive Multiple Profiles button: white background with green border
+      backgroundColor: '#FFFFFF',
+      borderWidth: 2,
+      borderColor: '#28a745', // Green border
+      opacity: 1
+    },
+    multipleProfilesButtonTextDisabled: {
+      // Inactive Multiple Profiles button text: green
+      color: '#28a745'
     },
     currentPlanBox: {
       backgroundColor: '#f0f0f0',
@@ -3119,24 +3263,24 @@ const sliderStyles = StyleSheet.create({
       marginBottom: 20
     },
     planButton: {
-      backgroundColor: '#fff',
+      backgroundColor: '#FFFFFF', // White background for inactive buttons
       borderRadius: 12,
       padding: 20,
       borderWidth: 2,
-      borderColor: '#ddd',
+      borderColor: COLORS.PRIMARY, // Yellow border for inactive buttons
       alignItems: 'center'
     },
     planButtonSelected: {
-      borderColor: COLORS.PRIMARY,
-      backgroundColor: '#f0f7ff'
+      backgroundColor: COLORS.PRIMARY, // Yellow background for active buttons
+      borderColor: COLORS.PRIMARY
     },
     planButtonText: {
       fontSize: 18,
       fontWeight: 'bold',
-      color: '#333'
+      color: COLORS.PRIMARY // Yellow text for inactive buttons
     },
     planButtonTextSelected: {
-      color: COLORS.PRIMARY
+      color: '#000000' // Black text for active buttons
     },
     planSubtext: {
       fontSize: 14,
@@ -3431,21 +3575,28 @@ const sliderStyles = StyleSheet.create({
       marginTop: 8,
     },
     featureButton: {
-      backgroundColor: COLORS.PRIMARY,
+      backgroundColor: COLORS.PRIMARY, // Yellow background for active buttons
       borderRadius: 12,
       paddingVertical: 16,
       paddingHorizontal: 20,
       alignItems: 'center',
       marginTop: 12,
-      marginBottom: 8
+      marginBottom: 8,
+      borderWidth: 0
     },
     dropboxButton: {
       backgroundColor: '#0061FF',
     },
+    multipleProfilesButton: {
+      backgroundColor: '#28a745', // Green background
+    },
     featureButtonText: {
-      color: COLORS.TEXT,
+      color: '#000000', // Black text for active buttons
       fontSize: 16,
       fontWeight: '600'
+    },
+    multipleProfilesButtonText: {
+      color: '#FFFFFF', // White text for green button
     },
     dropboxButtonText: {
       color: '#FFFFFF',
