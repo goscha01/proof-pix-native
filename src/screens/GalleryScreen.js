@@ -52,6 +52,8 @@ import {
   cleanupOldCache,
   invalidateCache,
 } from '../services/labelCacheService';
+import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
+import { FEATURES } from '../constants/featurePermissions';
 
 const { width } = Dimensions.get('window');
 const CONTAINER_PADDING = 32; // 16px on each side
@@ -95,7 +97,9 @@ export default function GalleryScreen({ navigation, route }) {
     sectionLanguage,
     cleaningServiceEnabled,
     getRooms,
+    updateUserPlan,
   } = useSettings();
+  const { canUse } = useFeaturePermissions();
   const { userMode, teamInfo, isAuthenticated, folderId, proxySessionId, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
@@ -261,10 +265,25 @@ export default function GalleryScreen({ navigation, route }) {
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
   const [selectedShareTypes, setSelectedShareTypes] = useState({ before: true, after: true, combined: true });
-  const [shareAsArchive, setShareAsArchive] = useState(false); // Default: share individual photos
-  const [shareToSameApp, setShareToSameApp] = useState(true); // Default: reuse same app for all photos
+  // For starter users, archive should always be checked by default
+  const [shareAsArchive, setShareAsArchive] = useState(true); // Default: true for starter users, will be adjusted by useEffect
   const [uploadDestinations, setUploadDestinations] = useState({ google: true, dropbox: false }); // Default: Google only
+  const [showAdvancedShareFormats, setShowAdvancedShareFormats] = useState(false);
+  const [showSharePlanModal, setShowSharePlanModal] = useState(false);
   const [isDropboxConnected, setIsDropboxConnected] = useState(false);
+
+  // Debug: Track when showSharePlanModal changes
+  useEffect(() => {
+    console.log('[GALLERY] showSharePlanModal changed to:', showSharePlanModal);
+  }, [showSharePlanModal]);
+
+  // For starter users, archive should always be checked
+  useEffect(() => {
+    if (!canUse(FEATURES.ADVANCED_TEMPLATES) && !shareAsArchive) {
+      console.log('[GALLERY] Starter user - forcing archive to be checked');
+      setShareAsArchive(true);
+    }
+  }, [shareAsArchive, canUse]);
   const [selectedFormats, setSelectedFormats] = useState(() => {
     // Default: only square formats enabled by default
     const initial = {};
@@ -336,9 +355,22 @@ export default function GalleryScreen({ navigation, route }) {
 
   const FREE_FORMATS = new Set([]);
   const handleFormatToggle = (key) => {
+    console.log('[GALLERY] handleFormatToggle called with key:', key);
+    console.log('[GALLERY] userPlan:', userPlan);
+    console.log('[GALLERY] canUse(ADVANCED_TEMPLATES):', canUse(FEATURES.ADVANCED_TEMPLATES));
+    console.log('[GALLERY] FEATURES.ADVANCED_TEMPLATES:', FEATURES.ADVANCED_TEMPLATES);
+    
+    // Check if user has access to advanced templates
+    if (!canUse(FEATURES.ADVANCED_TEMPLATES)) {
+      console.log('[GALLERY] User does not have access to advanced templates, showing plan modal');
+      // Show plan modal on top of share modal
+      setShowSharePlanModal(true);
+      return;
+    }
     try {
       setSelectedFormats(prev => ({ ...prev, [key]: !prev[key] }));
     } catch (e) {
+      console.error('[GALLERY] Error toggling format:', e);
     }
   };
 
@@ -1065,7 +1097,6 @@ export default function GalleryScreen({ navigation, route }) {
                 // Share multiple photos using react-native-share
                 // Use urls parameter to share all photos at once (same approach that worked for 8 photos)
                 console.log('[GALLERY] Starting to share', urls.length, 'photos together');
-                console.log('[GALLERY] Share to same app:', shareToSameApp);
                 
                 // Add a small delay before sharing to ensure UI is ready
                 await new Promise(resolve => InteractionManager.runAfterInteractions(resolve));
@@ -3901,39 +3932,161 @@ export default function GalleryScreen({ navigation, route }) {
         visible={shareOptionsVisible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShareOptionsVisible(false)}
+        onRequestClose={() => {
+          console.log('[GALLERY] Share options modal close requested');
+          setShareOptionsVisible(false);
+          setShowAdvancedShareFormats(false);
+        }}
       >
         <View style={styles.optionsModalOverlay}>
           <View style={styles.optionsModalContent}>
             <Text style={styles.optionsTitle}>{t('gallery.whatToShare')}</Text>
 
             <Text style={styles.optionsSectionLabel}>{t('gallery.photoTypes')}</Text>
-            <View style={styles.optionsChipsRow}>
+            <View style={[styles.optionsChipsRow, { gap: 8, justifyContent: 'center', alignItems: 'stretch' }]}>
               <TouchableOpacity
-                style={[styles.chip, selectedShareTypes.before && styles.chipActive]}
+                style={[
+                  {
+                    flex: 1,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
+                  selectedShareTypes.before
+                    ? { backgroundColor: '#4CAF50', borderColor: '#4CAF50' }
+                    : { backgroundColor: '#FFFFFF', borderColor: '#4CAF50' }
+                ]}
                 onPress={() => setSelectedShareTypes(prev => ({ ...prev, before: !prev.before }))}
               >
-                <Text style={[styles.chipText, selectedShareTypes.before && styles.chipTextActive]}>{t('camera.before')}</Text>
+                <Text style={[
+                  { fontSize: 12, fontWeight: '500' },
+                  selectedShareTypes.before
+                    ? { color: '#000000' }
+                    : { color: '#4CAF50' }
+                ]}>{t('camera.before')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.chip, selectedShareTypes.after && styles.chipActive]}
+                style={[
+                  {
+                    flex: 1,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
+                  selectedShareTypes.after
+                    ? { backgroundColor: '#2196F3', borderColor: '#2196F3' }
+                    : { backgroundColor: '#FFFFFF', borderColor: '#2196F3' }
+                ]}
                 onPress={() => setSelectedShareTypes(prev => ({ ...prev, after: !prev.after }))}
               >
-                <Text style={[styles.chipText, selectedShareTypes.after && styles.chipTextActive]}>{t('camera.after')}</Text>
+                <Text style={[
+                  { fontSize: 12, fontWeight: '500' },
+                  selectedShareTypes.after
+                    ? { color: '#000000' }
+                    : { color: '#2196F3' }
+                ]}>{t('camera.after')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.chip, selectedShareTypes.combined && styles.chipActive]}
+                style={[
+                  {
+                    flex: 1,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  },
+                  selectedShareTypes.combined
+                    ? { backgroundColor: '#FFC107', borderColor: '#FFC107' }
+                    : { backgroundColor: '#FFFFFF', borderColor: '#FFC107' }
+                ]}
                 onPress={() => setSelectedShareTypes(prev => ({ ...prev, combined: !prev.combined }))}
               >
-                <Text style={[styles.chipText, selectedShareTypes.combined && styles.chipTextActive]}>{t('camera.combined')}</Text>
+                <Text style={[
+                  { fontSize: 12, fontWeight: '500' },
+                  selectedShareTypes.combined
+                    ? { color: '#000000' }
+                    : { color: '#FFC107' }
+                ]}>{t('camera.combined')}</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Advanced formats section - only show if combined is selected */}
+            {selectedShareTypes.combined && (
+              <>
+                {/* Advanced toggle */}
+                {!showAdvancedShareFormats && (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionPrimary, { marginTop: 12, marginLeft: 0, marginRight: 0, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }]}
+                    onPress={() => setShowAdvancedShareFormats(true)}
+                  >
+                    <Text style={[styles.actionBtnText, { color: '#000000' }]}>{t('gallery.showAdvancedFormats')}</Text>
+                    <Text style={{ color: '#000000', fontSize: 16, marginLeft: 8 }}>▼</Text>
+                  </TouchableOpacity>
+                )}
+
+                {showAdvancedShareFormats && (
+                  <>
+                    <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>{t('gallery.stackedFormats')}</Text>
+                    <View style={styles.optionsChipsRow}>
+                      {Object.entries(TEMPLATE_CONFIGS)
+                        .filter(([k, cfg]) => cfg.layout === 'stack')
+                        .map(([key, cfg]) => (
+                          <TouchableOpacity
+                            key={key}
+                            style={[styles.chip, selectedFormats[key] && styles.chipActive]}
+                            onPress={() => handleFormatToggle(key)}
+                          >
+                            <Text style={[styles.chipText, selectedFormats[key] && styles.chipTextActive]}>{cfg.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <Text style={[styles.optionsSectionLabel, { marginTop: 12 }]}>{t('gallery.sideBySideFormats')}</Text>
+                    <View style={styles.optionsChipsRow}>
+                      {Object.entries(TEMPLATE_CONFIGS)
+                        .filter(([k, cfg]) => cfg.layout === 'sidebyside')
+                        .map(([key, cfg]) => (
+                          <TouchableOpacity
+                            key={key}
+                            style={[styles.chip, selectedFormats[key] && styles.chipActive]}
+                            onPress={() => handleFormatToggle(key)}
+                          >
+                            <Text style={[styles.chipText, selectedFormats[key] && styles.chipTextActive]}>{cfg.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionPrimary, { marginTop: 12, marginLeft: 0, marginRight: 0, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }]}
+                      onPress={() => setShowAdvancedShareFormats(false)}
+                    >
+                      <Text style={[styles.actionBtnText, { color: '#000000' }]}>{t('gallery.hideAdvancedFormats')}</Text>
+                      <Text style={{ color: '#000000', fontSize: 16, marginLeft: 8 }}>▲</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </>
+            )}
 
             {/* Share as Archive Checkbox */}
             <View style={styles.checkboxRow}>
               <TouchableOpacity
                 style={styles.checkboxContainer}
-                onPress={() => setShareAsArchive(!shareAsArchive)}
+                onPress={() => {
+                  // For starter users, archive should always be checked
+                  // If trying to uncheck, show plan modal
+                  if (shareAsArchive && !canUse(FEATURES.ADVANCED_TEMPLATES)) {
+                    console.log('[GALLERY] Starter user trying to uncheck archive, showing plan modal');
+                    setShowSharePlanModal(true);
+                    return;
+                  }
+                  setShareAsArchive(!shareAsArchive);
+                }}
               >
                 <View style={[
                   styles.checkbox,
@@ -3951,42 +4104,106 @@ export default function GalleryScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
 
-            {/* Share to Same App Checkbox - only show if not sharing as archive */}
-            {!shareAsArchive && (
-              <View style={styles.checkboxRow}>
-                <TouchableOpacity
-                  style={styles.checkboxContainer}
-                  onPress={() => setShareToSameApp(!shareToSameApp)}
-                >
-                  <View style={[
-                    styles.checkbox,
-                    shareToSameApp && styles.checkboxChecked
-                  ]}>
-                    {shareToSameApp && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
-                  </View>
-                  <View style={styles.checkboxLabelContainer}>
-                    <Text style={styles.checkboxLabelText}>
-                      {t('gallery.shareToSameApp')}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-            )}
-
             <View style={styles.optionsActionsRow}>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setShareOptionsVisible(false)}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => {
+                console.log('[GALLERY] Share options modal canceled');
+                setShareOptionsVisible(false);
+                // Reset advanced formats state when closing
+                setShowAdvancedShareFormats(false);
+                setShowSharePlanModal(false);
+              }}>
                 <Text style={styles.actionBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} onPress={() => {
                   setShareOptionsVisible(false);
                   startSharingWithOptions();
               }}>
-                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>{t('gallery.prepareToShare')}</Text>
+                <Text style={[styles.actionBtnText, { color: '#000000' }]}>{t('gallery.startToShare')}</Text>
               </TouchableOpacity>
             </View>
           </View>
+
+          {/* Plan Selection Modal Overlay - Rendered as sibling of share modal content */}
+          {showSharePlanModal && (
+            <View style={styles.planModalOverlayAbsolute}>
+              <View style={styles.planModalContent}>
+                <View style={styles.planModalHeader}>
+                  <Text style={styles.planModalTitle}>{t('planModal.title')}</Text>
+                  <TouchableOpacity
+                    onPress={() => {
+                      console.log('[GALLERY] Plan modal close button pressed');
+                      setShowSharePlanModal(false);
+                    }}
+                    style={styles.planModalCloseButton}
+                  >
+                    <Text style={styles.planModalCloseText}>×</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView 
+                  style={styles.planModalScrollView}
+                  contentContainerStyle={styles.planModalScrollViewContent}
+                  showsVerticalScrollIndicator={true}
+                >
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
+                      onPress={async () => {
+                        console.log('[GALLERY] Plan selected: starter');
+                        await updateUserPlan('starter');
+                        setShowSharePlanModal(false);
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
+                  </View>
+
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
+                      onPress={async () => {
+                        console.log('[GALLERY] Plan selected: pro');
+                        await updateUserPlan('pro');
+                        setShowSharePlanModal(false);
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
+                  </View>
+
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
+                      onPress={async () => {
+                        console.log('[GALLERY] Plan selected: business');
+                        await updateUserPlan('business');
+                        setShowSharePlanModal(false);
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
+                  </View>
+
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
+                      onPress={async () => {
+                        console.log('[GALLERY] Plan selected: enterprise');
+                        await updateUserPlan('enterprise');
+                        setShowSharePlanModal(false);
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
+                  </View>
+                </ScrollView>
+              </View>
+            </View>
+          )}
         </View>
       </Modal>
 
@@ -4462,14 +4679,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    zIndex: 1000,
+    elevation: 1000
   },
   optionsModalContent: {
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 20,
     width: '86%',
-    maxWidth: 380
+    maxWidth: 380,
+    zIndex: 1001,
+    elevation: 1001
   },
   modalOverlay: {
     flex: 1,
@@ -4801,5 +5022,98 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT,
     fontSize: 18,
     fontWeight: 'bold'
+  },
+  // Plan Selection Modal styles
+  planModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+    zIndex: 9999,
+    elevation: 9999
+  },
+  planModalOverlayAbsolute: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-end',
+    alignItems: 'stretch',
+    zIndex: 10000,
+    elevation: 10000,
+    paddingBottom: 0
+  },
+  planModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    width: '100%',
+    zIndex: 10000,
+    elevation: 10000,
+    overflow: 'hidden',
+    maxHeight: '75%'
+  },
+  planModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER
+  },
+  planModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.TEXT
+  },
+  planModalCloseButton: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  planModalCloseText: {
+    fontSize: 24,
+    color: COLORS.GRAY
+  },
+  planModalScrollView: {
+    maxHeight: Dimensions.get('window').height * 0.6
+  },
+  planModalScrollViewContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 80,
+    flexGrow: 1
+  },
+  planContainer: {
+    marginBottom: 20
+  },
+  planButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    alignItems: 'center'
+  },
+  planButtonSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  planButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.PRIMARY
+  },
+  planButtonTextSelected: {
+    color: '#000000'
+  },
+  planSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 10
   }
 });
