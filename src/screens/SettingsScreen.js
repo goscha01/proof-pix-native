@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
 import { useAdmin } from '../context/AdminContext';
 import { COLORS, getLabelPositions } from '../constants/rooms';
+import { FONTS } from '../constants/fonts';
 import RoomEditor from '../components/RoomEditor';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
@@ -40,6 +41,7 @@ import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
 import { FEATURES } from '../constants/featurePermissions';
 import EnterpriseContactModal from '../components/EnterpriseContactModal';
 import { isTrialActive, getTrialDaysRemaining, getTrialPlan } from '../services/trialService';
+import * as TrialTestUtils from '../utils/trialTestUtils';
 
 const getFontOptions = (t) => [
   {
@@ -2728,9 +2730,12 @@ export default function SettingsScreen({ navigation, route }) {
                       setShowPlanModal(false);
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
+                    <View style={styles.planButtonRow}>
+                      <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('firstLoad.starter')}</Text>
+                      <Text style={styles.planPrice}>Free</Text>
+                    </View>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
+                  <Text style={styles.planSubtext}>{t('firstLoad.starterDesc')}</Text>
                 </View>
 
                 <View style={styles.planContainer}>
@@ -2741,9 +2746,12 @@ export default function SettingsScreen({ navigation, route }) {
                       setShowPlanModal(false);
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
+                    <View style={styles.planButtonRow}>
+                      <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('firstLoad.pro')}</Text>
+                      <Text style={styles.planPrice}>$8.99/month</Text>
+                    </View>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
+                  <Text style={styles.planSubtext}>{t('firstLoad.proDesc')}</Text>
                 </View>
 
                 <View style={styles.planContainer}>
@@ -2754,9 +2762,14 @@ export default function SettingsScreen({ navigation, route }) {
                       setShowPlanModal(false);
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
+                    <View style={styles.planButtonRow}>
+                      <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('firstLoad.business')}</Text>
+                      <Text style={styles.planPrice}>$24.99/month</Text>
+                    </View>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
+                  <Text style={styles.planSubtext}>
+                    For small teams up to 5 members. $5.99 per additional team member
+                  </Text>
                 </View>
 
                 <View style={styles.planContainer}>
@@ -2767,9 +2780,14 @@ export default function SettingsScreen({ navigation, route }) {
                       setShowEnterpriseModal(true);
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
+                    <View style={styles.planButtonRow}>
+                      <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('firstLoad.enterprise')}</Text>
+                      <Text style={styles.planPrice}>Starts at $69.99/month</Text>
+                    </View>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
+                  <Text style={styles.planSubtext}>
+                    For growing organisations with 15 team members and more
+                  </Text>
                 </View>
               </ScrollView>
             </View>
@@ -2947,6 +2965,78 @@ export default function SettingsScreen({ navigation, route }) {
           visible={showEnterpriseModal}
           onClose={() => setShowEnterpriseModal(false)}
         />
+
+        {/* Trial Testing Section - Only in Development */}
+        {__DEV__ && (
+          <View style={styles.testSection}>
+            <Text style={styles.testSectionTitle}>🧪 Trial Test Tools</Text>
+            <View style={styles.testButtons}>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay0();
+                  Alert.alert('Test Set', 'Trial set to Day 0. Restart app or go to foreground to see welcome message.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 0 (Welcome)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay7_10();
+                  Alert.alert('Test Set', 'Trial set to Day 7-10. Restart app to see engagement message.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 7-10</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay15();
+                  Alert.alert('Test Set', 'Trial set to Day 15. Restart app to see check-in message.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 15</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay22_24();
+                  Alert.alert('Test Set', 'Trial set to Day 22-24. Restart app to see early reminder.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 22-24</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay27_28();
+                  Alert.alert('Test Set', 'Trial set to Day 27-28. Restart app to see last chance message.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 27-28</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay30();
+                  Alert.alert('Test Set', 'Trial set to expired. Restart app to see expiration message.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 30 (Expired)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.testButton, styles.clearButton]}
+                onPress={async () => {
+                  await TrialTestUtils.clearTrial();
+                  Alert.alert('Cleared', 'Trial cleared. No trial active.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Clear Trial</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </SafeAreaView>
     );
   }
@@ -3475,7 +3565,8 @@ const sliderStyles = StyleSheet.create({
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       maxHeight: '80%',
-      paddingBottom: 20
+      paddingBottom: 20,
+      width: '100%',
     },
     modalHeader: {
       flexDirection: 'row',
@@ -3528,6 +3619,12 @@ const sliderStyles = StyleSheet.create({
       backgroundColor: COLORS.PRIMARY, // Yellow background for active buttons
       borderColor: COLORS.PRIMARY
     },
+    planButtonRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      width: '100%',
+    },
     planButtonText: {
       fontSize: 18,
       fontWeight: 'bold',
@@ -3542,6 +3639,12 @@ const sliderStyles = StyleSheet.create({
       textAlign: 'center',
       marginTop: 8,
       paddingHorizontal: 10
+    },
+    planPrice: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: '#4CAF50',
+      fontFamily: FONTS.QUICKSAND_BOLD,
     },
     expoGoWarning: {
       backgroundColor: '#fff3cd',
@@ -4673,5 +4776,42 @@ const sliderStyles = StyleSheet.create({
     roomTabTextActive: {
       color: COLORS.TEXT,
       fontWeight: '600',
+    },
+    testSection: {
+      marginTop: 20,
+      marginBottom: 20,
+      padding: 16,
+      backgroundColor: '#FFF3CD',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#FFC107',
+    },
+    testSectionTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: COLORS.TEXT,
+      marginBottom: 12,
+      fontFamily: FONTS.QUICKSAND_BOLD,
+    },
+    testButtons: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    testButton: {
+      backgroundColor: COLORS.PRIMARY,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 6,
+      marginBottom: 8,
+    },
+    clearButton: {
+      backgroundColor: '#DC3545',
+    },
+    testButtonText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#000000',
+      fontFamily: FONTS.QUICKSAND_BOLD,
     },
   });

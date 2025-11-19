@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,11 @@ import { useSettings } from '../context/SettingsContext';
 import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
 import EnterpriseContactModal from '../components/EnterpriseContactModal';
+import TrialNotificationModal from '../components/TrialNotificationModal';
+import TrialConfirmationModal from '../components/TrialConfirmationModal';
 import { canStartTrial, startTrial } from '../services/trialService';
+import { getNotificationToShow } from '../services/trialNotificationService';
+import { clearTrial } from '../utils/trialTestUtils';
 
 export default function PlanSelectionScreen({ navigation }) {
   const { t } = useTranslation();
@@ -23,14 +27,43 @@ export default function PlanSelectionScreen({ navigation }) {
   // Enterprise modal state
   const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
   const [trialAvailable, setTrialAvailable] = useState(false);
+  // Trial notification modal state
+  const [showTrialModal, setShowTrialModal] = useState(false);
+  const [trialNotification, setTrialNotification] = useState(null);
+  // Trial confirmation modal state
+  const [showTrialConfirmation, setShowTrialConfirmation] = useState(false);
+  const [selectedPlanForTrial, setSelectedPlanForTrial] = useState(null);
+  // Track if we've shown the notification in this session
+  const hasShownTrialNotification = useRef(false);
 
   useEffect(() => {
     // Check if trial is available for new users
     const checkTrialAvailability = async () => {
-      const available = await canStartTrial();
-      setTrialAvailable(available);
+      try {
+        const available = await canStartTrial();
+        console.log('[PlanSelection] Trial available:', available);
+        
+        // Debug: Check why trial might not be available
+        if (!available) {
+          const { hasUsedTrial, isTrialActive } = await import('../services/trialService');
+          const used = await hasUsedTrial();
+          const active = await isTrialActive();
+          console.log('[PlanSelection] Trial debug - used:', used, 'active:', active);
+        }
+        
+        setTrialAvailable(available);
+      } catch (error) {
+        console.error('[PlanSelection] Error checking trial availability:', error);
+        // Default to showing trial UI if check fails (for new users)
+        setTrialAvailable(true);
+      }
     };
     checkTrialAvailability();
+    
+    // Clear modal state when screen is focused (e.g., when navigating back)
+    setShowTrialModal(false);
+    setTrialNotification(null);
+    hasShownTrialNotification.current = false;
   }, []);
 
   const handleSelectPlan = async (plan) => {
@@ -40,33 +73,132 @@ export default function PlanSelectionScreen({ navigation }) {
       return;
     }
 
-    // Check if user can start a trial for this plan
+    // If trial is available, show confirmation modal
     if (trialAvailable) {
+      setSelectedPlanForTrial(plan);
+      setShowTrialConfirmation(true);
+      return;
+    }
+
+    // Regular plan selection (trial already used or not available)
+    await proceedWithPlanSelection(plan, false);
+  };
+
+  // Proceed with plan selection (with or without trial)
+  const proceedWithPlanSelection = async (plan, useTrial = false) => {
+    let trialJustStarted = false;
+
+    if (useTrial) {
       try {
         // Start 30-day free trial for the selected plan
         await startTrial(plan);
         await updateUserPlan(plan);
+        trialJustStarted = true;
       } catch (error) {
         console.error('[PlanSelection] Error starting trial:', error);
         // Fallback to regular plan selection
         await updateUserPlan(plan);
       }
     } else {
-      // Regular plan selection (trial already used or not available)
+      // Regular plan selection without trial
       await updateUserPlan(plan);
     }
 
-    if (plan === 'starter') {
-      // For Starter plan, go to Label Language Setup screen
-      navigation.replace('LabelLanguageSetup');
-    } else {
-      // For Pro, Business, go to the Google Sign-Up screen
-      navigation.navigate('GoogleSignUp', { plan });
+    // Navigate to next screen (all plans go to GoogleSignUp)
+    navigation.navigate('GoogleSignUp', { plan, trialJustStarted: trialJustStarted });
+
+    // If trial just started, show welcome notification
+    if (trialJustStarted && !hasShownTrialNotification.current) {
+      hasShownTrialNotification.current = true;
+      setTimeout(async () => {
+        try {
+          const notification = await getNotificationToShow(false); // Don't skip Day 0
+          if (notification && notification.key === 'day0') {
+            setTrialNotification(notification);
+            setShowTrialModal(true);
+          }
+        } catch (error) {
+          console.error('[PlanSelection] Error checking welcome notification:', error);
+        }
+      }, 500);
     }
+  };
+
+  // Handle trial confirmation - use trial
+  const handleUseTrial = async () => {
+    setShowTrialConfirmation(false);
+    const plan = selectedPlanForTrial;
+    setSelectedPlanForTrial(null);
+    await proceedWithPlanSelection(plan, true);
+  };
+
+  // Handle trial confirmation - cancel (continue without trial)
+  const handleCancelTrial = async () => {
+    setShowTrialConfirmation(false);
+    const plan = selectedPlanForTrial;
+    setSelectedPlanForTrial(null);
+    await proceedWithPlanSelection(plan, false);
   };
 
   const handleGoBack = () => {
     navigation.goBack();
+  };
+
+  // Handle free trial button click
+  const handleFreeTrialClick = async () => {
+    if (!trialAvailable || hasShownTrialNotification.current) {
+      return;
+    }
+
+    try {
+      // Start trial for business plan (default)
+      await startTrial('business');
+      await updateUserPlan('business');
+      
+      // Mark that we've shown the notification
+      hasShownTrialNotification.current = true;
+      
+      // Navigate immediately without delay
+      navigation.navigate('GoogleSignUp', { plan: 'business', trialJustStarted: true });
+      
+      // Show welcome notification immediately
+      const notification = await getNotificationToShow(false); // Don't skip Day 0
+      
+      if (notification && notification.key === 'day0') {
+        // Show modal immediately (after navigation)
+        setTrialNotification(notification);
+        setShowTrialModal(true);
+      }
+    } catch (error) {
+      console.error('[PlanSelection] Error starting free trial:', error);
+    }
+  };
+
+  // Handle trial modal close
+  const handleTrialModalClose = () => {
+    setShowTrialModal(false);
+    setTrialNotification(null);
+  };
+
+  // Handle trial upgrade (not needed for welcome, but keeping for consistency)
+  const handleTrialUpgrade = () => {
+    setShowTrialModal(false);
+    setTrialNotification(null);
+    // Navigate to Settings for upgrade
+    navigation.navigate('Settings');
+  };
+
+  // Dev-only: Reset trial for testing
+  const handleResetTrial = async () => {
+    try {
+      await clearTrial();
+      // Recheck trial availability
+      const available = await canStartTrial();
+      setTrialAvailable(available);
+      console.log('[PlanSelection] Trial reset, available:', available);
+    } catch (error) {
+      console.error('[PlanSelection] Error resetting trial:', error);
+    }
   };
 
   return (
@@ -87,11 +219,25 @@ export default function PlanSelectionScreen({ navigation }) {
           <Text style={styles.welcomeText}>{t('firstLoad.choosePlan')}</Text>
           
           {trialAvailable && (
-            <View style={styles.trialBanner}>
+            <TouchableOpacity
+              style={styles.trialBanner}
+              onPress={handleFreeTrialClick}
+            >
               <Text style={styles.trialBannerText}>
                 🎉 {t('firstLoad.freeTrialAvailable', { defaultValue: '30-Day Free Trial Available!' })}
               </Text>
-            </View>
+            </TouchableOpacity>
+          )}
+
+          {__DEV__ && (
+            <TouchableOpacity
+              style={styles.devResetButton}
+              onPress={handleResetTrial}
+            >
+              <Text style={styles.devResetButtonText}>
+                🧪 Dev: Reset Trial (for testing)
+              </Text>
+            </TouchableOpacity>
           )}
 
           <View style={styles.planContainer}>
@@ -101,10 +247,8 @@ export default function PlanSelectionScreen({ navigation }) {
             >
               <Text style={[styles.selectionButtonText, styles.planButtonText]}>
                 {t('firstLoad.starter')}
-                {trialAvailable && (
-                  <Text style={styles.trialBadge}> {t('firstLoad.freeTrial', { defaultValue: '(Free Trial)' })}</Text>
-                )}
               </Text>
+              <Text style={styles.planPrice}>Free</Text>
             </TouchableOpacity>
             <Text style={styles.planSubtext}>{t('firstLoad.starterDesc')}</Text>
           </View>
@@ -116,10 +260,8 @@ export default function PlanSelectionScreen({ navigation }) {
             >
               <Text style={[styles.selectionButtonText, styles.planButtonText]}>
                 {t('firstLoad.pro')}
-                {trialAvailable && (
-                  <Text style={styles.trialBadge}> {t('firstLoad.freeTrial', { defaultValue: '(Free Trial)' })}</Text>
-                )}
               </Text>
+              <Text style={styles.planPrice}>$8.99/month</Text>
             </TouchableOpacity>
             <Text style={styles.planSubtext}>{t('firstLoad.proDesc')}</Text>
           </View>
@@ -131,12 +273,12 @@ export default function PlanSelectionScreen({ navigation }) {
             >
               <Text style={[styles.selectionButtonText, styles.planButtonText]}>
                 {t('firstLoad.business')}
-                {trialAvailable && (
-                  <Text style={styles.trialBadge}> {t('firstLoad.freeTrial', { defaultValue: '(Free Trial)' })}</Text>
-                )}
               </Text>
+              <Text style={styles.planPrice}>$24.99/month</Text>
             </TouchableOpacity>
-            <Text style={styles.planSubtext}>{t('firstLoad.businessDesc')}</Text>
+            <Text style={styles.planSubtext}>
+              For small teams up to 5 members. $5.99 per additional team member
+            </Text>
           </View>
 
           <View style={styles.planContainer}>
@@ -147,8 +289,11 @@ export default function PlanSelectionScreen({ navigation }) {
               <Text style={[styles.selectionButtonText, styles.planButtonText]}>
                 {t('firstLoad.enterprise')}
               </Text>
+              <Text style={styles.planPrice}>Starts at $69.99/month</Text>
             </TouchableOpacity>
-            <Text style={styles.planSubtext}>{t('firstLoad.enterpriseDesc')}</Text>
+            <Text style={styles.planSubtext}>
+              For growing organisations with 15 team members and more
+            </Text>
           </View>
         </View>
       </ScrollView>
@@ -157,6 +302,22 @@ export default function PlanSelectionScreen({ navigation }) {
       <EnterpriseContactModal
         visible={showEnterpriseModal}
         onClose={() => setShowEnterpriseModal(false)}
+      />
+
+      {/* Trial Confirmation Modal */}
+      <TrialConfirmationModal
+        visible={showTrialConfirmation}
+        planName={selectedPlanForTrial ? selectedPlanForTrial.charAt(0).toUpperCase() + selectedPlanForTrial.slice(1) : ''}
+        onUseTrial={handleUseTrial}
+        onCancel={handleCancelTrial}
+      />
+
+      {/* Trial Notification Modal */}
+      <TrialNotificationModal
+        visible={showTrialModal}
+        notification={trialNotification}
+        onClose={handleTrialModalClose}
+        onUpgrade={handleTrialUpgrade}
       />
     </SafeAreaView>
   );
@@ -230,6 +391,13 @@ const styles = StyleSheet.create({
   planButtonText: {
     color: '#333',
   },
+  planPrice: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#4CAF50',
+    marginTop: 4,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+  },
   planSubtext: {
     fontSize: 14,
     color: '#333',
@@ -239,11 +407,18 @@ const styles = StyleSheet.create({
   },
   trialBanner: {
     backgroundColor: '#4CAF50',
-    paddingVertical: 12,
+    paddingVertical: 16,
     paddingHorizontal: 20,
-    borderRadius: 8,
+    borderRadius: 12,
     marginBottom: 20,
     width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   trialBannerText: {
     color: '#FFFFFF',
@@ -256,5 +431,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4CAF50',
     fontWeight: '600',
+  },
+  devResetButton: {
+    backgroundColor: '#FF6B6B',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    marginTop: 10,
+    marginBottom: 10,
+    alignSelf: 'center',
+  },
+  devResetButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: 'bold',
+    fontFamily: FONTS.QUICKSAND_BOLD,
   },
 });

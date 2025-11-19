@@ -77,6 +77,15 @@ export const startTrial = async (plan) => {
     };
 
     await AsyncStorage.setItem(TRIAL_STORAGE_KEY, JSON.stringify(trialInfo));
+    
+    // Reset notification flags for new trial
+    try {
+      const { resetNotifications } = await import('./trialNotificationService');
+      await resetNotifications();
+    } catch (error) {
+      console.error('[TrialService] Error resetting notifications:', error);
+    }
+    
     return trialInfo;
   } catch (error) {
     console.error('[TrialService] Error starting trial:', error);

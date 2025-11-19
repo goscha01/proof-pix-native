@@ -6,6 +6,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { PhotoProvider } from './src/context/PhotoContext';
 import { SettingsProvider } from './src/context/SettingsContext';
 import { AdminProvider } from './src/context/AdminContext';
+import TrialNotificationModal from './src/components/TrialNotificationModal';
 import { useFonts } from 'expo-font';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { PlayfairDisplay_700Bold } from '@expo-google-fonts/playfair-display';
@@ -184,10 +185,15 @@ const linking = {
   },
 };
 
+// Global function to trigger trial notification check (for use after plan selection)
+let globalCheckTrialNotifications = null;
+
 export default function App() {
   const navigationRef = useRef();
   const routeNameRef = useRef();
   const [firebaseInitialized, setFirebaseInitialized] = useState(false);
+  const [trialNotification, setTrialNotification] = useState(null);
+  const [showTrialModal, setShowTrialModal] = useState(false);
 
   const [fontsLoaded] = useFonts({
     Montserrat_700Bold,
@@ -229,8 +235,38 @@ export default function App() {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
         checkTrialExpiration();
+        // Skip Day 0 on foreground check too (only show after plan selection)
+        checkTrialNotifications(true);
       }
     });
+
+    // Check for trial notifications on startup (only if trial is already active, not for new trials)
+    // New trial welcome messages will be triggered after plan selection
+    // Skip Day 0 welcome on startup - it should only show after user selects a plan
+    setTimeout(async () => {
+      try {
+        // Check for pending notification first (set after plan selection)
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        const pendingNotification = await AsyncStorage.getItem('@pending_trial_notification');
+        if (pendingNotification) {
+          await AsyncStorage.removeItem('@pending_trial_notification');
+          const notification = JSON.parse(pendingNotification);
+          setTrialNotification(notification);
+          setShowTrialModal(true);
+          return;
+        }
+
+        const { isTrialActive } = await import('./src/services/trialService');
+        const active = await isTrialActive();
+        // Only check notifications if trial is already active (not a brand new trial)
+        // Skip Day 0 welcome message on startup
+        if (active) {
+          checkTrialNotifications(true); // Skip Day 0 on startup
+        }
+      } catch (error) {
+        console.error('[App] Error checking trial status:', error);
+      }
+    }, 2000);
 
     return () => {
       subscription?.remove();
@@ -246,6 +282,42 @@ export default function App() {
     } catch (error) {
       console.error('[App] Error checking trial expiration:', error);
     }
+  };
+
+  // Check for trial notifications to show
+  const checkTrialNotifications = async (skipDay0 = false) => {
+    try {
+      const { getNotificationToShow } = await import('./src/services/trialNotificationService');
+      const notification = await getNotificationToShow(skipDay0);
+      if (notification) {
+        setTrialNotification(notification);
+        setShowTrialModal(true);
+      }
+    } catch (error) {
+      console.error('[App] Error checking trial notifications:', error);
+    }
+  };
+
+  // Expose function globally so other screens can trigger notification check
+  useEffect(() => {
+    globalCheckTrialNotifications = checkTrialNotifications;
+    return () => {
+      globalCheckTrialNotifications = null;
+    };
+  }, []);
+
+  const handleTrialModalClose = () => {
+    setShowTrialModal(false);
+    setTrialNotification(null);
+  };
+
+  const handleTrialUpgrade = () => {
+    setShowTrialModal(false);
+    // Navigate to Settings screen where user can upgrade
+    if (navigationRef.current) {
+      navigationRef.current.navigate('Settings');
+    }
+    setTrialNotification(null);
   };
 
   if (!fontsLoaded) {
@@ -285,6 +357,47 @@ export default function App() {
                     } catch (error) {
                       console.error('[Analytics] Error logging screen view:', error);
                     }
+
+                    // Check for trial welcome notification when navigating to screens after plan selection
+                    if (currentRouteName === 'LabelLanguageSetup' || currentRouteName === 'GoogleSignUp') {
+                      // Check for pending notification first
+                      setTimeout(async () => {
+                        try {
+                          const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+                          const pendingNotification = await AsyncStorage.getItem('@pending_trial_notification');
+                          if (pendingNotification) {
+                            await AsyncStorage.removeItem('@pending_trial_notification');
+                            const notification = JSON.parse(pendingNotification);
+                            setTrialNotification(notification);
+                            setShowTrialModal(true);
+                            return;
+                          }
+
+                          // Fallback: Check if trial was just started (within last 5 minutes)
+                          const { getTrialInfo, isTrialActive } = await import('./src/services/trialService');
+                          const trialActive = await isTrialActive();
+                          console.log('[App] Trial active check:', trialActive);
+                          if (trialActive) {
+                            const trialInfo = await getTrialInfo();
+                            console.log('[App] Trial info:', trialInfo);
+                            if (trialInfo) {
+                              const startDate = new Date(trialInfo.startDate).getTime();
+                              const now = new Date().getTime();
+                              const minutesSinceStart = (now - startDate) / (1000 * 60);
+                              console.log('[App] Minutes since trial start:', minutesSinceStart);
+                              
+                              // If trial started within last 5 minutes, show welcome notification
+                              if (minutesSinceStart < 5) {
+                                console.log('[App] Triggering welcome notification check');
+                                checkTrialNotifications(false); // Don't skip Day 0
+                              }
+                            }
+                          }
+                        } catch (error) {
+                          console.error('[App] Error checking trial welcome:', error);
+                        }
+                      }, 1500);
+                    }
                   }
 
                   // Save the current route name for next comparison
@@ -298,6 +411,14 @@ export default function App() {
             </PhotoProvider>
           </AdminProvider>
         </SettingsProvider>
+        
+        {/* Trial Notification Modal */}
+        <TrialNotificationModal
+          visible={showTrialModal}
+          notification={trialNotification}
+          onClose={handleTrialModalClose}
+          onUpgrade={handleTrialUpgrade}
+        />
       </SafeAreaProvider>
     </View>
   );
