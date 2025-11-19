@@ -11,6 +11,7 @@ import {
   Platform,
   Pressable,
   TouchableWithoutFeedback,
+  Switch,
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -125,8 +126,20 @@ export default function LabelCustomizationScreen({ navigation }) {
     updateLabelMarginVertical,
     updateLabelMarginHorizontal,
     shouldShowWatermark,
+    showWatermark,
     userPlan,
     updateUserPlan,
+    customWatermarkEnabled,
+    watermarkText,
+    watermarkLink,
+    watermarkColor,
+    watermarkOpacity,
+    toggleWatermark,
+    updateShowWatermark,
+    updateWatermarkText,
+    updateWatermarkLink,
+    updateWatermarkColor,
+    updateWatermarkOpacity,
   } = useSettings();
 
   const { canUse } = useFeaturePermissions();
@@ -143,11 +156,37 @@ export default function LabelCustomizationScreen({ navigation }) {
   const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
   const [sliderResetKey, setSliderResetKey] = useState(0);
   const [colorPickerKey, setColorPickerKey] = useState(0);
+  const [watermarkOpacityPreview, setWatermarkOpacityPreview] = useState(watermarkOpacity || 0.5);
+  const watermarkTextInputRef = useRef(null);
+  const watermarkLinkInputRef = useRef(null);
 
   // HSL state for color picker
   const [hue, setHue] = useState(0);
   const [saturation, setSaturation] = useState(100);
   const [lightness, setLightness] = useState(50);
+
+  // Watermark swatch color (using existing normalizeHex function defined later)
+  const watermarkSwatchColor = useMemo(() => {
+    const baseColor = customWatermarkEnabled
+      ? watermarkColor || labelBackgroundColor
+      : labelBackgroundColor;
+    // Use a simple fallback if normalizeHex isn't available yet
+    if (typeof normalizeHex === 'function') {
+      return normalizeHex(baseColor) || '#FFD700';
+    }
+    // Fallback: simple hex validation
+    if (baseColor && /^#[0-9A-F]{6}$/i.test(baseColor)) {
+      return baseColor.toUpperCase();
+    }
+    return baseColor || '#FFD700';
+  }, [customWatermarkEnabled, watermarkColor, labelBackgroundColor]);
+
+  // Update watermark opacity preview when watermarkOpacity changes
+  useEffect(() => {
+    if (typeof watermarkOpacity === 'number') {
+      setWatermarkOpacityPreview(watermarkOpacity);
+    }
+  }, [watermarkOpacity]);
 
   const LABEL_SIZE_OPTIONS = useMemo(() => getLabelSizeOptions(t), [t]);
   const LABEL_CORNER_OPTIONS = useMemo(() => getLabelCornerOptions(t), [t]);
@@ -159,34 +198,6 @@ export default function LabelCustomizationScreen({ navigation }) {
       (opt) => opt.key.toLowerCase() === normalized
     ) || FONT_OPTIONS[0];
   }, [labelFontFamily, FONT_OPTIONS]);
-
-  const normalizeHex = (input) => {
-    if (!input) return null;
-    let cleaned = input.trim();
-    if (cleaned.startsWith('#')) {
-      cleaned = cleaned.substring(1);
-    }
-    if (/^[0-9A-F]{3}$/i.test(cleaned)) {
-      cleaned = cleaned
-        .split('')
-        .map((c) => c + c)
-        .join('');
-    }
-    if (/^[0-9A-F]{6}$/i.test(cleaned)) {
-      return `#${cleaned.toUpperCase()}`;
-    }
-    const rgbMatch = cleaned.match(/^rgb\s*\(\s*(\d{1,3})\s*,\s*(\d{1,3})\s*,\s*(\d{1,3})\s*\)$/i);
-    if (rgbMatch) {
-      const r = parseInt(rgbMatch[1], 10);
-      const g = parseInt(rgbMatch[2], 10);
-      const b = parseInt(rgbMatch[3], 10);
-      if (r >= 0 && r <= 255 && g >= 0 && g <= 255 && b >= 0 && b <= 255) {
-        const hex = ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
-        return `#${hex.toUpperCase()}`;
-      }
-    }
-    return null;
-  };
 
   const hsvToHex = ({ h, s, v }) => {
     const hNorm = h / 360;
@@ -220,12 +231,27 @@ export default function LabelCustomizationScreen({ navigation }) {
 
   const openColorModal = (type) => {
     console.log('[ColorPicker] openColorModal called with type:', type);
-    // Check if user has access to custom labels
-    if (!canUse(FEATURES.CUSTOM_LABELS)) {
-      setShowPlanModal(true);
-      return;
+    // Check if user has access
+    if (type === 'watermark') {
+      if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+        setShowPlanModal(true);
+        return;
+      }
+    } else {
+      if (!canUse(FEATURES.CUSTOM_LABELS)) {
+        setShowPlanModal(true);
+        return;
+      }
     }
-    const currentColor = type === 'background' ? labelBackgroundColor : labelTextColor;
+    
+    let currentColor;
+    if (type === 'background') {
+      currentColor = labelBackgroundColor;
+    } else if (type === 'text') {
+      currentColor = labelTextColor;
+    } else if (type === 'watermark') {
+      currentColor = watermarkColor || labelBackgroundColor;
+    }
     console.log('[ColorPicker] Setting draftColor to:', currentColor);
 
     // Initialize HSL values from current color
@@ -250,6 +276,8 @@ export default function LabelCustomizationScreen({ navigation }) {
       await updateLabelBackgroundColor(draftColor);
     } else if (colorModalType === 'text') {
       await updateLabelTextColor(draftColor);
+    } else if (colorModalType === 'watermark') {
+      await updateWatermarkColor(draftColor);
     }
     setColorModalVisible(false);
     setColorModalType(null);
@@ -489,6 +517,193 @@ export default function LabelCustomizationScreen({ navigation }) {
             <Text style={styles.fontSelectorButtonText}>{t('labelCustomization.chooseFont')}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Watermark Customization */}
+        <View style={styles.settingRow}>
+          <View style={styles.settingInfo}>
+            <Text style={styles.settingLabel}>{t('settings.customizeWatermark')}</Text>
+            <Text style={styles.settingDescription}>
+              {customWatermarkEnabled
+                ? t('settings.watermarkCustomDescription')
+                : t('settings.watermarkDefaultDescription')}
+            </Text>
+          </View>
+          <Switch
+            value={customWatermarkEnabled}
+            onValueChange={(value) => {
+              toggleWatermark(value);
+            }}
+            trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+            thumbColor="white"
+          />
+        </View>
+        {customWatermarkEnabled && (
+          <View style={styles.watermarkCustomization}>
+            {/* Add Watermark Checkbox */}
+            <View style={styles.settingRow}>
+              <View style={styles.settingInfo}>
+                <Text style={styles.settingLabel}>{t('settings.addWatermark', { defaultValue: 'Add watermark' })}</Text>
+                <Text style={styles.settingDescription}>
+                  {t('settings.addWatermarkDescription', { defaultValue: 'Show watermark on photos' })}
+                </Text>
+              </View>
+              <Switch
+                value={showWatermark}
+                onValueChange={(value) => {
+                  // Check if user has access to customize watermark
+                  if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                    // Starter users cannot turn off watermark - show tier popup
+                    if (value === false) {
+                      setShowPlanModal(true);
+                      return;
+                    }
+                  }
+                  updateShowWatermark(value);
+                }}
+                trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                thumbColor="white"
+              />
+            </View>
+
+            <View style={styles.watermarkField}>
+              <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkText')}</Text>
+              <Pressable
+                onPress={() => {
+                  if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                    setShowPlanModal(true);
+                  } else {
+                    // Focus the input if user has access
+                    if (watermarkTextInputRef.current) {
+                      watermarkTextInputRef.current.focus();
+                    }
+                  }
+                }}
+              >
+                <TextInput
+                  ref={watermarkTextInputRef}
+                  style={styles.watermarkInput}
+                  value={watermarkText}
+                  onChangeText={updateWatermarkText}
+                  onFocus={() => {
+                    // Check if user has access to customize watermark
+                    if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                      setShowPlanModal(true);
+                      // Blur the input to prevent typing
+                      if (watermarkTextInputRef.current) {
+                        watermarkTextInputRef.current.blur();
+                      }
+                    }
+                  }}
+                  placeholder={t('settings.watermarkTextPlaceholder')}
+                  placeholderTextColor={COLORS.GRAY}
+                  editable={canUse(FEATURES.CUSTOM_WATERMARKS)}
+                  pointerEvents={canUse(FEATURES.CUSTOM_WATERMARKS) ? 'auto' : 'none'}
+                />
+              </Pressable>
+            </View>
+            <View style={styles.watermarkField}>
+              <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkLink')}</Text>
+              <Pressable
+                onPress={() => {
+                  if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                    setShowPlanModal(true);
+                  } else {
+                    // Focus the input if user has access
+                    if (watermarkLinkInputRef.current) {
+                      watermarkLinkInputRef.current.focus();
+                    }
+                  }
+                }}
+              >
+                <TextInput
+                  ref={watermarkLinkInputRef}
+                  style={styles.watermarkInput}
+                  value={watermarkLink}
+                  onChangeText={updateWatermarkLink}
+                  onFocus={() => {
+                    // Check if user has access to customize watermark
+                    if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                      setShowPlanModal(true);
+                      // Blur the input to prevent typing
+                      if (watermarkLinkInputRef.current) {
+                        watermarkLinkInputRef.current.blur();
+                      }
+                    }
+                  }}
+                  placeholder={t('settings.watermarkLinkPlaceholder')}
+                  placeholderTextColor={COLORS.GRAY}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                  editable={canUse(FEATURES.CUSTOM_WATERMARKS)}
+                  pointerEvents={canUse(FEATURES.CUSTOM_WATERMARKS) ? 'auto' : 'none'}
+                />
+              </Pressable>
+            </View>
+            <View style={styles.watermarkColorRow}>
+              <View style={styles.watermarkColorInfo}>
+                <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkColor')}</Text>
+                <Text style={styles.watermarkColorValue}>{watermarkSwatchColor}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.watermarkColorButton}
+                onPress={() => {
+                  // Check if user has access to customize watermark
+                  if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                    setShowPlanModal(true);
+                    return;
+                  }
+                  openColorModal('watermark');
+                }}
+              >
+                <View
+                  style={[
+                    styles.colorPreviewSwatch,
+                    styles.watermarkColorSwatch,
+                    { backgroundColor: watermarkSwatchColor },
+                  ]}
+                />
+                <Text style={styles.customSelectorButtonText}>{t('settings.pickColor')}</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.watermarkOpacityRow}>
+              <Text style={styles.watermarkFieldLabel}>{t('settings.opacity')}</Text>
+              <View style={styles.watermarkOpacityControls}>
+                <Slider
+                  style={styles.slider}
+                  minimumValue={0}
+                  maximumValue={1}
+                  step={0.01}
+                  value={watermarkOpacityPreview}
+                  onValueChange={(value) => {
+                    // Update preview during dragging (don't check permissions here to avoid jumping)
+                    setWatermarkOpacityPreview(value);
+                  }}
+                  onSlidingComplete={(value) => {
+                    // Check if user has access to customize watermark when dragging ends
+                    if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                      setShowPlanModal(true);
+                      // Reset to original value
+                      setWatermarkOpacityPreview(watermarkOpacity);
+                      return;
+                    }
+                    updateWatermarkOpacity(value);
+                  }}
+                  minimumTrackTintColor={watermarkSwatchColor}
+                  maximumTrackTintColor="#d3d3d3"
+                  thumbTintColor={watermarkSwatchColor}
+                  disabled={!canUse(FEATURES.CUSTOM_WATERMARKS)}
+                />
+                <Text style={styles.watermarkOpacityValue}>
+                  {Math.round(watermarkOpacityPreview * 100)}%
+                </Text>
+              </View>
+            </View>
+            <Text style={styles.watermarkHelperText}>
+              {t('settings.watermarkHelperText')}
+            </Text>
+          </View>
+        )}
 
         {/* Label Position */}
         <View style={styles.settingRowStacked}>
@@ -940,7 +1155,7 @@ export default function LabelCustomizationScreen({ navigation }) {
         animationType="slide"
         onRequestClose={() => setShowPlanModal(false)}
       >
-        <View style={styles.planModalOverlay}>
+        <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{t('planModal.title')}</Text>
@@ -959,11 +1174,16 @@ export default function LabelCustomizationScreen({ navigation }) {
                   onPress={async () => {
                     await updateUserPlan('starter');
                     setShowPlanModal(false);
+                    // Reset color picker key to ensure proper remounting
+                    setColorPickerKey((prev) => prev + 1);
                   }}
                 >
-                  <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
+                  <View style={styles.planButtonRow}>
+                    <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('firstLoad.starter')}</Text>
+                    <Text style={styles.planPrice}>Free</Text>
+                  </View>
                 </TouchableOpacity>
-                <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
+                <Text style={styles.planSubtext}>{t('firstLoad.starterDesc')}</Text>
               </View>
 
               <View style={styles.planContainer}>
@@ -976,9 +1196,12 @@ export default function LabelCustomizationScreen({ navigation }) {
                     setColorPickerKey((prev) => prev + 1);
                   }}
                 >
-                  <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
+                  <View style={styles.planButtonRow}>
+                    <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('firstLoad.pro')}</Text>
+                    <Text style={styles.planPrice}>$8.99/month</Text>
+                  </View>
                 </TouchableOpacity>
-                <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
+                <Text style={styles.planSubtext}>{t('firstLoad.proDesc')}</Text>
               </View>
 
               <View style={styles.planContainer}>
@@ -991,9 +1214,14 @@ export default function LabelCustomizationScreen({ navigation }) {
                     setColorPickerKey((prev) => prev + 1);
                   }}
                 >
-                  <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
+                  <View style={styles.planButtonRow}>
+                    <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('firstLoad.business')}</Text>
+                    <Text style={styles.planPrice}>$24.99/month</Text>
+                  </View>
                 </TouchableOpacity>
-                <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
+                <Text style={styles.planSubtext}>
+                  For small teams up to 5 members. $5.99 per additional team member
+                </Text>
               </View>
 
               <View style={styles.planContainer}>
@@ -1004,9 +1232,14 @@ export default function LabelCustomizationScreen({ navigation }) {
                     setShowEnterpriseModal(true);
                   }}
                 >
-                  <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
+                  <View style={styles.planButtonRow}>
+                    <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('firstLoad.enterprise')}</Text>
+                    <Text style={styles.planPrice}>Starts at $69.99/month</Text>
+                  </View>
                 </TouchableOpacity>
-                <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
+                <Text style={styles.planSubtext}>
+                  For growing organisations with 15 team members and more
+                </Text>
               </View>
             </ScrollView>
           </View>
@@ -1434,12 +1667,13 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   // Plan Modal Styles
-  planModalOverlay: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'flex-end'
   },
   modalContent: {
+    width: '100%',
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -1496,11 +1730,100 @@ const styles = StyleSheet.create({
   planButtonTextSelected: {
     color: '#000000'
   },
+  planButtonRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%'
+  },
+  planPrice: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.TEXT
+  },
   planSubtext: {
     fontSize: 14,
     color: '#666',
     textAlign: 'center',
     marginTop: 8,
     paddingHorizontal: 10
+  },
+  watermarkCustomization: {
+    marginTop: 8,
+    marginBottom: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+    borderRadius: 12,
+    backgroundColor: '#f9f9f9',
+  },
+  watermarkField: {
+    marginBottom: 12,
+  },
+  watermarkFieldLabel: {
+    color: COLORS.TEXT,
+    fontWeight: '600',
+    marginBottom: 6,
+  },
+  watermarkInput: {
+    backgroundColor: 'white',
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    color: COLORS.TEXT,
+  },
+  watermarkHelperText: {
+    color: COLORS.GRAY,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 4,
+  },
+  watermarkColorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+    gap: 12,
+  },
+  watermarkColorInfo: {
+    flex: 1,
+  },
+  watermarkColorValue: {
+    color: COLORS.GRAY,
+    fontSize: 12,
+  },
+  watermarkColorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+    backgroundColor: 'white',
+    gap: 8,
+  },
+  watermarkColorSwatch: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+  },
+  watermarkOpacityRow: {
+    marginBottom: 16,
+  },
+  watermarkOpacityControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  watermarkOpacityValue: {
+    minWidth: 48,
+    textAlign: 'right',
+    color: COLORS.TEXT,
+    fontWeight: '600',
   },
 });

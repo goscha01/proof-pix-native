@@ -8,6 +8,7 @@ import {
   Dimensions,
   ScrollView,
   Modal as RNModal,
+  Switch,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
@@ -15,6 +16,7 @@ import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
 import { useTranslation } from 'react-i18next';
 import PhotoLabel from '../components/PhotoLabel';
+import PhotoWatermark from '../components/PhotoWatermark';
 
 const { width } = Dimensions.get('window');
 
@@ -36,7 +38,7 @@ const LANGUAGES = [
 
 export default function LabelLanguageSetupScreen({ navigation, route }) {
   const { t } = useTranslation();
-  const { labelLanguage, updateLabelLanguage } = useSettings();
+  const { labelLanguage, updateLabelLanguage, showLabels, toggleLabels, shouldShowWatermark } = useSettings();
   const [selectedLanguage, setSelectedLanguage] = useState(labelLanguage);
   const [labelLanguageModalVisible, setLabelLanguageModalVisible] = useState(false);
   const labelLanguageScrollViewRef = useRef(null);
@@ -115,24 +117,47 @@ export default function LabelLanguageSetupScreen({ navigation, route }) {
             </View>
 
             {/* Before Label */}
-            <View style={styles.beforeLabelContainer}>
-              <PhotoLabel
-                label="common.before"
-                position="left-top"
-                size="medium"
-              />
-            </View>
+            {showLabels && (
+              <View style={styles.beforeLabelContainer}>
+                <PhotoLabel
+                  label="common.before"
+                  position="left-top"
+                  size="medium"
+                />
+              </View>
+            )}
 
             {/* After Label */}
-            <View style={styles.afterLabelContainer}>
-              <PhotoLabel
-                label="common.after"
-                position="left-bottom"
-                size="medium"
-              />
-            </View>
+            {showLabels && (
+              <View style={styles.afterLabelContainer}>
+                <PhotoLabel
+                  label="common.after"
+                  position="left-bottom"
+                  size="medium"
+                />
+              </View>
+            )}
+
+            {/* Watermark */}
+            {shouldShowWatermark && <PhotoWatermark />}
           </View>
           <Text style={styles.photoDescription}>{t('labelLanguageSetup.previewDescription')}</Text>
+          
+          {/* Label Removal Switch */}
+          <View style={styles.settingRow}>
+            <View style={styles.settingInfo}>
+              <Text style={styles.settingLabel}>{t('settings.showLabels')}</Text>
+              <Text style={styles.settingDescription}>
+                {t('settings.showLabelsDescription')}
+              </Text>
+            </View>
+            <Switch
+              value={showLabels}
+              onValueChange={toggleLabels}
+              trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+              thumbColor="white"
+            />
+          </View>
         </View>
 
         {/* Language Selection Dropdown */}
@@ -311,6 +336,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     marginTop: 8,
+  },
+  settingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 12,
+    marginTop: 16,
+  },
+  settingInfo: {
+    flex: 1,
+    paddingRight: 16,
+  },
+  settingLabel: {
+    color: COLORS.TEXT,
+    fontWeight: '600',
+  },
+  settingDescription: {
+    color: COLORS.GRAY,
+    fontSize: 12,
   },
   languageSection: {
     marginBottom: 4,

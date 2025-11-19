@@ -331,6 +331,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
+    width: '100%',
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -343,24 +344,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#E0E0E0',
+    borderBottomColor: COLORS.BORDER,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: COLORS.TEXT,
-    fontFamily: FONTS.QUICKSAND_BOLD,
   },
   modalCloseButton: {
-    padding: 5,
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   modalCloseText: {
-    fontSize: 28,
-    color: COLORS.TEXT,
-    lineHeight: 28,
+    fontSize: 24,
+    color: COLORS.GRAY,
   },
   modalScrollView: {
     paddingHorizontal: 20,
+    paddingTop: 20,
   },
   planContainer: {
     marginBottom: 20,
@@ -402,7 +405,7 @@ const styles = StyleSheet.create({
   planPrice: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#4CAF50',
+    color: COLORS.TEXT,
     fontFamily: FONTS.QUICKSAND_BOLD,
   },
 });

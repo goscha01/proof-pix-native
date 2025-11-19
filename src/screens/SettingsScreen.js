@@ -239,6 +239,7 @@ export default function SettingsScreen({ navigation, route }) {
     watermarkColor,
     watermarkOpacity,
     toggleWatermark,
+    updateShowWatermark,
     updateWatermarkText,
     updateWatermarkLink,
     updateWatermarkColor,
@@ -1258,7 +1259,9 @@ export default function SettingsScreen({ navigation, route }) {
                     </Text>
                   )}
                 </Text>
-                <Text style={styles.changePlanText}>{t('settings.change')}</Text>
+                <TouchableOpacity onPress={() => setShowPlanModal(true)}>
+                  <Text style={styles.changePlanText}>{t('settings.change')}</Text>
+                </TouchableOpacity>
               </View>
               {trialActive && trialDaysRemaining > 0 && (
                 <Text style={styles.trialDaysText}>
@@ -1406,50 +1409,106 @@ export default function SettingsScreen({ navigation, route }) {
               </View>
               {customWatermarkEnabled && (
                 <View style={styles.watermarkCustomization}>
-                  <View style={styles.watermarkField}>
-                    <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkText')}</Text>
-                    <TextInput
-                      ref={watermarkTextInputRef}
-                      style={styles.watermarkInput}
-                      value={watermarkText}
-                      onChangeText={updateWatermarkText}
-                      onFocus={() => {
+                  {/* Add Watermark Checkbox */}
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Text style={styles.settingLabel}>{t('settings.addWatermark', { defaultValue: 'Add watermark' })}</Text>
+                      <Text style={styles.settingDescription}>
+                        {t('settings.addWatermarkDescription', { defaultValue: 'Show watermark on photos' })}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={showWatermark}
+                      onValueChange={(value) => {
                         // Check if user has access to customize watermark
                         if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                          // Starter users cannot turn off watermark - show tier popup
+                          if (value === false) {
+                            setShowPlanModal(true);
+                            return;
+                          }
+                        }
+                        updateShowWatermark(value);
+                      }}
+                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                      thumbColor="white"
+                    />
+                  </View>
+
+                  <View style={styles.watermarkField}>
+                    <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkText')}</Text>
+                    <Pressable
+                      onPress={() => {
+                        if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
                           setShowPlanModal(true);
-                          // Blur the input to prevent typing
+                        } else {
+                          // Focus the input if user has access
                           if (watermarkTextInputRef.current) {
-                            watermarkTextInputRef.current.blur();
+                            watermarkTextInputRef.current.focus();
                           }
                         }
                       }}
-                      placeholder={t('settings.watermarkTextPlaceholder')}
-                      placeholderTextColor={COLORS.GRAY}
-                    />
+                    >
+                      <TextInput
+                        ref={watermarkTextInputRef}
+                        style={styles.watermarkInput}
+                        value={watermarkText}
+                        onChangeText={updateWatermarkText}
+                        onFocus={() => {
+                          // Check if user has access to customize watermark
+                          if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                            setShowPlanModal(true);
+                            // Blur the input to prevent typing
+                            if (watermarkTextInputRef.current) {
+                              watermarkTextInputRef.current.blur();
+                            }
+                          }
+                        }}
+                        placeholder={t('settings.watermarkTextPlaceholder')}
+                        placeholderTextColor={COLORS.GRAY}
+                        editable={canUse(FEATURES.CUSTOM_WATERMARKS)}
+                        pointerEvents={canUse(FEATURES.CUSTOM_WATERMARKS) ? 'auto' : 'none'}
+                      />
+                    </Pressable>
                   </View>
                   <View style={styles.watermarkField}>
                     <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkLink')}</Text>
-                    <TextInput
-                      ref={watermarkLinkInputRef}
-                      style={styles.watermarkInput}
-                      value={watermarkLink}
-                      onChangeText={updateWatermarkLink}
-                      onFocus={() => {
-                        // Check if user has access to customize watermark
+                    <Pressable
+                      onPress={() => {
                         if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
                           setShowPlanModal(true);
-                          // Blur the input to prevent typing
+                        } else {
+                          // Focus the input if user has access
                           if (watermarkLinkInputRef.current) {
-                            watermarkLinkInputRef.current.blur();
+                            watermarkLinkInputRef.current.focus();
                           }
                         }
                       }}
-                      placeholder={t('settings.watermarkLinkPlaceholder')}
-                      placeholderTextColor={COLORS.GRAY}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="url"
-                    />
+                    >
+                      <TextInput
+                        ref={watermarkLinkInputRef}
+                        style={styles.watermarkInput}
+                        value={watermarkLink}
+                        onChangeText={updateWatermarkLink}
+                        onFocus={() => {
+                          // Check if user has access to customize watermark
+                          if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                            setShowPlanModal(true);
+                            // Blur the input to prevent typing
+                            if (watermarkLinkInputRef.current) {
+                              watermarkLinkInputRef.current.blur();
+                            }
+                          }
+                        }}
+                        placeholder={t('settings.watermarkLinkPlaceholder')}
+                        placeholderTextColor={COLORS.GRAY}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="url"
+                        editable={canUse(FEATURES.CUSTOM_WATERMARKS)}
+                        pointerEvents={canUse(FEATURES.CUSTOM_WATERMARKS) ? 'auto' : 'none'}
+                      />
+                    </Pressable>
                   </View>
                   <View style={styles.watermarkColorRow}>
                     <View style={styles.watermarkColorInfo}>
@@ -2801,8 +2860,8 @@ export default function SettingsScreen({ navigation, route }) {
           animationType="fade"
           onRequestClose={() => setLanguageModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+          <View style={styles.languageModalOverlay}>
+            <View style={styles.languageModalContent}>
               <Text style={styles.modalTitle}>{t('settings.language')}</Text>
 
               <ScrollView 
@@ -2851,14 +2910,14 @@ export default function SettingsScreen({ navigation, route }) {
         </RNModal>
 
         {/* Label Language Modal */}
-        <RNModal
+          <RNModal
           visible={labelLanguageModalVisible}
           transparent={true}
           animationType="fade"
           onRequestClose={() => setLabelLanguageModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+          <View style={styles.languageModalOverlay}>
+            <View style={styles.languageModalContent}>
               <Text style={styles.modalTitle}>{t('settings.labelLanguage')}</Text>
               <ScrollView 
                 ref={labelLanguageScrollViewRef}
@@ -2905,14 +2964,14 @@ export default function SettingsScreen({ navigation, route }) {
         </RNModal>
 
         {/* Section Language Modal */}
-        <RNModal
+          <RNModal
           visible={sectionLanguageModalVisible}
           transparent={true}
           animationType="fade"
           onRequestClose={() => setSectionLanguageModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+          <View style={styles.languageModalOverlay}>
+            <View style={styles.languageModalContent}>
               <Text style={styles.modalTitle}>{t('settings.sectionLanguage')}</Text>
               <ScrollView
                 ref={sectionLanguageScrollViewRef}
@@ -3516,7 +3575,8 @@ const sliderStyles = StyleSheet.create({
     currentPlanBox: {
       backgroundColor: '#f0f0f0',
       borderRadius: 8,
-      padding: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 20,
       marginBottom: 16,
     },
     currentPlanInfo: {
@@ -3531,7 +3591,7 @@ const sliderStyles = StyleSheet.create({
     currentPlanValueContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8,
+      justifyContent: 'space-between',
       marginBottom: 4,
     },
     currentPlanValue: {
@@ -3643,8 +3703,7 @@ const sliderStyles = StyleSheet.create({
     planPrice: {
       fontSize: 16,
       fontWeight: '600',
-      color: '#4CAF50',
-      fontFamily: FONTS.QUICKSAND_BOLD,
+      color: COLORS.TEXT,
     },
     expoGoWarning: {
       backgroundColor: '#fff3cd',
@@ -4665,13 +4724,13 @@ const sliderStyles = StyleSheet.create({
       color: COLORS.TEXT_MUTED,
     },
     // Language modal styles
-    modalOverlay: {
+    languageModalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
       justifyContent: 'center',
       alignItems: 'center',
     },
-    modalContent: {
+    languageModalContent: {
       backgroundColor: 'white',
       borderRadius: 16,
       padding: 24,

@@ -296,6 +296,11 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ watermarkLink: link });
   };
 
+  const updateShowWatermark = async (value) => {
+    setShowWatermark(value);
+    await saveSettings({ showWatermark: value });
+  };
+
   const updateWatermarkColor = async (color) => {
     const nextColor = normalizeColorHex(color, DEFAULT_LABEL_BACKGROUND);
     setWatermarkColor(nextColor);
@@ -496,7 +501,7 @@ export const SettingsProvider = ({ children }) => {
     }
   };
 
-  const shouldShowWatermark = customWatermarkEnabled ? Boolean(watermarkText?.trim()) : showWatermark;
+  const shouldShowWatermark = showWatermark && (customWatermarkEnabled ? Boolean(watermarkText?.trim()) : true);
 
   const value = {
     showLabels,
@@ -509,6 +514,7 @@ export const SettingsProvider = ({ children }) => {
     watermarkColor,
     watermarkOpacity,
     toggleWatermark,
+    updateShowWatermark,
     updateWatermarkText,
     updateWatermarkLink,
     updateWatermarkColor,
