@@ -547,9 +547,11 @@ export default function GalleryScreen({ navigation, route }) {
     
     // Check if we're sharing selected photos
     let sourcePhotos;
+    let selectedSets = [];
     if (shareSelectedPhotos) {
       // Use selected photos
       sourcePhotos = shareSelectedPhotos.individual;
+      selectedSets = shareSelectedPhotos.sets || [];
       // Reset the selected photos flag after using it
       setShareSelectedPhotos(null);
     } else {
@@ -557,7 +559,7 @@ export default function GalleryScreen({ navigation, route }) {
       sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
     }
     
-    if (sourcePhotos.length === 0) {
+    if (sourcePhotos.length === 0 && selectedSets.length === 0) {
         Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
         setSharing(false);
         return;
@@ -573,14 +575,88 @@ export default function GalleryScreen({ navigation, route }) {
     let combinedPhotosToShare = [];
     if (selectedShareTypes.combined) {
         try {
-            const beforePhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.BEFORE);
-            const afterPhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.AFTER);
+            // First, check if there are selected sets (combined photos directly selected)
+            // These don't require both before and after to be in sourcePhotos
             const dir = FileSystem.documentDirectory;
             const entries = await FileSystem.readDirectoryAsync(dir);
+            
+            for (const photoSet of selectedSets) {
+                if (photoSet.before && photoSet.after) {
+                    const beforePhoto = photoSet.before;
+                    const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
+                    const projectId = beforePhoto.projectId;
+                    const projectIdSuffix = projectId ? `_P${projectId}` : '';
+                    
+                    const extractTimestamp = (filename) => {
+                        const match = filename.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+                        return match ? parseInt(match[1], 10) : 0;
+                    };
+                    
+                    // Prioritize STACK over SIDE variant
+                    const stackPrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
+                    const sidePrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
+                    
+                    let newestUri = null;
+                    let newestTs = -1;
+                    
+                    // First, try to find STACK variant
+                    const stackMatches = entries.filter(name => {
+                        if (!name.startsWith(stackPrefix)) return false;
+                        if (projectId && !name.includes(projectIdSuffix)) return false;
+                        return true;
+                    });
+                    
+                    for (const filename of stackMatches) {
+                        const ts = extractTimestamp(filename);
+                        if (ts > newestTs) {
+                            newestTs = ts;
+                            newestUri = `${dir}${filename}`;
+                        }
+                    }
+                    
+                    // Only use SIDE if no STACK found
+                    if (!newestUri) {
+                        const sideMatches = entries.filter(name => {
+                            if (!name.startsWith(sidePrefix)) return false;
+                            if (projectId && !name.includes(projectIdSuffix)) return false;
+                            return true;
+                        });
+                        
+                        for (const filename of sideMatches) {
+                            const ts = extractTimestamp(filename);
+                            if (ts > newestTs) {
+                                newestTs = ts;
+                                newestUri = `${dir}${filename}`;
+                            }
+                        }
+                    }
+                    
+                    if (newestUri) {
+                        // Create a photo object for the combined photo
+                        combinedPhotosToShare.push({
+                            uri: newestUri,
+                            mode: PHOTO_MODES.COMBINED,
+                            name: beforePhoto.name,
+                            room: beforePhoto.room,
+                            projectId: beforePhoto.projectId,
+                            id: `combined_${beforePhoto.id}`, // Unique ID for combined photo
+                        });
+                        console.log(`[GALLERY] Found combined photo from selected set: ${beforePhoto.name}`);
+                    }
+                }
+            }
+            
+            // Also find combined photos based on before/after pairs in sourcePhotos
+            const beforePhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.BEFORE);
+            const afterPhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.AFTER);
             
             for (const beforePhoto of beforePhotos) {
                 const afterPhoto = afterPhotos.find(p => p.beforePhotoId === beforePhoto.id);
                 if (!afterPhoto) continue;
+                
+                // Skip if already added from selectedSets
+                const alreadyAdded = combinedPhotosToShare.some(cp => cp.id === `combined_${beforePhoto.id}`);
+                if (alreadyAdded) continue;
                 
                 const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
                 const projectId = beforePhoto.projectId;
