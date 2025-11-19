@@ -290,6 +290,12 @@
     "subtitle": "为您的照片标签选择语言（之前、之后、组合）",
     "previewDescription": "所选语言的标签预览"
   },
+  "sectionLanguageSetup": {
+    "title": "选择分区语言",
+    "subtitle": "为您的项目分区选择语言（厨房、浴室等）",
+    "previewDescription": "所选语言的分区预览",
+    "industryTemplate": "行业模板"
+  },
   "googleSignUp": {
     "title": "连接您的账户",
     "subtitle": "使用 Google 注册以启用云同步、批量上传和专业版及商业版的团队功能。",

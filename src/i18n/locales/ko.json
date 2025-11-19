@@ -274,6 +274,12 @@
     "subtitle": "사진 라벨의 언어를 선택하세요 (이전, 이후, 결합)",
     "previewDescription": "선택한 언어로 라벨 미리보기"
   },
+  "sectionLanguageSetup": {
+    "title": "섹션 언어 선택",
+    "subtitle": "프로젝트 섹션의 언어를 선택하세요 (부엌, 화장실 등)",
+    "previewDescription": "선택한 언어로 섹션 미리보기",
+    "industryTemplate": "업계 템플릿"
+  },
   "googleSignUp": {
     "title": "계정 연결",
     "subtitle": "Google로 가입하여 Pro 및 Business 요금제의 클라우드 동기화, 대량 업로드 및 팀 기능을 활성화하세요.",

@@ -274,6 +274,12 @@
     "subtitle": "اختر اللغة لتسميات الصور (قبل، بعد، مجتمعة)",
     "previewDescription": "معاينة التسميات باللغة المحددة"
   },
+  "sectionLanguageSetup": {
+    "title": "اختر لغة القسم",
+    "subtitle": "اختر اللغة لأقسام مشروعك (المطبخ، الحمام، إلخ)",
+    "previewDescription": "معاينة الأقسام باللغة المحددة",
+    "industryTemplate": "قوالب الصناعة"
+  },
   "googleSignUp": {
     "title": "اربط حسابك",
     "subtitle": "سجل باستخدام Google لتفعيل المزامنة السحابية والتحميل الجماعي وميزات الفريق لخطط Pro و Business.",

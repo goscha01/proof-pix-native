@@ -26,10 +26,12 @@ import PhotoDetailScreen from './src/screens/PhotoDetailScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LabelCustomizationScreen from './src/screens/LabelCustomizationScreen';
 import FirstLoadScreen from './src/screens/FirstLoadScreen';
+import PlanSelectionScreen from './src/screens/PlanSelectionScreen';
 import InviteScreen from './src/screens/InviteScreen';
 import JoinTeamScreen from './src/screens/JoinTeamScreen';
 import GoogleSignUpScreen from './src/screens/GoogleSignUpScreen';
 import LabelLanguageSetupScreen from './src/screens/LabelLanguageSetupScreen';
+import SectionLanguageSetupScreen from './src/screens/SectionLanguageSetupScreen';
 import AuthLoadingScreen from './src/screens/AuthLoadingScreen';
 import VisionCameraTest from './src/screens/VisionCameraTest';
 import GlobalBackgroundLabelPreparation from './src/components/GlobalBackgroundLabelPreparation';
@@ -55,6 +57,13 @@ function AppNavigator() {
         component={FirstLoadScreen}
         options={{
           animation: 'none'
+        }}
+      />
+      <Stack.Screen 
+        name="PlanSelection"
+        component={PlanSelectionScreen}
+        options={{
+          animation: 'slide_from_right'
         }}
       />
       <Stack.Screen 
@@ -141,6 +150,13 @@ function AppNavigator() {
       <Stack.Screen
         name="LabelLanguageSetup"
         component={LabelLanguageSetupScreen}
+        options={{
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen
+        name="SectionLanguageSetup"
+        component={SectionLanguageSetupScreen}
         options={{
           animation: 'slide_from_right'
         }}

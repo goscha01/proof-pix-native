@@ -43,7 +43,6 @@ export default function FirstLoadScreen({ navigation }) {
   const { individualSignIn } = useAdmin();
   const { updateUserInfo, updateUserPlan } = useSettings();
   const [userName, setUserName] = useState('');
-  const [selection, setSelection] = useState(null); // 'team' or 'individual'
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
   const scrollViewRef = useRef(null);
   const nameInputRef = useRef(null);
@@ -79,18 +78,7 @@ export default function FirstLoadScreen({ navigation }) {
   const handleSelectIndividual = async () => {
     if (!validateName()) return;
     await updateUserInfo(userName.trim());
-    setSelection('individual');
-  };
-
-  const handleSelectPlan = async (plan) => {
-    await updateUserPlan(plan);
-    if (plan === 'starter') {
-      // For Starter plan, go to Label Language Setup screen
-      navigation.replace('LabelLanguageSetup');
-    } else {
-      // For Pro, Business, Enterprise, go to the Google Sign-Up screen
-      navigation.navigate('GoogleSignUp', { plan });
-    }
+    navigation.navigate('PlanSelection');
   };
 
   const handleFormContainerLayout = (event) => {
@@ -174,43 +162,6 @@ export default function FirstLoadScreen({ navigation }) {
     </View>
   );
 
-  const renderPlanSelection = () => (
-    <View style={styles.formContainer}>
-      <TouchableOpacity onPress={() => setSelection(null)} style={styles.backLink}>
-        <Text style={styles.backLinkText}>&larr; {t('firstLoad.back')}</Text>
-      </TouchableOpacity>
-      <Text style={styles.welcomeText}>{t('firstLoad.choosePlan')}</Text>
-
-      <View style={styles.planContainer}>
-        <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('starter')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.starter')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.planSubtext}>{t('firstLoad.starterDesc')}</Text>
-      </View>
-
-      <View style={styles.planContainer}>
-        <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('pro')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.pro')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.planSubtext}>{t('firstLoad.proDesc')}</Text>
-      </View>
-      
-      <View style={styles.planContainer}>
-        <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('business')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.business')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.planSubtext}>{t('firstLoad.businessDesc')}</Text>
-      </View>
-      
-      <View style={styles.planContainer}>
-        <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('enterprise')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.enterprise')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.planSubtext}>{t('firstLoad.enterpriseDesc')}</Text>
-      </View>
-    </View>
-  );
-
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView
@@ -225,19 +176,17 @@ export default function FirstLoadScreen({ navigation }) {
           showsVerticalScrollIndicator={false}
         >
 
-        {selection !== 'individual' && (
-          <View style={styles.logoContainer}>
-            <Image
-              source={require('../../assets/PP_logo.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <Text style={styles.appTitle}>ProofPix</Text>
-            <Text style={styles.appSubtitle}>{t('firstLoad.subtitle')}</Text>
-          </View>
-        )}
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../assets/PP_logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.appTitle}>ProofPix</Text>
+          <Text style={styles.appSubtitle}>{t('firstLoad.subtitle')}</Text>
+        </View>
 
-        {selection === 'individual' ? renderPlanSelection() : renderInitialSelection()}
+        {renderInitialSelection()}
 
         </ScrollView>
       </KeyboardAvoidingView>

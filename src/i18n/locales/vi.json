@@ -278,6 +278,12 @@
     "subtitle": "Chọn ngôn ngữ cho nhãn ảnh của bạn (Trước, Sau, Kết hợp)",
     "previewDescription": "Xem trước nhãn bằng ngôn ngữ đã chọn"
   },
+  "sectionLanguageSetup": {
+    "title": "Chọn Ngôn Ngữ Phần",
+    "subtitle": "Chọn ngôn ngữ cho các phần của dự án của bạn (Nhà bếp, Phòng tắm, v.v.)",
+    "previewDescription": "Xem trước các phần bằng ngôn ngữ đã chọn",
+    "industryTemplate": "Mẫu ngành công nghiệp"
+  },
   "googleSignUp": {
     "title": "Kết Nối Tài Khoản Của Bạn",
     "subtitle": "Đăng ký với Google để bật đồng bộ đám mây, tải lên hàng loạt và các tính năng nhóm cho gói Pro và Doanh nghiệp.",

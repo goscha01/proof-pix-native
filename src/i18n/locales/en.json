@@ -407,6 +407,12 @@
     "subtitle": "Select the language for your photo labels (Before, After, Combined)",
     "previewDescription": "Preview of labels in selected language"
   },
+  "sectionLanguageSetup": {
+    "title": "Choose Section Language",
+    "subtitle": "Select the language for your project sections (Kitchen, Bathroom, etc.)",
+    "previewDescription": "Preview of sections in selected language",
+    "industryTemplate": "Industry templates"
+  },
   "googleSignUp": {
     "title": "Connect Your Account",
     "subtitle": "Sign up with Google to enable cloud sync, bulk uploads, and team features for Pro and Business plans.",

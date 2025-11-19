@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   View,
   Text,
@@ -879,6 +879,8 @@ export default function LabelCustomizationScreen({ navigation }) {
                   onPress={async () => {
                     await updateUserPlan('pro');
                     setShowPlanModal(false);
+                    // Reset color picker key to ensure proper remounting
+                    setColorPickerKey((prev) => prev + 1);
                   }}
                 >
                   <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
@@ -892,6 +894,8 @@ export default function LabelCustomizationScreen({ navigation }) {
                   onPress={async () => {
                     await updateUserPlan('business');
                     setShowPlanModal(false);
+                    // Reset color picker key to ensure proper remounting
+                    setColorPickerKey((prev) => prev + 1);
                   }}
                 >
                   <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
@@ -905,6 +909,8 @@ export default function LabelCustomizationScreen({ navigation }) {
                   onPress={async () => {
                     await updateUserPlan('enterprise');
                     setShowPlanModal(false);
+                    // Reset color picker key to ensure proper remounting
+                    setColorPickerKey((prev) => prev + 1);
                   }}
                 >
                   <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>

@@ -292,6 +292,12 @@
     "subtitle": "Seleccione el idioma para las etiquetas de sus fotos (Antes, Después, Combinado)",
     "previewDescription": "Vista previa de etiquetas en el idioma seleccionado"
   },
+  "sectionLanguageSetup": {
+    "title": "Elegir Idioma de Secciones",
+    "subtitle": "Seleccione el idioma para las secciones de su proyecto (Cocina, Baño, etc.)",
+    "previewDescription": "Vista previa de secciones en el idioma seleccionado",
+    "industryTemplate": "Plantillas de industria"
+  },
   "googleSignUp": {
     "title": "Conecta Tu Cuenta",
     "subtitle": "Regístrate con Google para habilitar la sincronización en la nube, cargas masivas y funciones de equipo para los planes Pro y Negocios.",

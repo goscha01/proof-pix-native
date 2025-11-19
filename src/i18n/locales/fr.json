@@ -292,6 +292,12 @@
     "subtitle": "Sélectionnez la langue pour les étiquettes de vos photos (Avant, Après, Combiné)",
     "previewDescription": "Aperçu des étiquettes dans la langue sélectionnée"
   },
+  "sectionLanguageSetup": {
+    "title": "Choisir la Langue des Sections",
+    "subtitle": "Sélectionnez la langue pour les sections de votre projet (Cuisine, Salle de bain, etc.)",
+    "previewDescription": "Aperçu des sections dans la langue sélectionnée",
+    "industryTemplate": "Modèles d'industrie"
+  },
   "googleSignUp": {
     "title": "Connectez Votre Compte",
     "subtitle": "Inscrivez-vous avec Google pour activer la synchronisation cloud, les téléchargements en masse et les fonctionnalités d'équipe pour les plans Pro et Entreprise.",

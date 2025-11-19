@@ -72,7 +72,7 @@ export default function LabelLanguageSetupScreen({ navigation, route }) {
   };
 
   const handleContinue = () => {
-    navigation.replace('Home');
+    navigation.navigate('SectionLanguageSetup');
   };
 
   const handleGoBack = () => {
@@ -98,7 +98,6 @@ export default function LabelLanguageSetupScreen({ navigation, route }) {
         showsVerticalScrollIndicator={true}
       >
         <Text style={styles.title}>{t('labelLanguageSetup.title')}</Text>
-        <Text style={styles.subtitle}>{t('labelLanguageSetup.subtitle')}</Text>
 
         {/* Dummy Photo Preview */}
         <View style={styles.photoContainer}>
@@ -152,6 +151,16 @@ export default function LabelLanguageSetupScreen({ navigation, route }) {
             </View>
           </TouchableOpacity>
         </View>
+
+        {/* Customize Button */}
+        <TouchableOpacity
+          style={styles.customizeButton}
+          onPress={() => {
+            navigation.navigate('LabelCustomization');
+          }}
+        >
+          <Text style={styles.customizeButtonText}>{t('settings.customize')}</Text>
+        </TouchableOpacity>
 
         {/* Continue Button */}
         <TouchableOpacity
@@ -246,15 +255,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: COLORS.TEXT,
     textAlign: 'center',
-    marginBottom: 12,
-    fontFamily: FONTS.QUICKSAND_BOLD,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
     marginBottom: 30,
-    lineHeight: 24,
+    fontFamily: FONTS.QUICKSAND_BOLD,
   },
   photoContainer: {
     marginBottom: 30,
@@ -375,6 +377,25 @@ const styles = StyleSheet.create({
     fontSize: 20,
     color: '#000000',
     fontWeight: 'bold',
+  },
+  customizeButton: {
+    backgroundColor: '#000000',
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
+    alignItems: 'center',
+    marginBottom: 20,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+  },
+  customizeButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    fontFamily: FONTS.QUICKSAND_BOLD,
   },
   continueButton: {
     backgroundColor: COLORS.PRIMARY,

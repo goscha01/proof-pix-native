@@ -289,6 +289,12 @@
     "subtitle": "Wählen Sie die Sprache für Ihre Fotoetiketten (Vorher, Nachher, Kombiniert)",
     "previewDescription": "Vorschau der Etiketten in der ausgewählten Sprache"
   },
+  "sectionLanguageSetup": {
+    "title": "Bereichssprache Wählen",
+    "subtitle": "Wählen Sie die Sprache für Ihre Projektbereiche (Küche, Badezimmer, etc.)",
+    "previewDescription": "Vorschau der Bereiche in der ausgewählten Sprache",
+    "industryTemplate": "Industrievorlagen"
+  },
   "googleSignUp": {
     "title": "Verbinden Sie Ihr Konto",
     "subtitle": "Melden Sie sich mit Google an, um Cloud-Synchronisation, Massen-Upload und Teamfunktionen für Pro- und Business-Pläne zu aktivieren.",
