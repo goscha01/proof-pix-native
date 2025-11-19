@@ -1336,14 +1336,14 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: '#F2C31B', marginTop: 8 }]}
+                  style={[styles.actionBtn, { backgroundColor: '#D6ECFF', marginTop: 8 }]}
                   onPress={() => {
                     setOpenProjectVisible(false);
                     exitMultiSelectMode();
                     navigation.navigate('Gallery', { openManage: true });
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: '#000' }]}>📤 {t('home.shareProject')}</Text>
+                  <Text style={[styles.actionBtnText, { color: '#0077CC' }]}>📤 {t('home.shareProject')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1391,13 +1391,13 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: '#F2C31B', marginTop: 8 }]}
+                  style={[styles.actionBtn, { backgroundColor: '#D6ECFF', marginTop: 8 }]}
                   onPress={() => {
                     setOpenProjectVisible(false);
                     navigation.navigate('Gallery', { openManage: true });
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: '#000' }]}>📤 {t('home.shareProject')}</Text>
+                  <Text style={[styles.actionBtnText, { color: '#0077CC' }]}>📤 {t('home.shareProject')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
