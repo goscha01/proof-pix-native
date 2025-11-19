@@ -1621,9 +1621,11 @@ export default function GalleryScreen({ navigation, route }) {
         // Team Member Upload Logic (same as Pro/Business/Enterprise)
         // Check if we're uploading selected photos
         let sourcePhotos;
+        let selectedSets = [];
         if (uploadSelectedPhotos) {
           // Use selected photos
           sourcePhotos = uploadSelectedPhotos.individual;
+          selectedSets = uploadSelectedPhotos.sets || [];
           // Reset the selected photos flag after using it
           setUploadSelectedPhotos(null);
         } else {
@@ -1642,7 +1644,89 @@ export default function GalleryScreen({ navigation, route }) {
         if (selectedTypes.combined) {
           const anyFormat = Object.keys(selectedFormats).some((k) => selectedFormats[k]);
 
-          // Group photos by room to find pairs
+          // First, process selected sets (combined photos directly selected)
+          // These don't require both before and after to be in sourcePhotos
+          if (!anyFormat) {
+            // Upload existing ORIGINAL combined images from device storage
+            try {
+              const dir = FileSystem.documentDirectory;
+              const entries = dir ? await FileSystem.readDirectoryAsync(dir) : [];
+
+              let foundCount = 0;
+              for (const photoSet of selectedSets) {
+                if (photoSet.before && photoSet.after) {
+                  const pair = {
+                    before: photoSet.before,
+                    after: photoSet.after,
+                    room: photoSet.before.room
+                  };
+                  const safeName = (pair.before.name || 'Photo').replace(/\s+/g, '_');
+                  const projectId = pair.before.projectId;
+                  const projectIdSuffix = projectId ? `_P${projectId}` : '';
+                  const stackPrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_STACK_`;
+                  const sidePrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_SIDE_`;
+
+                  const pickLatestByPrefix = (prefix) => {
+                    let matches = entries.filter(name => name.startsWith(prefix));
+                    
+                    // Filter by project ID if available
+                    if (projectId) {
+                      matches = matches.filter(name => name.includes(projectIdSuffix));
+                    }
+                    
+                    if (matches.length === 0) return null;
+                    // Filenames end with _<timestamp>[_PprojectId].jpg; pick max timestamp
+                    let best = null;
+                    let bestTs = -1;
+                    for (const name of matches) {
+                      // Match timestamp before project ID suffix if present
+                      const m = name.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+                      const ts = m ? parseInt(m[1], 10) : 0;
+                      if (ts > bestTs) { bestTs = ts; best = name; }
+                    }
+                    return best || matches[matches.length - 1];
+                  };
+
+                  const stackName = pickLatestByPrefix(stackPrefix);
+                  const sideName = pickLatestByPrefix(sidePrefix);
+
+                  const beforeOrientation = pair.before.orientation || 'portrait';
+                  const cameraVM = pair.before.cameraViewMode || 'portrait';
+                  const isLetterbox = (cameraVM === 'landscape' && beforeOrientation === 'portrait');
+                  const isLandscape = beforeOrientation === 'landscape' || cameraVM === 'landscape';
+
+                  const pushItem = (name, tag) => {
+                    if (!dir || !name) return;
+                    combinedItems.push({
+                      uri: `${dir}${name}`,
+                      filename: `${pair.before.name}_original-${tag}.jpg`,
+                      name: pair.before.name,
+                      room: pair.room,
+                      mode: PHOTO_MODES.COMBINED,
+                      format: `original-${tag}`
+                    });
+                    foundCount++;
+                  };
+
+                  if (isLetterbox) {
+                    // Upload both if both exist
+                    if (stackName) pushItem(stackName, 'stack');
+                    if (sideName) pushItem(sideName, 'side');
+                  } else if (isLandscape) {
+                    if (stackName) pushItem(stackName, 'stack');
+                    else if (sideName) pushItem(sideName, 'side');
+                  } else {
+                    if (sideName) pushItem(sideName, 'side');
+                    else if (stackName) pushItem(stackName, 'stack');
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('[UPLOAD] Error processing selected sets:', e);
+            }
+          }
+
+          // Group photos by room to find pairs from sourcePhotos
           const byRoom = {};
           sourcePhotos.forEach(p => {
             if (!byRoom[p.room]) byRoom[p.room] = { before: [], after: [] };
@@ -1650,14 +1734,23 @@ export default function GalleryScreen({ navigation, route }) {
             if (p.mode === PHOTO_MODES.AFTER) byRoom[p.room].after.push(p);
           });
 
-          // Create pairs
+          // Create pairs from sourcePhotos (skip if already added from selectedSets)
           const pairs = [];
           Object.keys(byRoom).forEach(roomId => {
             const beforeList = byRoom[roomId].before;
             const afterList = byRoom[roomId].after;
             afterList.forEach(after => {
               const match = beforeList.find(b => b.id === after.beforePhotoId);
-              if (match) pairs.push({ before: match, after, room: roomId });
+              if (match) {
+                // Check if this pair is already in selectedSets
+                const alreadyInSelectedSets = selectedSets.some(set => 
+                  set.before && set.after && 
+                  set.before.id === match.id && set.after.id === after.id
+                );
+                if (!alreadyInSelectedSets) {
+                  pairs.push({ before: match, after, room: roomId });
+                }
+              }
             });
           });
 
@@ -1757,7 +1850,19 @@ export default function GalleryScreen({ navigation, route }) {
               });
             };
 
-            const totalRenders = pairs.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
+            // Include selectedSets in pairs for rendering
+            const allPairsForRendering = [...pairs];
+            for (const photoSet of selectedSets) {
+              if (photoSet.before && photoSet.after) {
+                allPairsForRendering.push({
+                  before: photoSet.before,
+                  after: photoSet.after,
+                  room: photoSet.before.room
+                });
+              }
+            }
+
+            const totalRenders = allPairsForRendering.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
 
             if (totalRenders === 0) {
               Alert.alert(t('gallery.nothingToUploadTitle'), t('gallery.noPairsForCombined'));
@@ -1770,7 +1875,7 @@ export default function GalleryScreen({ navigation, route }) {
 
             // Render each combination
             let renderCount = 0;
-            for (const pair of pairs) {
+            for (const pair of allPairsForRendering) {
               const allowedKeys = getAllowedTemplatesForPair(pair);
               for (const templateKey of allowedKeys) {
                 const cfg = TEMPLATE_CONFIGS[templateKey];
@@ -1906,9 +2011,11 @@ export default function GalleryScreen({ navigation, route }) {
       const albumName = createAlbumName(userName, new Date(), projectUploadId);
       // Scope uploads to the active project if one is selected, or use selected photos
       let sourcePhotos;
+      let selectedSets = [];
       if (uploadSelectedPhotos) {
         // Use selected photos
         sourcePhotos = uploadSelectedPhotos.individual;
+        selectedSets = uploadSelectedPhotos.sets || [];
         // Reset the selected photos flag after using it
         setUploadSelectedPhotos(null);
       } else {
@@ -1927,7 +2034,89 @@ export default function GalleryScreen({ navigation, route }) {
       if (selectedTypes.combined) {
         const anyFormat = Object.keys(selectedFormats).some((k) => selectedFormats[k]);
 
-        // Group photos by room to find pairs
+        // First, process selected sets (combined photos directly selected)
+        // These don't require both before and after to be in sourcePhotos
+        if (!anyFormat) {
+          // Upload existing ORIGINAL combined images from device storage
+          try {
+            const dir = FileSystem.documentDirectory;
+            const entries = dir ? await FileSystem.readDirectoryAsync(dir) : [];
+
+            let foundCount = 0;
+            for (const photoSet of selectedSets) {
+              if (photoSet.before && photoSet.after) {
+                const pair = {
+                  before: photoSet.before,
+                  after: photoSet.after,
+                  room: photoSet.before.room
+                };
+                const safeName = (pair.before.name || 'Photo').replace(/\s+/g, '_');
+                const projectId = pair.before.projectId;
+                const projectIdSuffix = projectId ? `_P${projectId}` : '';
+                const stackPrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_STACK_`;
+                const sidePrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_SIDE_`;
+
+                const pickLatestByPrefix = (prefix) => {
+                  let matches = entries.filter(name => name.startsWith(prefix));
+                  
+                  // Filter by project ID if available
+                  if (projectId) {
+                    matches = matches.filter(name => name.includes(projectIdSuffix));
+                  }
+                  
+                  if (matches.length === 0) return null;
+                  // Filenames end with _<timestamp>[_PprojectId].jpg; pick max timestamp
+                  let best = null;
+                  let bestTs = -1;
+                  for (const name of matches) {
+                    // Match timestamp before project ID suffix if present
+                    const m = name.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+                    const ts = m ? parseInt(m[1], 10) : 0;
+                    if (ts > bestTs) { bestTs = ts; best = name; }
+                  }
+                  return best || matches[matches.length - 1];
+                };
+
+                const stackName = pickLatestByPrefix(stackPrefix);
+                const sideName = pickLatestByPrefix(sidePrefix);
+
+                const beforeOrientation = pair.before.orientation || 'portrait';
+                const cameraVM = pair.before.cameraViewMode || 'portrait';
+                const isLetterbox = (cameraVM === 'landscape' && beforeOrientation === 'portrait');
+                const isLandscape = beforeOrientation === 'landscape' || cameraVM === 'landscape';
+
+                const pushItem = (name, tag) => {
+                  if (!dir || !name) return;
+                  combinedItems.push({
+                    uri: `${dir}${name}`,
+                    filename: `${pair.before.name}_original-${tag}.jpg`,
+                    name: pair.before.name,
+                    room: pair.room,
+                    mode: PHOTO_MODES.COMBINED,
+                    format: `original-${tag}`
+                  });
+                  foundCount++;
+                };
+
+                if (isLetterbox) {
+                  // Upload both if both exist
+                  if (stackName) pushItem(stackName, 'stack');
+                  if (sideName) pushItem(sideName, 'side');
+                } else if (isLandscape) {
+                  if (stackName) pushItem(stackName, 'stack');
+                  else if (sideName) pushItem(sideName, 'side');
+                } else {
+                  if (sideName) pushItem(sideName, 'side');
+                  else if (stackName) pushItem(stackName, 'stack');
+                }
+              }
+            }
+          } catch (e) {
+            console.error('[UPLOAD] Error processing selected sets:', e);
+          }
+        }
+
+        // Group photos by room to find pairs from sourcePhotos
         const byRoom = {};
         sourcePhotos.forEach(p => {
           if (!byRoom[p.room]) byRoom[p.room] = { before: [], after: [] };
@@ -1935,14 +2124,23 @@ export default function GalleryScreen({ navigation, route }) {
           if (p.mode === PHOTO_MODES.AFTER) byRoom[p.room].after.push(p);
         });
 
-        // Create pairs
+        // Create pairs from sourcePhotos (skip if already added from selectedSets)
         const pairs = [];
         Object.keys(byRoom).forEach(roomId => {
           const beforeList = byRoom[roomId].before;
           const afterList = byRoom[roomId].after;
           afterList.forEach(after => {
             const match = beforeList.find(b => b.id === after.beforePhotoId);
-            if (match) pairs.push({ before: match, after, room: roomId });
+            if (match) {
+              // Check if this pair is already in selectedSets
+              const alreadyInSelectedSets = selectedSets.some(set => 
+                set.before && set.after && 
+                set.before.id === match.id && set.after.id === after.id
+              );
+              if (!alreadyInSelectedSets) {
+                pairs.push({ before: match, after, room: roomId });
+              }
+            }
           });
         });
 
@@ -2042,7 +2240,19 @@ export default function GalleryScreen({ navigation, route }) {
             });
           };
 
-          const totalRenders = pairs.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
+          // Include selectedSets in pairs for rendering
+          const allPairsForRendering = [...pairs];
+          for (const photoSet of selectedSets) {
+            if (photoSet.before && photoSet.after) {
+              allPairsForRendering.push({
+                before: photoSet.before,
+                after: photoSet.after,
+                room: photoSet.before.room
+              });
+            }
+          }
+
+          const totalRenders = allPairsForRendering.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
 
           if (totalRenders === 0) {
             Alert.alert(t('gallery.nothingToUploadTitle'), t('gallery.noPairsForCombined'));
@@ -2055,7 +2265,7 @@ export default function GalleryScreen({ navigation, route }) {
 
           // Render each combination
           let renderCount = 0;
-          for (const pair of pairs) {
+          for (const pair of allPairsForRendering) {
             const allowedKeys = getAllowedTemplatesForPair(pair);
             for (const templateKey of allowedKeys) {
               const cfg = TEMPLATE_CONFIGS[templateKey];
@@ -2407,12 +2617,13 @@ export default function GalleryScreen({ navigation, route }) {
       return;
     }
 
-    // Use the same upload logic but with filtered photos
-    // For now, we'll use the existing handleUploadPhotos but filter the photos
-    // This is a simplified approach - you may need to adjust based on your upload logic
+    // Store selected photos for upload logic to use
+    setUploadSelectedPhotos({ individual: selected, sets: selectedSets });
     setManageVisible(false);
-    // TODO: Implement upload for selected photos
-    Alert.alert('Info', 'Upload selected photos functionality will be implemented');
+    
+    // Use the same upload flow but with selected photos
+    // The upload logic will check uploadSelectedPhotos and use it instead of all photos
+    await handleUploadPhotos();
   };
 
   // Handle share selected photos
@@ -2559,19 +2770,27 @@ export default function GalleryScreen({ navigation, route }) {
         // Check if this is a double tap (second tap within 300ms)
         if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
           console.log('[GalleryScreen] Double tap detected for combined photo:', combinedId);
-          // Double tap detected - cancel any pending toggle and open preview
-          // Cancel the pending toggle from first tap
+          // Double tap detected - revert the toggle from first tap and open preview
+          // Cancel any pending toggle timeout
           if (toggleTimeoutRef.current[photoKey]) {
             clearTimeout(toggleTimeoutRef.current[photoKey]);
             delete toggleTimeoutRef.current[photoKey];
           }
           
+          // Revert the toggle that happened on first tap
           const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
-          console.log('[GalleryScreen] Original selection state:', wasOriginallySelected);
+          setSelectedPhotos(prev => {
+            const newSet = new Set(prev);
+            if (wasOriginallySelected) {
+              newSet.add(combinedId); // Restore to selected
+            } else {
+              newSet.delete(combinedId); // Restore to unselected
+            }
+            return newSet;
+          });
           
-          // Get the original state for navigation (don't change state, just use original)
+          // Get the original state for navigation
           const restoredSelected = new Set(currentSelectedPhotos);
-          // Make sure the photo is in the correct state for navigation
           if (wasOriginallySelected) {
             restoredSelected.add(combinedId);
           } else {
@@ -2588,7 +2807,7 @@ export default function GalleryScreen({ navigation, route }) {
           const selectedSets = getSelectedPhotoSets();
           console.log('[GalleryScreen] Navigating to PhotoEditor with', selectedSets.length, 'selected sets');
           
-          // Navigate immediately (no state change needed, checkbox stays as is)
+          // Navigate immediately
           navigation.navigate('PhotoEditor', {
             beforePhoto: photoSet.before,
             afterPhoto: photoSet.after,
@@ -2602,36 +2821,34 @@ export default function GalleryScreen({ navigation, route }) {
           return;
         }
         
-        // First tap - store original state, don't toggle yet
+        // First tap - immediately toggle selection (no delay)
         const wasOriginallySelected = currentSelectedPhotos.has(combinedId);
         originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
+        
+        // Toggle immediately for instant visual feedback
+        setSelectedPhotos(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(combinedId)) {
+            newSet.delete(combinedId);
+          } else {
+            newSet.add(combinedId);
+          }
+          return newSet;
+        });
         
         // Record tap for double tap detection
         tapCountRef.current[photoKey] = 1;
         lastTapRef.current[photoKey] = now;
         
-        // Schedule toggle after delay (only if no second tap comes)
+        // Schedule cleanup after delay (only if no second tap comes)
         toggleTimeoutRef.current[photoKey] = setTimeout(() => {
-          // Only toggle if this wasn't a double tap (tapCount is still 1)
-          if (tapCountRef.current[photoKey] === 1) {
-            setSelectedPhotos(prev => {
-              const newSet = new Set(prev);
-              if (newSet.has(combinedId)) {
-                newSet.delete(combinedId);
-              } else {
-                newSet.add(combinedId);
-              }
-              return newSet;
-            });
-          }
-          
           // Clear tap count after delay
           tapCountRef.current[photoKey] = 0;
           lastTapRef.current[photoKey] = 0;
           delete originalSelectionStateRef.current[photoKey];
           delete toggleTimeoutRef.current[photoKey];
           pendingTogglesRef.current.delete(combinedId);
-        }, DOUBLE_TAP_DELAY); // Wait full delay to confirm it's a single tap
+        }, DOUBLE_TAP_DELAY);
         return;
       }
       
@@ -2694,19 +2911,27 @@ export default function GalleryScreen({ navigation, route }) {
         // Check if this is a double tap (second tap within 300ms)
         if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
           console.log('[GalleryScreen] Double tap detected for photo:', photo.id);
-          // Double tap detected - cancel any pending toggle and open preview
-          // Cancel the pending toggle from first tap
+          // Double tap detected - revert the toggle from first tap and open preview
+          // Cancel any pending toggle timeout
           if (toggleTimeoutRef.current[photoKey]) {
             clearTimeout(toggleTimeoutRef.current[photoKey]);
             delete toggleTimeoutRef.current[photoKey];
           }
           
+          // Revert the toggle that happened on first tap
           const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
-          console.log('[GalleryScreen] Original selection state:', wasOriginallySelected);
+          setSelectedPhotos(prev => {
+            const newSet = new Set(prev);
+            if (wasOriginallySelected) {
+              newSet.add(photo.id); // Restore to selected
+            } else {
+              newSet.delete(photo.id); // Restore to unselected
+            }
+            return newSet;
+          });
           
-          // Get the original state for navigation (don't change state, just use original)
+          // Get the original state for navigation
           const restoredSelected = new Set(currentSelectedPhotos);
-          // Make sure the photo is in the correct state for navigation
           if (wasOriginallySelected) {
             restoredSelected.add(photo.id);
           } else {
@@ -2719,7 +2944,7 @@ export default function GalleryScreen({ navigation, route }) {
           delete originalSelectionStateRef.current[photoKey];
           pendingTogglesRef.current.delete(photo.id);
           
-          // Navigate immediately (no state change needed, checkbox stays as is)
+          // Navigate immediately
           if (photoType === 'combined') {
             // Get all selected combined photo sets for swiping
             const selectedSets = getSelectedPhotoSets();
@@ -2751,36 +2976,34 @@ export default function GalleryScreen({ navigation, route }) {
           return;
         }
         
-        // First tap - store original state, don't toggle yet
+        // First tap - immediately toggle selection (no delay)
         const wasOriginallySelected = currentSelectedPhotos.has(photo.id);
         originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
+        
+        // Toggle immediately for instant visual feedback
+        setSelectedPhotos(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(photo.id)) {
+            newSet.delete(photo.id);
+          } else {
+            newSet.add(photo.id);
+          }
+          return newSet;
+        });
         
         // Record tap for double tap detection
         tapCountRef.current[photoKey] = 1;
         lastTapRef.current[photoKey] = now;
         
-        // Schedule toggle after delay (only if no second tap comes)
+        // Schedule cleanup after delay (only if no second tap comes)
         toggleTimeoutRef.current[photoKey] = setTimeout(() => {
-          // Only toggle if this wasn't a double tap (tapCount is still 1)
-          if (tapCountRef.current[photoKey] === 1) {
-            setSelectedPhotos(prev => {
-              const newSet = new Set(prev);
-              if (newSet.has(photo.id)) {
-                newSet.delete(photo.id);
-              } else {
-                newSet.add(photo.id);
-              }
-              return newSet;
-            });
-          }
-          
           // Clear tap count after delay
           tapCountRef.current[photoKey] = 0;
           lastTapRef.current[photoKey] = 0;
           delete originalSelectionStateRef.current[photoKey];
           delete toggleTimeoutRef.current[photoKey];
           pendingTogglesRef.current.delete(photo.id);
-        }, DOUBLE_TAP_DELAY); // Wait full delay to confirm it's a single tap
+        }, DOUBLE_TAP_DELAY);
         return;
       }
       
@@ -3129,9 +3352,9 @@ export default function GalleryScreen({ navigation, route }) {
         />
       </View>
 
-      <View style={styles.columnHeaders}>
+      <View style={[styles.columnHeaders, { justifyContent: 'space-between' }]}>
         <TouchableOpacity
-          style={[styles.filterButton, photoFilter === 'all' && styles.filterButtonActive]}
+          style={[styles.filterButton, { flex: 1, marginRight: 4 }, photoFilter === 'all' && styles.filterButtonActive]}
           onPress={() => setPhotoFilter('all')}
           activeOpacity={0.7}
         >
@@ -3140,7 +3363,7 @@ export default function GalleryScreen({ navigation, route }) {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterButton, photoFilter === 'before' && styles.filterButtonActive]}
+          style={[styles.filterButton, { flex: 1, marginHorizontal: 4 }, photoFilter === 'before' && styles.filterButtonActive]}
           onPress={() => setPhotoFilter('before')}
           activeOpacity={0.7}
         >
@@ -3149,7 +3372,7 @@ export default function GalleryScreen({ navigation, route }) {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterButton, photoFilter === 'after' && styles.filterButtonActive]}
+          style={[styles.filterButton, { flex: 1, marginHorizontal: 4 }, photoFilter === 'after' && styles.filterButtonActive]}
           onPress={() => setPhotoFilter('after')}
           activeOpacity={0.7}
         >
@@ -3158,7 +3381,7 @@ export default function GalleryScreen({ navigation, route }) {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterButton, photoFilter === 'combined' && styles.filterButtonActive, { marginRight: 0 }]}
+          style={[styles.filterButton, { flex: 1, marginLeft: 4 }, photoFilter === 'combined' && styles.filterButtonActive]}
           onPress={() => setPhotoFilter('combined')}
           activeOpacity={0.7}
         >
@@ -3742,21 +3965,33 @@ export default function GalleryScreen({ navigation, route }) {
             )}
 
             <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>{t('gallery.photoTypes')}</Text>
-            <View style={styles.optionsChipsRow}>
+            <View style={[styles.optionsChipsRow, { justifyContent: 'space-between', alignItems: 'stretch', flexWrap: 'nowrap', gap: 0 }]}>
               <TouchableOpacity
-                style={[styles.chip, selectedTypes.before && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  { flex: 1, marginRight: 4 },
+                  selectedTypes.before && styles.chipActive
+                ]}
                 onPress={() => setSelectedTypes(prev => ({ ...prev, before: !prev.before }))}
               >
                 <Text style={[styles.chipText, selectedTypes.before && styles.chipTextActive]}>{t('camera.before')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.chip, selectedTypes.after && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  { flex: 1, marginHorizontal: 4 },
+                  selectedTypes.after && styles.chipActive
+                ]}
                 onPress={() => setSelectedTypes(prev => ({ ...prev, after: !prev.after }))}
               >
                 <Text style={[styles.chipText, selectedTypes.after && styles.chipTextActive]}>{t('camera.after')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.chip, selectedTypes.combined && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  { flex: 1, marginLeft: 4, marginRight: 0 },
+                  selectedTypes.combined && styles.chipActive
+                ]}
                 onPress={() => setSelectedTypes(prev => ({ ...prev, combined: !prev.combined }))}
               >
                 <Text style={[styles.chipText, selectedTypes.combined && styles.chipTextActive]}>{t('camera.combined')}</Text>
@@ -4053,7 +4288,7 @@ export default function GalleryScreen({ navigation, route }) {
             <Text style={styles.optionsTitle}>{t('gallery.whatToShare')}</Text>
 
             <Text style={styles.optionsSectionLabel}>{t('gallery.photoTypes')}</Text>
-            <View style={[styles.optionsChipsRow, { gap: 8, justifyContent: 'center', alignItems: 'stretch' }]}>
+            <View style={[styles.optionsChipsRow, { justifyContent: 'space-between', alignItems: 'stretch', flexWrap: 'nowrap', gap: 0 }]}>
               <TouchableOpacity
                 style={[
                   {
@@ -4063,6 +4298,7 @@ export default function GalleryScreen({ navigation, route }) {
                     borderWidth: 2,
                     alignItems: 'center',
                     justifyContent: 'center',
+                    marginRight: 4,
                   },
                   selectedShareTypes.before
                     ? { backgroundColor: '#4CAF50', borderColor: '#4CAF50' }
@@ -4086,6 +4322,7 @@ export default function GalleryScreen({ navigation, route }) {
                     borderWidth: 2,
                     alignItems: 'center',
                     justifyContent: 'center',
+                    marginHorizontal: 4,
                   },
                   selectedShareTypes.after
                     ? { backgroundColor: '#2196F3', borderColor: '#2196F3' }
@@ -4109,6 +4346,7 @@ export default function GalleryScreen({ navigation, route }) {
                     borderWidth: 2,
                     alignItems: 'center',
                     justifyContent: 'center',
+                    marginLeft: 4,
                   },
                   selectedShareTypes.combined
                     ? { backgroundColor: '#FFC107', borderColor: '#FFC107' }
@@ -4473,9 +4711,6 @@ const styles = StyleSheet.create({
     numberOfLines: 1
   },
   filterButton: {
-    flex: 0,
-    minWidth: 70,
-    marginRight: 6,
     paddingVertical: 6,
     paddingHorizontal: 8,
     borderRadius: 6,
