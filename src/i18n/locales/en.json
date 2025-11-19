@@ -32,7 +32,8 @@
     "deselectAll": "Deselect All",
     "selected": "selected",
     "select": "Select",
-    "all": "All"
+    "all": "All",
+    "continue": "Continue"
   },
   "firstLoad": {
     "title": "Welcome to ProofPix",
@@ -399,6 +400,11 @@
     "cornerStyle": "Corner Style",
     "rounded": "Rounded",
     "straight": "Straight"
+  },
+  "labelLanguageSetup": {
+    "title": "Choose Label Language",
+    "subtitle": "Select the language for your photo labels (Before, After, Combined)",
+    "previewDescription": "Preview of labels in selected language"
   },
   "googleSignUp": {
     "title": "Connect Your Account",

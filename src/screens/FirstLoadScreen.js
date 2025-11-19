@@ -85,8 +85,8 @@ export default function FirstLoadScreen({ navigation }) {
   const handleSelectPlan = async (plan) => {
     await updateUserPlan(plan);
     if (plan === 'starter') {
-      // For Starter plan, go home without Google Sign-In
-      navigation.replace('Home');
+      // For Starter plan, go to Label Language Setup screen
+      navigation.replace('LabelLanguageSetup');
     } else {
       // For Pro, Business, Enterprise, go to the Google Sign-Up screen
       navigation.navigate('GoogleSignUp', { plan });

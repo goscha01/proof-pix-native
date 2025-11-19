@@ -29,6 +29,7 @@ import FirstLoadScreen from './src/screens/FirstLoadScreen';
 import InviteScreen from './src/screens/InviteScreen';
 import JoinTeamScreen from './src/screens/JoinTeamScreen';
 import GoogleSignUpScreen from './src/screens/GoogleSignUpScreen';
+import LabelLanguageSetupScreen from './src/screens/LabelLanguageSetupScreen';
 import AuthLoadingScreen from './src/screens/AuthLoadingScreen';
 import VisionCameraTest from './src/screens/VisionCameraTest';
 import GlobalBackgroundLabelPreparation from './src/components/GlobalBackgroundLabelPreparation';
@@ -133,6 +134,13 @@ function AppNavigator() {
       <Stack.Screen
         name="GoogleSignUp"
         component={GoogleSignUpScreen}
+        options={{
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen
+        name="LabelLanguageSetup"
+        component={LabelLanguageSetupScreen}
         options={{
           animation: 'slide_from_right'
         }}

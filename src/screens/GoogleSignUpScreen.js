@@ -27,7 +27,7 @@ export default function GoogleSignUpScreen({ navigation, route }) {
       }
       
       if (result.success) {
-        navigation.replace('Home');
+        navigation.replace('LabelLanguageSetup');
       } else {
         Alert.alert(t('googleSignUp.signInError'), result.error || t('googleSignUp.unexpectedError'));
       }
@@ -67,7 +67,7 @@ export default function GoogleSignUpScreen({ navigation, route }) {
         Alert.alert(
           t('settings.dropboxConnected'),
           t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
-          [{ text: t('common.ok'), onPress: () => navigation.replace('Home') }]
+          [{ text: t('common.ok'), onPress: () => navigation.replace('LabelLanguageSetup') }]
         );
       } else {
         Alert.alert(t('common.error'), t('settings.dropboxSignInError'));
@@ -84,7 +84,7 @@ export default function GoogleSignUpScreen({ navigation, route }) {
   };
 
   const handleSkip = () => {
-    navigation.replace('Home');
+    navigation.replace('LabelLanguageSetup');
   };
 
   const handleGoBack = () => {
