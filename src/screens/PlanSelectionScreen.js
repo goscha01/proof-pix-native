@@ -180,12 +180,20 @@ export default function PlanSelectionScreen({ navigation }) {
     setTrialNotification(null);
   };
 
-  // Handle trial upgrade (not needed for welcome, but keeping for consistency)
+  // Handle trial upgrade - show plan modal
   const handleTrialUpgrade = () => {
     setShowTrialModal(false);
     setTrialNotification(null);
-    // Navigate to Settings for upgrade
-    navigation.navigate('Settings');
+    // Navigate to Settings where plan modal can be shown
+    navigation.navigate('Settings', { showPlanModal: true });
+  };
+
+  // Handle refer a friend
+  const handleTrialRefer = () => {
+    setShowTrialModal(false);
+    setTrialNotification(null);
+    // Navigate to Invite screen
+    navigation.navigate('Invite');
   };
 
   // Dev-only: Reset trial for testing
@@ -318,6 +326,20 @@ export default function PlanSelectionScreen({ navigation }) {
         notification={trialNotification}
         onClose={handleTrialModalClose}
         onUpgrade={handleTrialUpgrade}
+        onRefer={handleTrialRefer}
+        onCTA={(notification) => {
+          handleTrialModalClose();
+          // Determine which section to scroll to based on notification key
+          let scrollParam = {};
+          if (notification?.key === 'day7_10') {
+            scrollParam = { scrollToWatermark: true };
+          } else if (notification?.key === 'day15') {
+            scrollParam = { scrollToCloudSync: true };
+          } else if (notification?.key === 'day22_24') {
+            scrollParam = { scrollToAccountData: true };
+          }
+          navigation.navigate('Settings', scrollParam);
+        }}
       />
     </SafeAreaView>
   );

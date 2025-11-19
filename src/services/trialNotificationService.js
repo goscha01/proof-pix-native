@@ -60,30 +60,44 @@ export const markNotificationShown = async (notificationKey) => {
  * @returns {Promise<Object|null>} Notification object to show, or null
  */
 export const getNotificationToShow = async (skipDay0 = false) => {
-  const trialActive = await isTrialActive();
-  if (!trialActive) {
-    // Check if trial just expired (day 30)
-    const shown = await getShownNotifications();
-    if (!shown.day30) {
-      const trialPlan = await getTrialPlan();
-      if (trialPlan) {
-        // Trial expired, show expiration message
+  const shown = await getShownNotifications();
+  
+  // Check Day 30 FIRST (before checking if trial is active, since expired trials are inactive)
+  if (!shown.day30) {
+    const { getTrialInfo } = await import('./trialService');
+    const trialInfo = await getTrialInfo();
+    
+    if (trialInfo && trialInfo.plan) {
+      // Check if trial has expired
+      const now = new Date().getTime();
+      const endDate = new Date(trialInfo.endDate).getTime();
+      const daysRemaining = Math.ceil((endDate - now) / (1000 * 60 * 60 * 24));
+      
+      if (daysRemaining <= 0 || !trialInfo.active) {
+        console.log('[TrialNotification] Day 30 notification triggered, daysRemaining:', daysRemaining, 'active:', trialInfo.active);
         await markNotificationShown('day30');
         return {
           key: 'day30',
           type: 'expiration',
-          title: 'Trial Ended',
-          message: 'Your free trial has ended. Upgrade now to keep full access to all features, or continue with the free tier.',
+          title: 'Your Trial Ended – Upgrade to Unlock Everything',
+          message: 'You\'re back! To continue using:',
+          featuresList: '• Bulk before & after photo creation\n• Custom watermark & cloud storage\n• Team management & photo cleanup',
+          referralIncentive: 'Refer a friend and get 1-3 months free',
+          cta: '👉 Upgrade Now',
           showUpgrade: true,
           urgent: true,
         };
       }
     }
+  }
+
+  // If trial is not active and we've already shown day30, return null
+  const trialActive = await isTrialActive();
+  if (!trialActive) {
     return null;
   }
 
   const daysRemaining = await getTrialDaysRemaining();
-  const shown = await getShownNotifications();
   const trialPlan = await getTrialPlan();
 
   // Day 0 (Welcome) - Show immediately when trial starts (only if not skipped)
@@ -122,25 +136,12 @@ export const getNotificationToShow = async (skipDay0 = false) => {
   // Day 7-10 (Engagement Nudge)
   if (daysRemaining >= 20 && daysRemaining <= 23 && !shown.day7_10) {
     await markNotificationShown('day7_10');
-    const messages = [
-      {
-        title: 'Pro Tip: Bulk Delete',
-        message: 'Did you know you can delete entire projects at once? Try the bulk delete feature to manage your photos efficiently.',
-      },
-      {
-        title: 'Brand Your Photos',
-        message: 'Custom watermarks help you brand your photos professionally. Set up your watermark in Settings to add your logo or text.',
-      },
-      {
-        title: 'Organize with Projects',
-        message: 'Create multiple projects to organize your before/after photos by location, client, or date. Keep everything organized!',
-      },
-    ];
-    const randomMessage = messages[Math.floor(Math.random() * messages.length)];
     return {
       key: 'day7_10',
       type: 'engagement',
-      ...randomMessage,
+      title: 'Customize Your Watermark',
+      message: 'Make your before & after photos stand out with your own watermark.',
+      cta: '👉 Go to Settings to update now.',
       showUpgrade: false,
       urgent: false,
     };
@@ -152,8 +153,9 @@ export const getNotificationToShow = async (skipDay0 = false) => {
     return {
       key: 'day15',
       type: 'checkin',
-      title: 'Halfway Through Your Trial!',
-      message: `You're halfway through your free trial. How's it going? Make sure to explore all the premium features like unlimited photos, cloud sync, and team collaboration before your trial ends.`,
+      title: 'Connect Cloud Storage',
+      message: 'Keep your photos safe and organized. Connect Google Drive or Dropbox in Settings.',
+      cta: '👉 Go to Settings to connect.',
       showUpgrade: false,
       urgent: false,
     };
@@ -165,9 +167,10 @@ export const getNotificationToShow = async (skipDay0 = false) => {
     return {
       key: 'day22_24',
       type: 'reminder',
-      title: 'Your Trial Ends in 1 Week!',
-      message: `Only ${daysRemaining} days left in your free trial. Upgrade now to keep full access to all premium features without interruption.`,
-      showUpgrade: true,
+      title: 'Free up space Easily',
+      message: 'Free up space on your device and in the app by deleting entire projects at once.',
+      cta: '👉 Go to Settings to delete projects and free up storage.',
+      showUpgrade: false,
       urgent: false,
     };
   }
@@ -178,8 +181,10 @@ export const getNotificationToShow = async (skipDay0 = false) => {
     return {
       key: 'day27_28',
       type: 'urgent',
-      title: 'Last Chance - Trial Ending Soon!',
-      message: `Only ${daysRemaining} days left! Upgrade now to continue uninterrupted access to all premium features.`,
+      title: 'Trial Ending Soon!',
+      message: `Only ${daysRemaining} days left to enjoy full features. Upgrade now to continue.`,
+      referralIncentive: '🎁 Invite friends and earn extra months:\n\n1 friend → +1 month\n2 friends → +2 months\n3+ friends → +3 months\n\nYour friend must set up the app to count.',
+      cta: '👉 Upgrade / Refer Now',
       showUpgrade: true,
       urgent: true,
     };

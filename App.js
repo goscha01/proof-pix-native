@@ -276,9 +276,25 @@ export default function App() {
   // Check if trial has expired
   const checkTrialExpiration = async () => {
     try {
-      const { isTrialActive } = await import('./src/services/trialService');
+      const { isTrialActive, getTrialInfo } = await import('./src/services/trialService');
+      const trialInfo = await getTrialInfo();
+      const wasActive = trialInfo?.active === true;
+      
       // This will automatically mark trial as inactive if expired
-      await isTrialActive();
+      const isActive = await isTrialActive();
+      
+      // If trial just expired (was active but now inactive), check for Day 30 notification
+      if (wasActive && !isActive && trialInfo && trialInfo.plan) {
+        // Trial just expired, check for Day 30 notification
+        console.log('[App] Trial expired, checking for Day 30 notification');
+        setTimeout(() => {
+          checkTrialNotifications(true);
+        }, 500);
+      } else if (!isActive && trialInfo && trialInfo.plan) {
+        // Trial is already expired, check if Day 30 notification should show
+        console.log('[App] Trial already expired, checking for Day 30 notification');
+        checkTrialNotifications(true);
+      }
     } catch (error) {
       console.error('[App] Error checking trial expiration:', error);
     }
@@ -313,7 +329,40 @@ export default function App() {
 
   const handleTrialUpgrade = () => {
     setShowTrialModal(false);
-    // Navigate to Settings screen where user can upgrade
+    setTrialNotification(null);
+    // Navigate to Settings screen for upgrade with plan modal
+    if (navigationRef.current) {
+      navigationRef.current.navigate('Settings', { showPlanModal: true });
+    }
+  };
+
+  const handleTrialRefer = () => {
+    setShowTrialModal(false);
+    setTrialNotification(null);
+    // Navigate to Invite screen
+    if (navigationRef.current) {
+      navigationRef.current.navigate('Invite');
+    }
+  };
+
+  const handleTrialCTA = (notification) => {
+    setShowTrialModal(false);
+    // Determine which section to scroll to based on notification key
+    let scrollParam = {};
+    if (notification?.key === 'day7_10') {
+      scrollParam = { scrollToWatermark: true };
+    } else if (notification?.key === 'day15') {
+      scrollParam = { scrollToCloudSync: true };
+    } else if (notification?.key === 'day22_24') {
+      scrollParam = { scrollToAccountData: true };
+    }
+    // Navigate to Settings screen for CTA actions
+    if (navigationRef.current) {
+      navigationRef.current.navigate('Settings', scrollParam);
+    }
+    setTrialNotification(null);
+    setShowTrialModal(false);
+    // Navigate to Settings screen for CTA actions
     if (navigationRef.current) {
       navigationRef.current.navigate('Settings');
     }
@@ -418,6 +467,8 @@ export default function App() {
           notification={trialNotification}
           onClose={handleTrialModalClose}
           onUpgrade={handleTrialUpgrade}
+          onRefer={handleTrialRefer}
+          onCTA={handleTrialCTA}
         />
       </SafeAreaProvider>
     </View>

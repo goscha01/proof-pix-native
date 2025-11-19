@@ -591,6 +591,10 @@ export default function SettingsScreen({ navigation, route }) {
   const watermarkLinkInputRef = useRef(null);
   const mainScrollViewRef = useRef(null);
   const cloudSyncSectionRef = useRef(null);
+  const watermarkSectionRef = useRef(null);
+  const accountDataSectionRef = useRef(null);
+  const watermarkSectionY = useRef(null);
+  const watermarkSectionAbsoluteY = useRef(null);
 
   const isTeamMember = userMode === 'team_member';
   const [canSwitchBack, setCanSwitchBack] = useState(false);
@@ -1152,78 +1156,102 @@ export default function SettingsScreen({ navigation, route }) {
     }
   }, [sectionLanguageModalVisible, sectionLanguage]);
 
-  // Handle navigation to Cloud and Sync section
-  useFocusEffect(
-    useCallback(() => {
-      const params = route?.params;
-      console.log('[SETTINGS] useFocusEffect triggered, params:', params);
-      console.log('[SETTINGS] scrollToCloudSync param:', params?.scrollToCloudSync);
-      console.log('[SETTINGS] cloudSyncSectionRef.current:', !!cloudSyncSectionRef.current);
-      console.log('[SETTINGS] mainScrollViewRef.current:', !!mainScrollViewRef.current);
-      
-      // Only process if scrollToCloudSync is explicitly true (not undefined)
-      if (params?.scrollToCloudSync === true && cloudSyncSectionRef.current && mainScrollViewRef.current) {
-        console.log('[SETTINGS] Scrolling to Cloud and Sync section');
-        // Wait longer for the layout to complete after navigation
-        setTimeout(() => {
-          cloudSyncSectionRef.current.measureLayout(
-            mainScrollViewRef.current,
-            (x, y) => {
-              console.log('[SETTINGS] Cloud Sync section position:', { x, y });
-              if (y > 0) {
-                setTimeout(() => {
-                  console.log('[SETTINGS] Scrolling to y:', y - 20);
-                  mainScrollViewRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true });
-                  // Clear the param after scrolling with a delay
-                  setTimeout(() => {
-                    navigation.setParams({ scrollToCloudSync: undefined });
-                    console.log('[SETTINGS] Param cleared');
-                  }, 500);
-                }, 150);
+  // Handle navigation to specific sections - using useEffect to watch route params
+  useEffect(() => {
+    const params = route?.params;
+    console.log('[SETTINGS] Route params changed:', params);
+    
+    const scrollToSection = (sectionRef, paramKey) => {
+      if (params?.[paramKey] === true) {
+        console.log(`[SETTINGS] Attempting to scroll to ${paramKey} section`);
+        console.log(`[SETTINGS] sectionRef.current:`, !!sectionRef.current);
+        console.log(`[SETTINGS] mainScrollViewRef.current:`, !!mainScrollViewRef.current);
+        
+        // For watermark, use stored absolute Y position if available
+        if (paramKey === 'scrollToWatermark' && watermarkSectionAbsoluteY.current !== null) {
+          console.log(`[SETTINGS] Using stored absolute Y position for watermark:`, watermarkSectionAbsoluteY.current);
+          setTimeout(() => {
+            mainScrollViewRef.current?.scrollTo({ y: Math.max(0, watermarkSectionAbsoluteY.current - 20), animated: true });
+            setTimeout(() => {
+              navigation.setParams({ [paramKey]: undefined });
+            }, 500);
+          }, 400);
+          return;
+        }
+        
+        // Retry function with increasing delays
+        const attemptScroll = (attempt = 0) => {
+          const maxAttempts = 5;
+          const delay = 400 + (attempt * 200); // 400ms, 600ms, 800ms, 1000ms, 1200ms
+          
+          setTimeout(() => {
+            if (!sectionRef.current || !mainScrollViewRef.current) {
+              console.log(`[SETTINGS] Refs not ready for ${paramKey}, attempt ${attempt + 1}/${maxAttempts}`);
+              if (attempt < maxAttempts - 1) {
+                attemptScroll(attempt + 1);
               } else {
-                console.log('[SETTINGS] Invalid y position, retrying...');
-                // Retry after a longer delay if position is invalid
-                setTimeout(() => {
-                  cloudSyncSectionRef.current.measureLayout(
-                    mainScrollViewRef.current,
-                    (x, y) => {
-                      if (y > 0) {
-                        console.log('[SETTINGS] Retry - Cloud Sync section position:', { x, y });
-                        mainScrollViewRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true });
-                        navigation.setParams({ scrollToCloudSync: undefined });
-                      }
-                    },
-                    (error) => {
-                      console.log('[SETTINGS] Retry measureLayout error:', error);
-                    }
-                  );
-                }, 500);
-              }
-            },
-            (error) => {
-              console.log('[SETTINGS] measureLayout error:', error);
-              // Retry on error
-              setTimeout(() => {
-                if (cloudSyncSectionRef.current && mainScrollViewRef.current) {
-                  cloudSyncSectionRef.current.measureLayout(
-                    mainScrollViewRef.current,
-                    (x, y) => {
-                      if (y > 0) {
-                        console.log('[SETTINGS] Retry after error - position:', { x, y });
-                        mainScrollViewRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true });
-                        navigation.setParams({ scrollToCloudSync: undefined });
-                      }
-                    },
-                    () => {}
-                  );
+                console.log(`[SETTINGS] Failed to scroll to ${paramKey} after ${maxAttempts} attempts`);
+                // For watermark, try using stored absolute Y as fallback
+                if (paramKey === 'scrollToWatermark' && watermarkSectionAbsoluteY.current !== null) {
+                  console.log(`[SETTINGS] Fallback: Using stored absolute Y position for watermark:`, watermarkSectionAbsoluteY.current);
+                  mainScrollViewRef.current?.scrollTo({ y: Math.max(0, watermarkSectionAbsoluteY.current - 20), animated: true });
+                  navigation.setParams({ [paramKey]: undefined });
                 }
-              }, 500);
+              }
+              return;
             }
-          );
-        }, 400);
+            
+            sectionRef.current.measureLayout(
+              mainScrollViewRef.current,
+              (x, y) => {
+                console.log(`[SETTINGS] ${paramKey} section position:`, { x, y, attempt: attempt + 1 });
+                if (y >= 0) {
+                  setTimeout(() => {
+                    console.log(`[SETTINGS] Scrolling to y:`, y - 20);
+                    mainScrollViewRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true });
+                    setTimeout(() => {
+                      navigation.setParams({ [paramKey]: undefined });
+                      console.log(`[SETTINGS] ${paramKey} param cleared`);
+                    }, 500);
+                  }, 150);
+                } else {
+                  console.log(`[SETTINGS] Invalid y position for ${paramKey}, retrying...`);
+                  if (attempt < maxAttempts - 1) {
+                    attemptScroll(attempt + 1);
+                  }
+                }
+              },
+              (error) => {
+                console.log(`[SETTINGS] measureLayout error for ${paramKey} (attempt ${attempt + 1}):`, error);
+                if (attempt < maxAttempts - 1) {
+                  attemptScroll(attempt + 1);
+                } else if (paramKey === 'scrollToWatermark' && watermarkSectionAbsoluteY.current !== null) {
+                  // Fallback for watermark
+                  console.log(`[SETTINGS] Fallback: Using stored absolute Y position for watermark:`, watermarkSectionAbsoluteY.current);
+                  mainScrollViewRef.current?.scrollTo({ y: Math.max(0, watermarkSectionAbsoluteY.current - 20), animated: true });
+                  navigation.setParams({ [paramKey]: undefined });
+                }
+              }
+            );
+          }, delay);
+        };
+        
+        attemptScroll();
       }
-    }, [route, navigation])
-  );
+    };
+
+    // Check for each scroll target
+    scrollToSection(cloudSyncSectionRef, 'scrollToCloudSync');
+    scrollToSection(watermarkSectionRef, 'scrollToWatermark');
+    scrollToSection(accountDataSectionRef, 'scrollToAccountData');
+
+    // Check if plan modal should be shown
+    if (params?.showPlanModal === true) {
+      setShowPlanModal(true);
+      // Clear the param
+      navigation.setParams({ showPlanModal: undefined });
+    }
+  }, [route?.params, navigation]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -1388,7 +1416,37 @@ export default function SettingsScreen({ navigation, route }) {
                 </View>
               </View>
 
-              <View style={styles.settingRow}>
+              <View 
+                ref={watermarkSectionRef}
+                style={styles.settingRow}
+                onLayout={(event) => {
+                  const { y } = event.nativeEvent.layout;
+                  watermarkSectionY.current = y;
+                  // Also measure absolute position
+                  if (watermarkSectionRef.current && mainScrollViewRef.current) {
+                    watermarkSectionRef.current.measureLayout(
+                      mainScrollViewRef.current,
+                      (x, absoluteY) => {
+                        watermarkSectionAbsoluteY.current = absoluteY;
+                        console.log('[SETTINGS] Watermark section absolute position:', absoluteY);
+                        // If scroll param is set, scroll immediately
+                        const params = route?.params;
+                        if (params?.scrollToWatermark === true) {
+                          setTimeout(() => {
+                            console.log('[SETTINGS] Auto-scrolling to watermark from onLayout, y:', absoluteY);
+                            mainScrollViewRef.current?.scrollTo({ y: Math.max(0, absoluteY - 20), animated: true });
+                            setTimeout(() => {
+                              navigation.setParams({ scrollToWatermark: undefined });
+                            }, 500);
+                          }, 300);
+                        }
+                      },
+                      () => {}
+                    );
+                  }
+                  console.log('[SETTINGS] Watermark section layout:', y);
+                }}
+              >
                 <View style={styles.settingInfo}>
                   <Text style={styles.settingLabel}>{t('settings.customizeWatermark')}</Text>
                   <Text style={styles.settingDescription}>
@@ -2526,7 +2584,10 @@ export default function SettingsScreen({ navigation, route }) {
         </View>
 
         {/* Account & Data */}
-        <View style={styles.section}>
+        <View 
+          ref={accountDataSectionRef}
+          style={styles.section}
+        >
           <Text style={styles.sectionTitle}>{t('settings.accountData')}</Text>
 
           <View style={styles.inputGroup}>
@@ -3085,13 +3146,13 @@ export default function SettingsScreen({ navigation, route }) {
                 <Text style={styles.testButtonText}>Day 30 (Expired)</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.testButton, styles.clearButton]}
+                style={[styles.testButton, { backgroundColor: '#FF0000' }]}
                 onPress={async () => {
-                  await TrialTestUtils.clearTrial();
-                  Alert.alert('Cleared', 'Trial cleared. No trial active.');
+                  await TrialTestUtils.testDay30();
+                  Alert.alert('Test Set', 'Trial set to expired. Restart app to see Day 30 expiration message with discount and referral.');
                 }}
               >
-                <Text style={styles.testButtonText}>Clear Trial</Text>
+                <Text style={[styles.testButtonText, { color: '#FFFFFF' }]}>Test Day 30</Text>
               </TouchableOpacity>
             </View>
           </View>
