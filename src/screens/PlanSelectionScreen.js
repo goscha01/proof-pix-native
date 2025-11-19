@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,19 +12,29 @@ import { useTranslation } from 'react-i18next';
 import { useSettings } from '../context/SettingsContext';
 import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
+import EnterpriseContactModal from '../components/EnterpriseContactModal';
 
 export default function PlanSelectionScreen({ navigation }) {
   const { t } = useTranslation();
   const { updateUserPlan } = useSettings();
   const insets = useSafeAreaInsets();
 
+  // Enterprise modal state
+  const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
+
   const handleSelectPlan = async (plan) => {
+    if (plan === 'enterprise') {
+      // Show enterprise contact form modal
+      setShowEnterpriseModal(true);
+      return;
+    }
+
     await updateUserPlan(plan);
     if (plan === 'starter') {
       // For Starter plan, go to Label Language Setup screen
       navigation.replace('LabelLanguageSetup');
     } else {
-      // For Pro, Business, Enterprise, go to the Google Sign-Up screen
+      // For Pro, Business, go to the Google Sign-Up screen
       navigation.navigate('GoogleSignUp', { plan });
     }
   };
@@ -99,6 +109,12 @@ export default function PlanSelectionScreen({ navigation }) {
           </View>
         </View>
       </ScrollView>
+
+      {/* Enterprise Contact Form Modal */}
+      <EnterpriseContactModal
+        visible={showEnterpriseModal}
+        onClose={() => setShowEnterpriseModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -179,4 +195,3 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
 });
-

@@ -9,6 +9,7 @@
     "web": "expo start --web"
   },
   "dependencies": {
+    "@emailjs/react-native": "^5.1.0",
     "@expo-google-fonts/lato": "^0.2.2",
     "@expo-google-fonts/montserrat": "^0.4.2",
     "@expo-google-fonts/oswald": "^0.2.2",

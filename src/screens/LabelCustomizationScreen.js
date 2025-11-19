@@ -18,6 +18,7 @@ import { useSettings } from '../context/SettingsContext';
 import { COLORS, getLabelPositions } from '../constants/rooms';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
+import EnterpriseContactModal from '../components/EnterpriseContactModal';
 // HSL conversion utilities
 const hslToHex = (h, s, l) => {
   s /= 100;
@@ -139,6 +140,7 @@ export default function LabelCustomizationScreen({ navigation }) {
   const [hexModalError, setHexModalError] = useState(null);
   const [fontModalVisible, setFontModalVisible] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
   const [sliderResetKey, setSliderResetKey] = useState(0);
   const [colorPickerKey, setColorPickerKey] = useState(0);
 
@@ -997,11 +999,9 @@ export default function LabelCustomizationScreen({ navigation }) {
               <View style={styles.planContainer}>
                 <TouchableOpacity
                   style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
-                  onPress={async () => {
-                    await updateUserPlan('enterprise');
+                  onPress={() => {
                     setShowPlanModal(false);
-                    // Reset color picker key to ensure proper remounting
-                    setColorPickerKey((prev) => prev + 1);
+                    setShowEnterpriseModal(true);
                   }}
                 >
                   <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
@@ -1012,6 +1012,12 @@ export default function LabelCustomizationScreen({ navigation }) {
           </View>
         </View>
       </RNModal>
+
+      {/* Enterprise Contact Form Modal */}
+      <EnterpriseContactModal
+        visible={showEnterpriseModal}
+        onClose={() => setShowEnterpriseModal(false)}
+      />
     </SafeAreaView>
   );
 }
@@ -1319,6 +1325,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: 'center',
+    justifyContent: 'center',
   },
   cancelButton: {
     backgroundColor: '#F5F5F5',
@@ -1327,6 +1334,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: COLORS.TEXT,
+    textAlign: 'center',
   },
   applyButton: {
     backgroundColor: COLORS.PRIMARY,
@@ -1335,6 +1343,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#000000',
+    textAlign: 'center',
   },
   hexModalContainer: {
     width: '80%',

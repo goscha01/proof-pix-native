@@ -57,6 +57,24 @@
     "enterprise": "企业版",
     "enterpriseDesc": "适合成长型组织。无限成员数，支持多地点。"
   },
+  "enterprise": {
+    "title": "企业版计划申请",
+    "subtitle": "我们将在24小时内通过电子邮件或电话与您联系。",
+    "namePlaceholder": "您的姓名",
+    "emailPlaceholder": "电子邮件地址",
+    "phonePlaceholder": "电话号码（可选）",
+    "descriptionPlaceholder": "请告诉我们您的需求...",
+    "submit": "发送申请",
+    "submitting": "发送中...",
+    "error": "错误",
+    "nameRequired": "请输入您的姓名",
+    "emailRequired": "请输入您的电子邮件地址",
+    "invalidEmail": "请输入有效的电子邮件地址",
+    "emailAppError": "无法打开邮件应用。请直接发送邮件至 info@geos-ai.com",
+    "submitError": "发送申请失败。请重试。",
+    "successTitle": "申请已发送",
+    "successMessage": "感谢您的关注！我们将在24小时内与您联系。"
+  },
   "home": {
     "title": "主页",
     "manageProjects": "管理项目",

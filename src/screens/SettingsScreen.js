@@ -38,6 +38,7 @@ import ColorPicker from 'react-native-wheel-color-picker';
 import { useTranslation } from 'react-i18next';
 import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
 import { FEATURES } from '../constants/featurePermissions';
+import EnterpriseContactModal from '../components/EnterpriseContactModal';
 
 const getFontOptions = (t) => [
   {
@@ -553,6 +554,7 @@ export default function SettingsScreen({ navigation, route }) {
   const [adminInfo, setAdminInfo] = useState(null);
   const [loadingAdminInfo, setLoadingAdminInfo] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
   const [editingTeamName, setEditingTeamName] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
@@ -1764,10 +1766,9 @@ export default function SettingsScreen({ navigation, route }) {
                   <View style={styles.planContainer}>
                     <TouchableOpacity
                       style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
-                      onPress={async () => {
-                        await updateUserPlan('enterprise');
+                      onPress={() => {
                         setShowPlanSelection(false);
-                        navigation.navigate('GoogleSignUp', { plan: 'enterprise' });
+                        setShowEnterpriseModal(true);
                       }}
                     >
                       <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('settings.plans.enterprise')}</Text>
@@ -2729,9 +2730,9 @@ export default function SettingsScreen({ navigation, route }) {
                 <View style={styles.planContainer}>
                   <TouchableOpacity
                     style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
-                    onPress={async () => {
-                      await updateUserPlan('enterprise');
+                    onPress={() => {
                       setShowPlanModal(false);
+                      setShowEnterpriseModal(true);
                     }}
                   >
                     <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
@@ -2908,6 +2909,12 @@ export default function SettingsScreen({ navigation, route }) {
             </View>
           </View>
         </RNModal>
+
+        {/* Enterprise Contact Form Modal */}
+        <EnterpriseContactModal
+          visible={showEnterpriseModal}
+          onClose={() => setShowEnterpriseModal(false)}
+        />
       </SafeAreaView>
     );
   }

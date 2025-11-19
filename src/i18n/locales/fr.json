@@ -57,6 +57,24 @@
     "enterprise": "Grande Entreprise",
     "enterpriseDesc": "Pour les organisations en croissance. Membres illimités, support multi-sites."
   },
+  "enterprise": {
+    "title": "Demande Plan Enterprise",
+    "subtitle": "Nous vous contacterons dans les 24 heures par e-mail ou téléphone.",
+    "namePlaceholder": "Votre Nom",
+    "emailPlaceholder": "Adresse E-mail",
+    "phonePlaceholder": "Numéro de Téléphone (optionnel)",
+    "descriptionPlaceholder": "Parlez-nous de vos besoins...",
+    "submit": "Envoyer la Demande",
+    "submitting": "Envoi en cours...",
+    "error": "Erreur",
+    "nameRequired": "Veuillez entrer votre nom",
+    "emailRequired": "Veuillez entrer votre adresse e-mail",
+    "invalidEmail": "Veuillez entrer une adresse e-mail valide",
+    "emailAppError": "Impossible d'ouvrir l'application e-mail. Veuillez nous contacter directement à info@geos-ai.com",
+    "submitError": "Échec de l'envoi de la demande. Veuillez réessayer.",
+    "successTitle": "Demande Envoyée",
+    "successMessage": "Merci pour votre intérêt ! Nous vous contacterons dans les 24 heures."
+  },
   "home": {
     "title": "Accueil",
     "manageProjects": "Gérer les Projets",

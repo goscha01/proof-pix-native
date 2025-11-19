@@ -58,6 +58,24 @@
     "enterprise": "Enterprise",
     "enterpriseDesc": "For growing organizations. Unlimited members, multi-location support."
   },
+  "enterprise": {
+    "title": "Enterprise Plan Request",
+    "subtitle": "We will connect with you within 24 hours via email or phone.",
+    "namePlaceholder": "Your Name",
+    "emailPlaceholder": "Email Address",
+    "phonePlaceholder": "Phone Number (optional)",
+    "descriptionPlaceholder": "Tell us about your needs...",
+    "submit": "Send Request",
+    "submitting": "Sending...",
+    "error": "Error",
+    "nameRequired": "Please enter your name",
+    "emailRequired": "Please enter your email address",
+    "invalidEmail": "Please enter a valid email address",
+    "emailAppError": "Unable to open email app. Please email us directly at info@geos-ai.com",
+    "submitError": "Failed to send request. Please try again.",
+    "successTitle": "Request Sent",
+    "successMessage": "Thank you for your interest! We will contact you within 24 hours."
+  },
   "home": {
     "title": "Home",
     "manageProjects": "Manage Projects",

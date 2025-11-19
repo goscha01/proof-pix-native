@@ -27,6 +27,7 @@ import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import RoomEditor from '../components/RoomEditor';
 import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
+import EnterpriseContactModal from '../components/EnterpriseContactModal';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 60) / 2; // 2 columns with padding
@@ -63,6 +64,7 @@ export default function HomeScreen({ navigation }) {
   const [pendingCameraAfterCreate, setPendingCameraAfterCreate] = useState(false);
   const [combinedBaseUris, setCombinedBaseUris] = useState({}); // Cache for combined base image URIs
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
 
   // Get rooms from settings (custom or default)
   const { customRooms, saveCustomRooms, resetCustomRooms } = useSettings();
@@ -1583,9 +1585,9 @@ export default function HomeScreen({ navigation }) {
               <View style={styles.planContainer}>
                 <TouchableOpacity
                   style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
-                  onPress={async () => {
-                    await updateUserPlan('enterprise');
+                  onPress={() => {
                     setShowPlanModal(false);
+                    setShowEnterpriseModal(true);
                   }}
                 >
                   <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
@@ -1596,6 +1598,12 @@ export default function HomeScreen({ navigation }) {
           </View>
         </View>
       </Modal>
+
+      {/* Enterprise Contact Form Modal */}
+      <EnterpriseContactModal
+        visible={showEnterpriseModal}
+        onClose={() => setShowEnterpriseModal(false)}
+      />
     </SafeAreaView>
   );
 }
