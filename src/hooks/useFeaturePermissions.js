@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { useSettings } from '../context/SettingsContext';
 import { 
   hasFeature, 
@@ -8,9 +9,11 @@ import {
   getTierRole,
   FEATURES 
 } from '../constants/featurePermissions';
+import { getEffectivePlan } from '../services/trialService';
 
 /**
  * Hook to check feature permissions and limits based on user's tier
+ * Automatically uses trial plan if trial is active
  * 
  * Usage:
  * const { canUse, getLimit, isUnlimited, exceedsLimit } = useFeaturePermissions();
@@ -25,6 +28,21 @@ import {
  */
 export const useFeaturePermissions = () => {
   const { userPlan } = useSettings();
+  const [effectivePlan, setEffectivePlan] = useState(userPlan);
+
+  // Update effective plan when userPlan changes or on mount
+  useEffect(() => {
+    const updateEffectivePlan = async () => {
+      // Check trial expiration first (this will mark it inactive if expired)
+      const { isTrialActive } = await import('../services/trialService');
+      await isTrialActive();
+      
+      // Then get the effective plan
+      const effective = await getEffectivePlan(userPlan);
+      setEffectivePlan(effective);
+    };
+    updateEffectivePlan();
+  }, [userPlan]);
 
   /**
    * Check if current tier has access to a feature
@@ -32,7 +50,7 @@ export const useFeaturePermissions = () => {
    * @returns {boolean}
    */
   const canUse = (feature) => {
-    return hasFeature(feature, userPlan);
+    return hasFeature(feature, effectivePlan);
   };
 
   /**
@@ -41,7 +59,7 @@ export const useFeaturePermissions = () => {
    * @returns {number} - Limit value (-1 means unlimited)
    */
   const getResourceLimit = (limitType) => {
-    return getLimit(limitType, userPlan);
+    return getLimit(limitType, effectivePlan);
   };
 
   /**
@@ -50,7 +68,7 @@ export const useFeaturePermissions = () => {
    * @returns {boolean}
    */
   const isResourceUnlimited = (limitType) => {
-    return isUnlimited(limitType, userPlan);
+    return isUnlimited(limitType, effectivePlan);
   };
 
   /**
@@ -60,7 +78,7 @@ export const useFeaturePermissions = () => {
    * @returns {boolean}
    */
   const resourceExceedsLimit = (limitType, currentUsage) => {
-    return exceedsLimit(limitType, userPlan, currentUsage);
+    return exceedsLimit(limitType, effectivePlan, currentUsage);
   };
 
   /**
@@ -68,7 +86,7 @@ export const useFeaturePermissions = () => {
    * @returns {Array<string>}
    */
   const getAvailableFeatures = () => {
-    return getTierFeatures(userPlan);
+    return getTierFeatures(effectivePlan);
   };
 
   /**
@@ -76,12 +94,14 @@ export const useFeaturePermissions = () => {
    * @returns {Object|null}
    */
   const getCurrentTierRole = () => {
-    return getTierRole(userPlan);
+    return getTierRole(effectivePlan);
   };
 
   return {
-    // Current tier
+    // Current tier (actual plan)
     userPlan,
+    // Effective tier (trial plan if trial is active)
+    effectivePlan,
     
     // Feature checks
     canUse,

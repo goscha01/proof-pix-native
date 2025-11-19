@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -13,6 +13,7 @@ import { useSettings } from '../context/SettingsContext';
 import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
 import EnterpriseContactModal from '../components/EnterpriseContactModal';
+import { canStartTrial, startTrial } from '../services/trialService';
 
 export default function PlanSelectionScreen({ navigation }) {
   const { t } = useTranslation();
@@ -21,6 +22,16 @@ export default function PlanSelectionScreen({ navigation }) {
 
   // Enterprise modal state
   const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
+  const [trialAvailable, setTrialAvailable] = useState(false);
+
+  useEffect(() => {
+    // Check if trial is available for new users
+    const checkTrialAvailability = async () => {
+      const available = await canStartTrial();
+      setTrialAvailable(available);
+    };
+    checkTrialAvailability();
+  }, []);
 
   const handleSelectPlan = async (plan) => {
     if (plan === 'enterprise') {
@@ -29,7 +40,22 @@ export default function PlanSelectionScreen({ navigation }) {
       return;
     }
 
-    await updateUserPlan(plan);
+    // Check if user can start a trial for this plan
+    if (trialAvailable) {
+      try {
+        // Start 30-day free trial for the selected plan
+        await startTrial(plan);
+        await updateUserPlan(plan);
+      } catch (error) {
+        console.error('[PlanSelection] Error starting trial:', error);
+        // Fallback to regular plan selection
+        await updateUserPlan(plan);
+      }
+    } else {
+      // Regular plan selection (trial already used or not available)
+      await updateUserPlan(plan);
+    }
+
     if (plan === 'starter') {
       // For Starter plan, go to Label Language Setup screen
       navigation.replace('LabelLanguageSetup');
@@ -59,6 +85,14 @@ export default function PlanSelectionScreen({ navigation }) {
       >
         <View style={styles.formContainer}>
           <Text style={styles.welcomeText}>{t('firstLoad.choosePlan')}</Text>
+          
+          {trialAvailable && (
+            <View style={styles.trialBanner}>
+              <Text style={styles.trialBannerText}>
+                🎉 {t('firstLoad.freeTrialAvailable', { defaultValue: '30-Day Free Trial Available!' })}
+              </Text>
+            </View>
+          )}
 
           <View style={styles.planContainer}>
             <TouchableOpacity
@@ -67,6 +101,9 @@ export default function PlanSelectionScreen({ navigation }) {
             >
               <Text style={[styles.selectionButtonText, styles.planButtonText]}>
                 {t('firstLoad.starter')}
+                {trialAvailable && (
+                  <Text style={styles.trialBadge}> {t('firstLoad.freeTrial', { defaultValue: '(Free Trial)' })}</Text>
+                )}
               </Text>
             </TouchableOpacity>
             <Text style={styles.planSubtext}>{t('firstLoad.starterDesc')}</Text>
@@ -79,6 +116,9 @@ export default function PlanSelectionScreen({ navigation }) {
             >
               <Text style={[styles.selectionButtonText, styles.planButtonText]}>
                 {t('firstLoad.pro')}
+                {trialAvailable && (
+                  <Text style={styles.trialBadge}> {t('firstLoad.freeTrial', { defaultValue: '(Free Trial)' })}</Text>
+                )}
               </Text>
             </TouchableOpacity>
             <Text style={styles.planSubtext}>{t('firstLoad.proDesc')}</Text>
@@ -91,6 +131,9 @@ export default function PlanSelectionScreen({ navigation }) {
             >
               <Text style={[styles.selectionButtonText, styles.planButtonText]}>
                 {t('firstLoad.business')}
+                {trialAvailable && (
+                  <Text style={styles.trialBadge}> {t('firstLoad.freeTrial', { defaultValue: '(Free Trial)' })}</Text>
+                )}
               </Text>
             </TouchableOpacity>
             <Text style={styles.planSubtext}>{t('firstLoad.businessDesc')}</Text>
@@ -193,5 +236,25 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 8,
     paddingHorizontal: 10,
+  },
+  trialBanner: {
+    backgroundColor: '#4CAF50',
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    marginBottom: 20,
+    width: '100%',
+  },
+  trialBannerText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    fontFamily: FONTS.QUICKSAND_BOLD,
+  },
+  trialBadge: {
+    fontSize: 14,
+    color: '#4CAF50',
+    fontWeight: '600',
   },
 });

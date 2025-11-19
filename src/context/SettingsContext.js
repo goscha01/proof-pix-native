@@ -110,7 +110,20 @@ export const SettingsProvider = ({ children }) => {
   // Load settings on mount
   useEffect(() => {
     loadSettings();
+    // Check trial expiration on app startup
+    checkTrialExpiration();
   }, []);
+
+  // Check if trial has expired and mark as inactive
+  const checkTrialExpiration = async () => {
+    try {
+      const { isTrialActive } = await import('../services/trialService');
+      // This will automatically mark trial as inactive if expired
+      await isTrialActive();
+    } catch (error) {
+      console.error('[SettingsContext] Error checking trial expiration:', error);
+    }
+  };
 
   const loadSettings = async () => {
     try {

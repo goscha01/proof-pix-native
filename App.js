@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { View, StyleSheet, Text, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, ActivityIndicator, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -221,7 +221,32 @@ export default function App() {
     };
 
     initializeFirebase();
+
+    // Check trial expiration on app startup
+    checkTrialExpiration();
+
+    // Check trial expiration when app comes to foreground
+    const subscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        checkTrialExpiration();
+      }
+    });
+
+    return () => {
+      subscription?.remove();
+    };
   }, []);
+
+  // Check if trial has expired
+  const checkTrialExpiration = async () => {
+    try {
+      const { isTrialActive } = await import('./src/services/trialService');
+      // This will automatically mark trial as inactive if expired
+      await isTrialActive();
+    } catch (error) {
+      console.error('[App] Error checking trial expiration:', error);
+    }
+  };
 
   if (!fontsLoaded) {
     return (

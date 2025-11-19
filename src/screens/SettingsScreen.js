@@ -39,6 +39,7 @@ import { useTranslation } from 'react-i18next';
 import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
 import { FEATURES } from '../constants/featurePermissions';
 import EnterpriseContactModal from '../components/EnterpriseContactModal';
+import { isTrialActive, getTrialDaysRemaining, getTrialPlan } from '../services/trialService';
 
 const getFontOptions = (t) => [
   {
@@ -292,6 +293,9 @@ export default function SettingsScreen({ navigation, route }) {
   const LABEL_CORNER_OPTIONS = useMemo(() => getLabelCornerOptions(t), [t]);
 
   const [showPlanSelection, setShowPlanSelection] = useState(false);
+  const [trialActive, setTrialActive] = useState(false);
+  const [trialDaysRemaining, setTrialDaysRemaining] = useState(0);
+  const [trialPlan, setTrialPlan] = useState(null);
   const [colorModalVisible, setColorModalVisible] = useState(false);
   const [colorModalType, setColorModalType] = useState(null);
   const [draftColor, setDraftColor] = useState(labelBackgroundColor);
@@ -443,6 +447,19 @@ export default function SettingsScreen({ navigation, route }) {
       : labelBackgroundColor;
     return normalizeHex(baseColor) || '#FFFFFF';
   }, [customWatermarkEnabled, watermarkColor, labelBackgroundColor]);
+
+  // Load trial information
+  useEffect(() => {
+    const loadTrialInfo = async () => {
+      const active = await isTrialActive();
+      const daysRemaining = await getTrialDaysRemaining();
+      const plan = await getTrialPlan();
+      setTrialActive(active);
+      setTrialDaysRemaining(daysRemaining);
+      setTrialPlan(plan);
+    };
+    loadTrialInfo();
+  }, []);
 
   useEffect(() => {
     if (typeof watermarkOpacity === 'number') {
@@ -1228,12 +1245,27 @@ export default function SettingsScreen({ navigation, route }) {
             style={styles.currentPlanBox}
             onPress={() => setShowPlanModal(true)}
           >
-            <Text style={styles.currentPlanLabel}>{t('settings.currentPlan')}</Text>
-            <View style={styles.currentPlanValueContainer}>
-              <Text style={styles.currentPlanValue}>
-                {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
-              </Text>
-              <Text style={styles.changePlanText}>{t('settings.change')}</Text>
+            <View style={styles.currentPlanInfo}>
+              <Text style={styles.currentPlanLabel}>{t('settings.currentPlan')}</Text>
+              <View style={styles.currentPlanValueContainer}>
+                <Text style={styles.currentPlanValue}>
+                  {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
+                  {trialActive && trialPlan && (
+                    <Text style={styles.trialBadge}>
+                      {' '}({t('settings.trial', { defaultValue: 'Trial' })})
+                    </Text>
+                  )}
+                </Text>
+                <Text style={styles.changePlanText}>{t('settings.change')}</Text>
+              </View>
+              {trialActive && trialDaysRemaining > 0 && (
+                <Text style={styles.trialDaysText}>
+                  {t('settings.trialDaysRemaining', { 
+                    days: trialDaysRemaining,
+                    defaultValue: `${trialDaysRemaining} days remaining` 
+                  })}
+                </Text>
+              )}
             </View>
           </TouchableOpacity>
         )}
@@ -3396,24 +3428,37 @@ const sliderStyles = StyleSheet.create({
       borderRadius: 8,
       padding: 12,
       marginBottom: 16,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center'
+    },
+    currentPlanInfo: {
+      width: '100%',
     },
     currentPlanLabel: {
       fontSize: 14,
       color: COLORS.GRAY,
-      fontWeight: '600'
+      fontWeight: '600',
+      marginBottom: 4,
     },
     currentPlanValueContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8
+      gap: 8,
+      marginBottom: 4,
     },
     currentPlanValue: {
       fontSize: 16,
       color: COLORS.TEXT,
       fontWeight: 'bold'
+    },
+    trialBadge: {
+      fontSize: 14,
+      color: '#4CAF50',
+      fontWeight: '600',
+    },
+    trialDaysText: {
+      fontSize: 12,
+      color: '#4CAF50',
+      fontWeight: '500',
+      marginTop: 4,
     },
     changePlanText: {
       fontSize: 14,
