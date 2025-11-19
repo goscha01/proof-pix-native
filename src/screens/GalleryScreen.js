@@ -265,23 +265,15 @@ export default function GalleryScreen({ navigation, route }) {
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
   const [selectedShareTypes, setSelectedShareTypes] = useState({ before: true, after: true, combined: true });
-  // For starter users, archive should always be checked by default
-  const [shareAsArchive, setShareAsArchive] = useState(true); // Default: true for starter users, will be adjusted by useEffect
+  
+  // Default: unchecked for all tiers. Users can check/uncheck freely.
+  // For starter users, unchecking (when checked) will show tier popup (handled in checkbox onPress)
+  const [shareAsArchive, setShareAsArchive] = useState(false);
+  
   const [uploadDestinations, setUploadDestinations] = useState({ google: true, dropbox: false }); // Default: Google only
   const [showAdvancedShareFormats, setShowAdvancedShareFormats] = useState(false);
   const [showSharePlanModal, setShowSharePlanModal] = useState(false);
   const [isDropboxConnected, setIsDropboxConnected] = useState(false);
-
-  // Debug: Track when showSharePlanModal changes (removed to prevent excessive logging)
-
-  // For starter users, archive should always be checked
-  useEffect(() => {
-    const hasAdvancedTemplates = canUse(FEATURES.ADVANCED_TEMPLATES);
-    if (!hasAdvancedTemplates && !shareAsArchive) {
-      console.log('[GALLERY] Starter user - forcing archive to be checked');
-      setShareAsArchive(true);
-    }
-  }, [shareAsArchive, userPlan]);
   const [selectedFormats, setSelectedFormats] = useState(() => {
     // Default: only square formats enabled by default
     const initial = {};
