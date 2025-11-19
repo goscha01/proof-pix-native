@@ -27,13 +27,20 @@
     "tryAgain": "다시 시도하세요",
     "somethingWentWrong": "문제가 발생했습니다.",
     "requiredField": "이 필드는 필수입니다.",
-    "invalidValue": "잘못된 값입니다."
+    "invalidValue": "잘못된 값입니다.",
+    "selectAll": "전체 선택",
+    "deselectAll": "전체 선택 해제",
+    "selected": "선택됨",
+    "select": "선택",
+    "all": "모두",
+    "continue": "계속"
   },
   "firstLoad": {
     "title": "ProofPix에 오신 것을 환영합니다",
     "subtitle": "전문적인 사진 문서화를 쉽게",
     "selectLanguage": "언어 선택",
-    "getStarted": "시작하기"
+    "getStarted": "시작하기",
+    "chooseAppLanguage": "앱 언어 선택"
   },
   "home": {
     "title": "홈",
@@ -86,7 +93,9 @@
     "noPhotosYet": "아직 사진이 없습니다",
     "selectProjectToView": "프로젝트를 선택하여 사진 보기",
     "takePhotosToStart": "시작하려면 이전/이후 사진을 찍으세요",
-    "share": "공유"
+    "share": "공유",
+    "whatToShare": "공유 형식 선택",
+    "startToShare": "공유 시작"
   },
   "camera": {
     "before": "이전",
@@ -147,6 +156,8 @@
     "signInRequired": "로그인 필요",
     "connectGoogleFirst": "먼저 Google에 연결하세요",
     "setUpTeam": "팀 설정",
+    "multiprofile": "여러 프로필",
+    "contactDeveloper": "여러 프로필을 활성화하려면 {{email}}에 문의하세요.",
     "expoGoWarning": "⚠️ 경고: 팀 기능은 Expo Go에서 작동하지 않습니다.",
     "expoGoWarningCommand": "실행: npx expo run:android 또는 npx expo run:ios",
     "upgradePlan": "요금제 업그레이드",
@@ -257,6 +268,11 @@
     "cornerStyle": "모서리 스타일",
     "rounded": "둥근",
     "straight": "직선"
+  },
+  "labelLanguageSetup": {
+    "title": "라벨 언어 선택",
+    "subtitle": "사진 라벨의 언어를 선택하세요 (이전, 이후, 결합)",
+    "previewDescription": "선택한 언어로 라벨 미리보기"
   },
   "googleSignUp": {
     "title": "계정 연결",

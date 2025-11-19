@@ -27,13 +27,20 @@
     "tryAgain": "حاول مرة أخرى",
     "somethingWentWrong": "حدث خطأ ما.",
     "requiredField": "هذا الحقل مطلوب.",
-    "invalidValue": "قيمة غير صالحة."
+    "invalidValue": "قيمة غير صالحة.",
+    "selectAll": "تحديد الكل",
+    "deselectAll": "إلغاء تحديد الكل",
+    "selected": "محدد",
+    "select": "تحديد",
+    "all": "الكل",
+    "continue": "متابعة"
   },
   "firstLoad": {
     "title": "مرحبًا بك في ProofPix",
     "subtitle": "توثيق الصور الاحترافي أصبح سهلاً",
     "selectLanguage": "اختر اللغة",
-    "getStarted": "ابدأ"
+    "getStarted": "ابدأ",
+    "chooseAppLanguage": "اختر لغة التطبيق"
   },
   "home": {
     "title": "الرئيسية",
@@ -86,7 +93,9 @@
     "noPhotosYet": "لا توجد صور بعد",
     "selectProjectToView": "حدد مشروعًا لعرض الصور",
     "takePhotosToStart": "التقط بعض الصور قبل/بعد للبدء",
-    "share": "مشاركة"
+    "share": "مشاركة",
+    "whatToShare": "اختر التنسيقات المشتركة",
+    "startToShare": "بدء المشاركة"
   },
   "camera": {
     "before": "قبل",
@@ -147,6 +156,8 @@
     "signInRequired": "تسجيل الدخول مطلوب",
     "connectGoogleFirst": "يرجى الاتصال بـ Google أولاً",
     "setUpTeam": "إعداد الفريق",
+    "multiprofile": "ملفات تعريف متعددة",
+    "contactDeveloper": "يرجى الاتصال بـ {{email}} لتمكين ملفات تعريف متعددة.",
     "expoGoWarning": "⚠️ تحذير: ميزات الفريق لا تعمل في Expo Go.",
     "expoGoWarningCommand": "قم بتشغيل: npx expo run:android أو npx expo run:ios",
     "upgradePlan": "ترقية الخطة",
@@ -257,6 +268,11 @@
     "cornerStyle": "نمط الزوايا",
     "rounded": "مستدير",
     "straight": "مستقيم"
+  },
+  "labelLanguageSetup": {
+    "title": "اختر لغة التسمية",
+    "subtitle": "اختر اللغة لتسميات الصور (قبل، بعد، مجتمعة)",
+    "previewDescription": "معاينة التسميات باللغة المحددة"
   },
   "googleSignUp": {
     "title": "اربط حسابك",

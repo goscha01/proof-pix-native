@@ -27,7 +27,13 @@
     "tryAgain": "Паспрабуйце яшчэ раз",
     "somethingWentWrong": "Нешта пайшло не так.",
     "requiredField": "Гэта поле абавязковае.",
-    "invalidValue": "Недапушчальнае значэнне."
+    "invalidValue": "Недапушчальнае значэнне.",
+    "selectAll": "Выбраць Усё",
+    "deselectAll": "Зняць Выбар",
+    "selected": "выбрана",
+    "select": "Выбраць",
+    "all": "Усё",
+    "continue": "Працягнуць"
   },
   "firstLoad": {
     "title": "Вітаем у ProofPix",
@@ -39,6 +45,7 @@
     "joinTeam": "Далучыцца да каманды",
     "useIndividual": "Выкарыстоўваць як прыватная асоба",
     "individualSubtext": "Кіруйце сваімі праектамі з бясплатнымі і платнымі планамі.",
+    "chooseAppLanguage": "Выбраць Мову Праграмы",
     "back": "Назад",
     "choosePlan": "Выберыце план",
     "starter": "Стартавы",
@@ -101,7 +108,9 @@
     "noPhotosYet": "Пакуль няма фатаграфій",
     "selectProjectToView": "Выберыце праект для прагляду фатаграфій",
     "takePhotosToStart": "Зрабіце некалькі фатаграфій да/пасля для пачатку",
-    "share": "Падзяліцца"
+    "share": "Падзяліцца",
+    "whatToShare": "Выбраць фарматы для абмену",
+    "startToShare": "Пачаць Абмен"
   },
   "camera": {
     "takePhoto": "Зрабіць фота",
@@ -160,6 +169,8 @@
     "signInRequired": "Патрабуецца ўваход",
     "connectGoogleFirst": "Калі ласка, спачатку падлучыцеся да Google",
     "setUpTeam": "Наладзіць каманду",
+    "multiprofile": "Некалькі Профіляў",
+    "contactDeveloper": "Калі ласка, звяжыцеся з {{email}}, каб уключыць некалькі профіляў.",
     "expoGoWarning": "⚠️ Папярэджанне: Функцыі каманды не працуюць у Expo Go.",
     "expoGoWarningCommand": "Выканайце: npx expo run:android або npx expo run:ios",
     "upgradePlan": "Абнавіць план",
@@ -285,6 +296,11 @@
     "cornerStyle": "Стыль кутоў",
     "rounded": "Закругленыя",
     "straight": "Прамыя"
+  },
+  "labelLanguageSetup": {
+    "title": "Выбраць Мову Метак",
+    "subtitle": "Выберыце мову для метак вашых фатаграфій (Да, Пасля, Камбінаванае)",
+    "previewDescription": "Перадпрагляд метак на выбранай мове"
   },
   "googleSignUp": {
     "title": "Падлучыце Ваш Акаўнт",

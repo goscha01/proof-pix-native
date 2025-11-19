@@ -27,7 +27,13 @@
     "tryAgain": "Пожалуйста, попробуйте еще раз.",
     "somethingWentWrong": "Что-то пошло не так.",
     "requiredField": "Это поле обязательно для заполнения.",
-    "invalidValue": "Недопустимое значение."
+    "invalidValue": "Недопустимое значение.",
+    "selectAll": "Выбрать Все",
+    "deselectAll": "Снять Выбор",
+    "selected": "выбрано",
+    "select": "Выбрать",
+    "all": "Все",
+    "continue": "Продолжить"
   },
   "firstLoad": {
     "title": "Добро пожаловать в ProofPix",
@@ -39,6 +45,7 @@
     "joinTeam": "Присоединиться к команде",
     "useIndividual": "Использовать как частное лицо",
     "individualSubtext": "Управляйте своими проектами с бесплатными и платными планами.",
+    "chooseAppLanguage": "Выбрать Язык Приложения",
     "back": "Назад",
     "choosePlan": "Выберите план",
     "starter": "Стартовый",
@@ -104,7 +111,9 @@
     "noPhotosYet": "Пока нет фотографий",
     "selectProjectToView": "Выберите проект для просмотра фотографий",
     "takePhotosToStart": "Сделайте несколько фотографий до/после для начала",
-    "share": "Поделиться"
+    "share": "Поделиться",
+    "whatToShare": "Выбрать форматы для обмена",
+    "startToShare": "Начать Обмен"
   },
   "camera": {
     "before": "ДО",
@@ -165,6 +174,8 @@
     "signInRequired": "Требуется вход",
     "connectGoogleFirst": "Пожалуйста, сначала подключитесь к Google",
     "setUpTeam": "Настроить команду",
+    "multiprofile": "Несколько Профилей",
+    "contactDeveloper": "Пожалуйста, свяжитесь с {{email}}, чтобы включить несколько профилей.",
     "expoGoWarning": "⚠️ Предупреждение: Функции команды не работают в Expo Go.",
     "expoGoWarningCommand": "Выполните: npx expo run:android или npx expo run:ios",
     "upgradePlan": "Обновить план",
@@ -275,6 +286,11 @@
     "cornerStyle": "Стиль углов",
     "rounded": "Закругленные",
     "straight": "Прямые"
+  },
+  "labelLanguageSetup": {
+    "title": "Выбрать Язык Меток",
+    "subtitle": "Выберите язык для меток ваших фотографий (До, После, Комбинированное)",
+    "previewDescription": "Предварительный просмотр меток на выбранном языке"
   },
   "googleSignUp": {
     "title": "Подключите Ваш Аккаунт",

@@ -167,7 +167,7 @@ export default function FirstLoadScreen({ navigation }) {
           onPress={() => setLanguageModalVisible(true)}
         >
           <Text style={[styles.selectionButtonText, styles.languageButtonText]}>
-            Choose App Language
+            {t('firstLoad.chooseAppLanguage')}
           </Text>
         </TouchableOpacity>
       </View>

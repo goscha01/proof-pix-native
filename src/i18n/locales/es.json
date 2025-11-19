@@ -27,7 +27,13 @@
     "tryAgain": "Intentar de nuevo",
     "somethingWentWrong": "Algo salió mal.",
     "requiredField": "Este campo es obligatorio.",
-    "invalidValue": "Valor inválido."
+    "invalidValue": "Valor inválido.",
+    "selectAll": "Seleccionar Todo",
+    "deselectAll": "Deseleccionar Todo",
+    "selected": "seleccionado",
+    "select": "Seleccionar",
+    "all": "Todos",
+    "continue": "Continuar"
   },
   "firstLoad": {
     "title": "Bienvenido a ProofPix",
@@ -39,6 +45,7 @@
     "joinTeam": "Unirse a un Equipo",
     "useIndividual": "Usar como Individual",
     "individualSubtext": "Administre sus propios proyectos, con planes gratuitos y de pago.",
+    "chooseAppLanguage": "Elegir Idioma de la Aplicación",
     "back": "Atrás",
     "choosePlan": "Elegir un Plan",
     "starter": "Inicial",
@@ -104,7 +111,9 @@
     "noPhotosYet": "Aún no hay fotos",
     "selectProjectToView": "Seleccione un proyecto para ver las fotos",
     "takePhotosToStart": "Tome algunas fotos de antes/después para comenzar",
-    "share": "Compartir"
+    "share": "Compartir",
+    "whatToShare": "Elegir formatos compartidos",
+    "startToShare": "Comenzar a Compartir"
   },
   "camera": {
     "before": "ANTES",
@@ -165,6 +174,8 @@
     "signInRequired": "Inicio de Sesión Requerido",
     "connectGoogleFirst": "Por favor, conéctate a Google primero",
     "setUpTeam": "Configurar Equipo",
+    "multiprofile": "Múltiples Perfiles",
+    "contactDeveloper": "Por favor, contacte a {{email}} para habilitar múltiples perfiles.",
     "expoGoWarning": "⚠️ Advertencia: Las funciones de equipo no funcionan en Expo Go.",
     "expoGoWarningCommand": "Ejecuta: npx expo run:android o npx expo run:ios",
     "upgradePlan": "Actualizar Plan",
@@ -275,6 +286,11 @@
     "cornerStyle": "Estilo de Esquina",
     "rounded": "Redondeado",
     "straight": "Recto"
+  },
+  "labelLanguageSetup": {
+    "title": "Elegir Idioma de Etiquetas",
+    "subtitle": "Seleccione el idioma para las etiquetas de sus fotos (Antes, Después, Combinado)",
+    "previewDescription": "Vista previa de etiquetas en el idioma seleccionado"
   },
   "googleSignUp": {
     "title": "Conecta Tu Cuenta",

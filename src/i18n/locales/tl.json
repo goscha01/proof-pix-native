@@ -27,7 +27,13 @@
     "tryAgain": "Subukang muli",
     "somethingWentWrong": "May nangyaring mali.",
     "requiredField": "Kinakailangan ang field na ito.",
-    "invalidValue": "Hindi wasto ang halaga."
+    "invalidValue": "Hindi wasto ang halaga.",
+    "selectAll": "Piliin ang Lahat",
+    "deselectAll": "Alisin ang Pagpili sa Lahat",
+    "selected": "napili",
+    "select": "Pumili",
+    "all": "Lahat",
+    "continue": "Magpatuloy"
   },
   "firstLoad": {
     "title": "Maligayang pagdating sa ProofPix",
@@ -39,6 +45,7 @@
     "joinTeam": "Sumali sa Koponan",
     "useIndividual": "Gamitin bilang Indibidwal",
     "individualSubtext": "Pamahalaan ang iyong sariling mga proyekto, na may libreng at bayad na mga plano.",
+    "chooseAppLanguage": "Pumili ng Wika ng App",
     "back": "Bumalik",
     "choosePlan": "Pumili ng Plano",
     "starter": "Starter",
@@ -101,7 +108,9 @@
     "noPhotosYet": "Wala pang mga larawan",
     "selectProjectToView": "Pumili ng proyekto upang tingnan ang mga larawan",
     "takePhotosToStart": "Kumuha ng ilang bago/pagkatapos na mga larawan upang magsimula",
-    "share": "Ibahagi"
+    "share": "Ibahagi",
+    "whatToShare": "Pumili ng mga format na ibabahagi",
+    "startToShare": "Simulan ang Pagbabahagi"
   },
   "camera": {
     "before": "BAGO",
@@ -162,6 +171,8 @@
     "signInRequired": "Kailangan ang Sign-In",
     "connectGoogleFirst": "Mangyaring kumonekta muna sa Google",
     "setUpTeam": "I-set Up ang Koponan",
+    "multiprofile": "Maraming Profile",
+    "contactDeveloper": "Mangyaring makipag-ugnayan sa {{email}} upang paganahin ang maraming profile.",
     "expoGoWarning": "⚠️ Babala: Hindi gumagana ang mga team features sa Expo Go.",
     "expoGoWarningCommand": "Patakbuhin: npx expo run:android o npx expo run:ios",
     "upgradePlan": "I-upgrade ang Plano",
@@ -272,6 +283,11 @@
     "cornerStyle": "Estilo ng Sulok",
     "rounded": "Bilog",
     "straight": "Tuwid"
+  },
+  "labelLanguageSetup": {
+    "title": "Pumili ng Wika ng Label",
+    "subtitle": "Pumili ng wika para sa mga label ng iyong larawan (Bago, Pagkatapos, Pinagsama)",
+    "previewDescription": "Preview ng mga label sa napiling wika"
   },
   "googleSignUp": {
     "title": "Ikonekta ang Iyong Account",

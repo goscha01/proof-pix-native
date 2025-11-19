@@ -27,7 +27,13 @@
     "tryAgain": "重试",
     "somethingWentWrong": "出错了。",
     "requiredField": "此字段为必填项。",
-    "invalidValue": "无效值。"
+    "invalidValue": "无效值。",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "selected": "已选择",
+    "select": "选择",
+    "all": "全部",
+    "continue": "继续"
   },
   "firstLoad": {
     "title": "欢迎使用 ProofPix",
@@ -39,6 +45,7 @@
     "joinTeam": "加入团队",
     "useIndividual": "个人使用",
     "individualSubtext": "管理您自己的项目，提供免费和付费计划。",
+    "chooseAppLanguage": "选择应用语言",
     "back": "返回",
     "choosePlan": "选择计划",
     "starter": "入门版",
@@ -101,7 +108,9 @@
     "noPhotosYet": "暂无照片",
     "selectProjectToView": "选择项目以查看照片",
     "takePhotosToStart": "拍摄一些前后对比照片开始使用",
-    "share": "分享"
+    "share": "分享",
+    "whatToShare": "选择共享格式",
+    "startToShare": "开始分享"
   },
   "camera": {
     "before": "之前",
@@ -162,6 +171,8 @@
     "signInRequired": "需要登录",
     "connectGoogleFirst": "请先连接到Google",
     "setUpTeam": "设置团队",
+    "multiprofile": "多个配置文件",
+    "contactDeveloper": "请联系 {{email}} 以启用多个配置文件。",
     "expoGoWarning": "⚠️ 警告：团队功能在Expo Go中不起作用。",
     "expoGoWarningCommand": "运行：npx expo run:android 或 npx expo run:ios",
     "upgradePlan": "升级计划",
@@ -273,6 +284,11 @@
     "cornerStyle": "角样式",
     "rounded": "圆角",
     "straight": "直角"
+  },
+  "labelLanguageSetup": {
+    "title": "选择标签语言",
+    "subtitle": "为您的照片标签选择语言（之前、之后、组合）",
+    "previewDescription": "所选语言的标签预览"
   },
   "googleSignUp": {
     "title": "连接您的账户",

@@ -27,13 +27,20 @@
     "tryAgain": "Tente novamente",
     "somethingWentWrong": "Algo deu errado.",
     "requiredField": "Este campo é obrigatório.",
-    "invalidValue": "Valor inválido."
+    "invalidValue": "Valor inválido.",
+    "selectAll": "Selecionar Tudo",
+    "deselectAll": "Deselecionar Tudo",
+    "selected": "selecionado",
+    "select": "Selecionar",
+    "all": "Todos",
+    "continue": "Continuar"
   },
   "firstLoad": {
     "title": "Bem-vindo ao ProofPix",
     "subtitle": "Documentação fotográfica profissional facilitada",
     "selectLanguage": "Selecionar Idioma",
-    "getStarted": "Começar"
+    "getStarted": "Começar",
+    "chooseAppLanguage": "Escolher Idioma do Aplicativo"
   },
   "home": {
     "title": "Início",
@@ -86,7 +93,9 @@
     "noPhotosYet": "Ainda sem fotos",
     "selectProjectToView": "Selecione um projeto para ver as fotos",
     "takePhotosToStart": "Tire algumas fotos antes/depois para começar",
-    "share": "Compartilhar"
+    "share": "Compartilhar",
+    "whatToShare": "Escolher Formatos Compartilhados",
+    "startToShare": "Começar a Compartilhar"
   },
   "camera": {
     "before": "ANTES",
@@ -147,6 +156,8 @@
     "signInRequired": "Login Necessário",
     "connectGoogleFirst": "Por favor, conecte-se ao Google primeiro",
     "setUpTeam": "Configurar Equipe",
+    "multiprofile": "Múltiplos Perfis",
+    "contactDeveloper": "Entre em contato com {{email}} para ativar vários perfis.",
     "expoGoWarning": "⚠️ Aviso: Os recursos de equipe não funcionam no Expo Go.",
     "expoGoWarningCommand": "Execute: npx expo run:android ou npx expo run:ios",
     "upgradePlan": "Atualizar Plano",
@@ -257,6 +268,11 @@
     "cornerStyle": "Estilo do Canto",
     "rounded": "Arredondado",
     "straight": "Reto"
+  },
+  "labelLanguageSetup": {
+    "title": "Escolher Idioma das Etiquetas",
+    "subtitle": "Selecione o idioma para as etiquetas das suas fotos (Antes, Depois, Combinado)",
+    "previewDescription": "Visualização das etiquetas no idioma selecionado"
   },
   "googleSignUp": {
     "title": "Conecte Sua Conta",

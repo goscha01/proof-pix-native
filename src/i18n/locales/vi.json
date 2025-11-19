@@ -27,7 +27,13 @@
     "tryAgain": "Thử lại",
     "somethingWentWrong": "Đã xảy ra lỗi.",
     "requiredField": "Trường này là bắt buộc.",
-    "invalidValue": "Giá trị không hợp lệ."
+    "invalidValue": "Giá trị không hợp lệ.",
+    "selectAll": "Chọn Tất Cả",
+    "deselectAll": "Bỏ Chọn Tất Cả",
+    "selected": "đã chọn",
+    "select": "Chọn",
+    "all": "Tất cả",
+    "continue": "Tiếp tục"
   },
   "firstLoad": {
     "title": "Chào mừng đến với ProofPix",
@@ -39,6 +45,7 @@
     "joinTeam": "Tham Gia Nhóm",
     "useIndividual": "Sử Dụng Cá Nhân",
     "individualSubtext": "Quản lý các dự án của riêng bạn, với các gói miễn phí và trả phí.",
+    "chooseAppLanguage": "Chọn Ngôn Ngữ Ứng Dụng",
     "back": "Quay Lại",
     "choosePlan": "Chọn Gói",
     "starter": "Gói Khởi Đầu",
@@ -101,7 +108,9 @@
     "noPhotosYet": "Chưa có ảnh",
     "selectProjectToView": "Chọn một dự án để xem ảnh",
     "takePhotosToStart": "Chụp một số ảnh trước/sau để bắt đầu",
-    "share": "Chia Sẻ"
+    "share": "Chia Sẻ",
+    "whatToShare": "Chọn Định Dạng Chia Sẻ",
+    "startToShare": "Bắt Đầu Chia Sẻ"
   },
   "camera": {
     "before": "TRƯỚC",
@@ -162,6 +171,8 @@
     "signInRequired": "Cần Đăng Nhập",
     "connectGoogleFirst": "Vui lòng kết nối với Google trước",
     "setUpTeam": "Thiết Lập Nhóm",
+    "multiprofile": "Nhiều Hồ Sơ",
+    "contactDeveloper": "Vui lòng liên hệ {{email}} để bật nhiều hồ sơ.",
     "expoGoWarning": "⚠️ Cảnh báo: Tính năng nhóm không hoạt động trong Expo Go.",
     "expoGoWarningCommand": "Chạy: npx expo run:android hoặc npx expo run:ios",
     "upgradePlan": "Nâng Cấp Gói",
@@ -261,6 +272,11 @@
     "cornerStyle": "Kiểu Góc",
     "rounded": "Tròn",
     "straight": "Vuông"
+  },
+  "labelLanguageSetup": {
+    "title": "Chọn Ngôn Ngữ Nhãn",
+    "subtitle": "Chọn ngôn ngữ cho nhãn ảnh của bạn (Trước, Sau, Kết hợp)",
+    "previewDescription": "Xem trước nhãn bằng ngôn ngữ đã chọn"
   },
   "googleSignUp": {
     "title": "Kết Nối Tài Khoản Của Bạn",

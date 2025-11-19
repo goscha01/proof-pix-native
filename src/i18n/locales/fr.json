@@ -27,7 +27,13 @@
     "tryAgain": "Veuillez réessayer.",
     "somethingWentWrong": "Quelque chose s'est mal passé.",
     "requiredField": "Ce champ est obligatoire.",
-    "invalidValue": "Valeur invalide."
+    "invalidValue": "Valeur invalide.",
+    "selectAll": "Tout Sélectionner",
+    "deselectAll": "Tout Désélectionner",
+    "selected": "sélectionné",
+    "select": "Sélectionner",
+    "all": "Tous",
+    "continue": "Continuer"
   },
   "firstLoad": {
     "title": "Bienvenue sur ProofPix",
@@ -39,6 +45,7 @@
     "joinTeam": "Rejoindre une Équipe",
     "useIndividual": "Utiliser en Individuel",
     "individualSubtext": "Gérez vos propres projets, avec des plans gratuits et payants.",
+    "chooseAppLanguage": "Choisir la Langue de l'Application",
     "back": "Retour",
     "choosePlan": "Choisir un Plan",
     "starter": "Débutant",
@@ -104,7 +111,9 @@
     "noPhotosYet": "Pas encore de photos",
     "selectProjectToView": "Sélectionnez un projet pour voir les photos",
     "takePhotosToStart": "Prenez des photos avant/après pour commencer",
-    "share": "Partager"
+    "share": "Partager",
+    "whatToShare": "Choisir les formats partagés",
+    "startToShare": "Commencer à Partager"
   },
   "camera": {
     "before": "AVANT",
@@ -165,6 +174,8 @@
     "signInRequired": "Connexion Requise",
     "connectGoogleFirst": "Veuillez d'abord vous connecter à Google",
     "setUpTeam": "Configurer l'Équipe",
+    "multiprofile": "Profils Multiples",
+    "contactDeveloper": "Veuillez contacter {{email}} pour activer les profils multiples.",
     "expoGoWarning": "⚠️ Attention : Les fonctionnalités d'équipe ne fonctionnent pas dans Expo Go.",
     "expoGoWarningCommand": "Exécutez : npx expo run:android ou npx expo run:ios",
     "upgradePlan": "Mettre à Niveau le Plan",
@@ -275,6 +286,11 @@
     "cornerStyle": "Style de Coin",
     "rounded": "Arrondi",
     "straight": "Droit"
+  },
+  "labelLanguageSetup": {
+    "title": "Choisir la Langue des Étiquettes",
+    "subtitle": "Sélectionnez la langue pour les étiquettes de vos photos (Avant, Après, Combiné)",
+    "previewDescription": "Aperçu des étiquettes dans la langue sélectionnée"
   },
   "googleSignUp": {
     "title": "Connectez Votre Compte",
