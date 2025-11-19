@@ -130,7 +130,7 @@ const styles = StyleSheet.create({
     padding: 10,
   },
   backButtonText: {
-    color: COLORS.PRIMARY,
+    color: COLORS.TEXT,
     fontSize: 24,
     fontWeight: 'bold',
   },

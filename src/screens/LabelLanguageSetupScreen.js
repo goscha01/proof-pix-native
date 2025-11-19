@@ -4,9 +4,9 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Image,
   Dimensions,
+  ScrollView,
   Modal as RNModal,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -80,8 +80,10 @@ export default function LabelLanguageSetupScreen({ navigation, route }) {
   };
 
   // Dummy photo URI - using a placeholder color as background
+  const screenHeight = Dimensions.get('window').height;
+  const availableHeight = screenHeight - insets.top - insets.bottom - 100; // Reserve space for header and buttons
   const dummyPhotoWidth = width - 40;
-  const dummyPhotoHeight = (dummyPhotoWidth * 3) / 4; // 4:3 aspect ratio
+  const dummyPhotoHeight = Math.min((dummyPhotoWidth * 3) / 4, availableHeight * 0.35); // Limit photo height
 
   return (
     <SafeAreaView style={styles.container}>
@@ -92,11 +94,7 @@ export default function LabelLanguageSetupScreen({ navigation, route }) {
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={true}
-      >
+      <View style={styles.content}>
         <Text style={styles.title}>{t('labelLanguageSetup.title')}</Text>
 
         {/* Dummy Photo Preview */}
@@ -169,7 +167,7 @@ export default function LabelLanguageSetupScreen({ navigation, route }) {
         >
           <Text style={styles.continueButtonText}>{t('common.continue')}</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
 
       {/* Label Language Modal */}
       <RNModal
@@ -242,25 +240,25 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
   },
-  scrollView: {
+  content: {
     flex: 1,
-  },
-  scrollContent: {
     padding: 20,
     paddingTop: 60,
-    paddingBottom: 40,
+    paddingBottom: 20,
+    justifyContent: 'space-between',
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: COLORS.TEXT,
     textAlign: 'center',
-    marginBottom: 30,
+    marginBottom: 12,
     fontFamily: FONTS.QUICKSAND_BOLD,
   },
   photoContainer: {
-    marginBottom: 30,
     alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 12,
   },
   dummyPhoto: {
     borderRadius: 12,
@@ -308,19 +306,20 @@ const styles = StyleSheet.create({
     height: '50%',
   },
   photoDescription: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
     textAlign: 'center',
     fontStyle: 'italic',
+    marginTop: 8,
   },
   languageSection: {
-    marginBottom: 30,
+    marginBottom: 4,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.TEXT,
-    marginBottom: 16,
+    marginBottom: 12,
     fontFamily: FONTS.QUICKSAND_BOLD,
   },
   languageSelectorButton: {
@@ -381,10 +380,11 @@ const styles = StyleSheet.create({
   customizeButton: {
     backgroundColor: '#000000',
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 32,
     alignItems: 'center',
-    marginBottom: 20,
+    marginTop: 4,
+    marginBottom: 8,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   customizeButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
     fontFamily: FONTS.QUICKSAND_BOLD,
@@ -400,7 +400,7 @@ const styles = StyleSheet.create({
   continueButton: {
     backgroundColor: COLORS.PRIMARY,
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 32,
     alignItems: 'center',
     marginTop: 20,

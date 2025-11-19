@@ -4,8 +4,8 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  ScrollView,
   Dimensions,
+  ScrollView,
   Modal as RNModal,
   Switch,
   PanResponder,
@@ -163,11 +163,7 @@ export default function SectionLanguageSetupScreen({ navigation, route }) {
         <Text style={styles.backButtonText}>←</Text>
       </TouchableOpacity>
 
-      <ScrollView
-        style={styles.scrollView}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={true}
-      >
+      <View style={styles.content}>
         <Text style={styles.title}>{t('sectionLanguageSetup.title')}</Text>
 
         {/* Industry Template Section */}
@@ -209,7 +205,7 @@ export default function SectionLanguageSetupScreen({ navigation, route }) {
                   ]}
                   onPress={() => setCurrentRoom(room.id)}
                 >
-                  <Text style={[styles.roomIcon, { fontSize: isActive ? 28 : 22 }]}>
+                  <Text style={[styles.roomIcon, { fontSize: isActive ? 24 : 20 }]}>
                     {room.icon}
                   </Text>
                   {isActive && (
@@ -265,7 +261,7 @@ export default function SectionLanguageSetupScreen({ navigation, route }) {
         >
           <Text style={styles.continueButtonText}>{t('common.continue')}</Text>
         </TouchableOpacity>
-      </ScrollView>
+      </View>
 
       {/* Section Language Modal */}
       <RNModal
@@ -344,51 +340,51 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: 'bold',
   },
-  scrollView: {
+  content: {
     flex: 1,
-  },
-  scrollContent: {
     padding: 20,
     paddingTop: 60,
-    paddingBottom: 40,
+    paddingBottom: 20,
+    justifyContent: 'space-between',
   },
   title: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: 'bold',
     color: COLORS.TEXT,
     textAlign: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
     fontFamily: FONTS.QUICKSAND_BOLD,
   },
   carouselContainer: {
-    marginBottom: 30,
+    marginTop: 8,
+    marginBottom: 12,
     alignItems: 'center',
   },
   carouselTitle: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
     fontStyle: 'italic',
   },
   roomTabsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 8,
     paddingHorizontal: 8,
-    maxHeight: 100,
+    maxHeight: 80,
     width: '100%',
   },
   roomTab: {
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    marginHorizontal: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginHorizontal: 3,
     borderRadius: 12,
     backgroundColor: 'white',
-    minWidth: 60,
-    minHeight: 60,
+    minWidth: 55,
+    minHeight: 55,
     borderWidth: 1,
     borderColor: COLORS.BORDER,
   },
@@ -397,8 +393,8 @@ const styles = StyleSheet.create({
     borderColor: COLORS.PRIMARY,
   },
   roomIcon: {
-    fontSize: 24,
-    marginBottom: 4,
+    fontSize: 20,
+    marginBottom: 2,
   },
   roomTabText: {
     fontSize: 12,
@@ -409,13 +405,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   languageSection: {
-    marginBottom: 24,
+    marginBottom: 4,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.TEXT,
-    marginBottom: 16,
+    marginBottom: 12,
     fontFamily: FONTS.QUICKSAND_BOLD,
   },
   languageSelectorButton: {
@@ -443,16 +439,16 @@ const styles = StyleSheet.create({
   sectionLine: {
     height: 1,
     backgroundColor: COLORS.BORDER,
-    marginVertical: 24,
+    marginVertical: 4,
   },
   switchSection: {
-    marginBottom: 30,
+    marginBottom: 8,
   },
   industryTemplateLabel: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: COLORS.TEXT,
-    marginBottom: 16,
+    marginBottom: 12,
     fontFamily: FONTS.QUICKSAND_BOLD,
   },
   switchRow: {
@@ -474,10 +470,11 @@ const styles = StyleSheet.create({
   customizeButton: {
     backgroundColor: '#000000',
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 32,
     alignItems: 'center',
-    marginBottom: 20,
+    marginTop: 4,
+    marginBottom: 8,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -485,7 +482,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
   },
   customizeButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: 'bold',
     color: '#FFFFFF',
     fontFamily: FONTS.QUICKSAND_BOLD,
@@ -493,9 +490,10 @@ const styles = StyleSheet.create({
   continueButton: {
     backgroundColor: COLORS.PRIMARY,
     borderRadius: 12,
-    paddingVertical: 16,
+    paddingVertical: 14,
     paddingHorizontal: 32,
     alignItems: 'center',
+    marginTop: 20,
     elevation: 2,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

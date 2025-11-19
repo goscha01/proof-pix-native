@@ -252,7 +252,7 @@ export default function App() {
                   if (previousRouteName !== currentRouteName && firebaseInitialized) {
                     // Log screen view to Firebase Analytics
                     try {
-                      await analytics().logScreenView({
+                      await analytics().logEvent('screen_view', {
                         screen_name: currentRouteName,
                         screen_class: currentRouteName,
                       });

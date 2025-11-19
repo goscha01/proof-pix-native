@@ -1222,6 +1222,22 @@ export default function SettingsScreen({ navigation, route }) {
         ref={mainScrollViewRef}
         style={styles.content}
       >
+        {/* Current Plan - Moved to top */}
+        {userPlan && (
+          <TouchableOpacity
+            style={styles.currentPlanBox}
+            onPress={() => setShowPlanModal(true)}
+          >
+            <Text style={styles.currentPlanLabel}>{t('settings.currentPlan')}</Text>
+            <View style={styles.currentPlanValueContainer}>
+              <Text style={styles.currentPlanValue}>
+                {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
+              </Text>
+              <Text style={styles.changePlanText}>{t('settings.change')}</Text>
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Language Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
@@ -1590,22 +1606,6 @@ export default function SettingsScreen({ navigation, route }) {
           onLayout={() => {}}
         >
           <Text style={styles.sectionTitle}>{t('settings.cloudTeamSync')}</Text>
-
-          {/* Show current plan above buttons */}
-          {userPlan && (
-            <TouchableOpacity
-              style={styles.currentPlanBox}
-              onPress={() => setShowPlanModal(true)}
-            >
-              <Text style={styles.currentPlanLabel}>{t('settings.currentPlan')}</Text>
-              <View style={styles.currentPlanValueContainer}>
-                <Text style={styles.currentPlanValue}>
-                  {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
-                </Text>
-                <Text style={styles.changePlanText}>{t('settings.change')}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
           
           {userMode === 'team_member' ? (
             <>
