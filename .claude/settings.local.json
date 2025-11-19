@@ -29,7 +29,8 @@
       "Bash(ping:*)",
       "Bash(netstat:*)",
       "Bash(findstr:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(npm uninstall:*)"
     ],
     "deny": [],
     "ask": []

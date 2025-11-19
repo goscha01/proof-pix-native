@@ -33,7 +33,8 @@
     "selected": "selected",
     "select": "Select",
     "all": "All",
-    "continue": "Continue"
+    "continue": "Continue",
+    "apply": "Apply"
   },
   "firstLoad": {
     "title": "Welcome to ProofPix",
@@ -464,7 +465,10 @@
       "enterColorCode": "Enter Color Code",
       "hexPlaceholder": "#RRGGBB or rgb(r,g,b)",
       "hexPlaceholderLong": "#FFFFFF or rgb(255, 255, 255)",
-      "hexError": "Enter #RRGGBB, #RGB, or rgb(r, g, b)"
+      "hexError": "Enter #RRGGBB, #RGB, or rgb(r, g, b)",
+      "hue": "Hue: {{value}}°",
+      "saturation": "Saturation: {{value}}%",
+      "lightness": "Lightness: {{value}}%"
     },
     "fontModal": {
       "title": "Choose Font",

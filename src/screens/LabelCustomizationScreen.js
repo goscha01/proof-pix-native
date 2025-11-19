@@ -18,7 +18,37 @@ import { useSettings } from '../context/SettingsContext';
 import { COLORS, getLabelPositions } from '../constants/rooms';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
-import { ColorPicker, fromHsv } from 'react-native-color-picker';
+// HSL conversion utilities
+const hslToHex = (h, s, l) => {
+  s /= 100;
+  l /= 100;
+  const a = s * Math.min(l, 1 - l);
+  const f = (n) => {
+    const k = (n + h / 30) % 12;
+    const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1);
+    return Math.round(255 * color).toString(16).padStart(2, '0');
+  };
+  return `#${f(0)}${f(8)}${f(4)}`.toUpperCase();
+};
+
+const hexToHsl = (hex) => {
+  let r = parseInt(hex.slice(1, 3), 16) / 255;
+  let g = parseInt(hex.slice(3, 5), 16) / 255;
+  let b = parseInt(hex.slice(5, 7), 16) / 255;
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  let h = 0, s = 0, l = (max + min) / 2;
+  if (max !== min) {
+    const d = max - min;
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+    switch (max) {
+      case r: h = ((g - b) / d + (g < b ? 6 : 0)) / 6; break;
+      case g: h = ((b - r) / d + 2) / 6; break;
+      case b: h = ((r - g) / d + 4) / 6; break;
+    }
+  }
+  return { h: h * 360, s: s * 100, l: l * 100 };
+};
 import { useTranslation } from 'react-i18next';
 import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
 import { FEATURES } from '../constants/featurePermissions';
@@ -110,6 +140,12 @@ export default function LabelCustomizationScreen({ navigation }) {
   const [fontModalVisible, setFontModalVisible] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [sliderResetKey, setSliderResetKey] = useState(0);
+  const [colorPickerKey, setColorPickerKey] = useState(0);
+
+  // HSL state for color picker
+  const [hue, setHue] = useState(0);
+  const [saturation, setSaturation] = useState(100);
+  const [lightness, setLightness] = useState(50);
 
   const LABEL_SIZE_OPTIONS = useMemo(() => getLabelSizeOptions(t), [t]);
   const LABEL_CORNER_OPTIONS = useMemo(() => getLabelCornerOptions(t), [t]);
@@ -181,12 +217,21 @@ export default function LabelCustomizationScreen({ navigation }) {
   };
 
   const openColorModal = (type) => {
+    console.log('[ColorPicker] openColorModal called with type:', type);
     // Check if user has access to custom labels
     if (!canUse(FEATURES.CUSTOM_LABELS)) {
       setShowPlanModal(true);
       return;
     }
     const currentColor = type === 'background' ? labelBackgroundColor : labelTextColor;
+    console.log('[ColorPicker] Setting draftColor to:', currentColor);
+
+    // Initialize HSL values from current color
+    const hsl = hexToHsl(currentColor);
+    setHue(hsl.h);
+    setSaturation(hsl.s);
+    setLightness(hsl.l);
+
     setColorModalType(type);
     setDraftColor(currentColor);
     setColorInput(currentColor);
@@ -721,15 +766,61 @@ export default function LabelCustomizationScreen({ navigation }) {
               </TouchableOpacity>
             </View>
             <View style={styles.colorPickerWrapper}>
-              <ColorPicker
-                color={draftColor}
-                onColorChange={handleDraftColorChange}
-                onColorSelected={(color) => {
-                  const hex = fromHsv(color);
-                  handleDraftColorChange(hex, { source: 'complete' });
+              {/* Hue Slider */}
+              <Text style={styles.sliderLabel}>{t('labelCustomization.colorPicker.hue', { value: Math.round(hue) })}</Text>
+              <Slider
+                style={styles.colorSlider}
+                minimumValue={0}
+                maximumValue={360}
+                step={1}
+                value={hue}
+                onValueChange={(value) => {
+                  setHue(value);
+                  const newColor = hslToHex(value, saturation, lightness);
+                  setDraftColor(newColor);
+                  setColorInput(newColor);
                 }}
-                style={styles.colorPicker}
-                hideSliders
+                minimumTrackTintColor={`hsl(${hue}, 100%, 50%)`}
+                maximumTrackTintColor="#d3d3d3"
+                thumbTintColor={`hsl(${hue}, 100%, 50%)`}
+              />
+
+              {/* Saturation Slider */}
+              <Text style={styles.sliderLabel}>{t('labelCustomization.colorPicker.saturation', { value: Math.round(saturation) })}</Text>
+              <Slider
+                style={styles.colorSlider}
+                minimumValue={0}
+                maximumValue={100}
+                step={1}
+                value={saturation}
+                onValueChange={(value) => {
+                  setSaturation(value);
+                  const newColor = hslToHex(hue, value, lightness);
+                  setDraftColor(newColor);
+                  setColorInput(newColor);
+                }}
+                minimumTrackTintColor={draftColor}
+                maximumTrackTintColor="#d3d3d3"
+                thumbTintColor={draftColor}
+              />
+
+              {/* Lightness Slider */}
+              <Text style={styles.sliderLabel}>{t('labelCustomization.colorPicker.lightness', { value: Math.round(lightness) })}</Text>
+              <Slider
+                style={styles.colorSlider}
+                minimumValue={0}
+                maximumValue={100}
+                step={1}
+                value={lightness}
+                onValueChange={(value) => {
+                  setLightness(value);
+                  const newColor = hslToHex(hue, saturation, value);
+                  setDraftColor(newColor);
+                  setColorInput(newColor);
+                }}
+                minimumTrackTintColor={draftColor}
+                maximumTrackTintColor="#d3d3d3"
+                thumbTintColor={draftColor}
               />
             </View>
             <View style={styles.colorPreview}>
@@ -1189,11 +1280,17 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   colorPickerWrapper: {
-    height: 300,
     marginBottom: 16,
   },
-  colorPicker: {
-    flex: 1,
+  sliderLabel: {
+    fontSize: 14,
+    color: COLORS.TEXT,
+    marginBottom: 4,
+    marginTop: 8,
+  },
+  colorSlider: {
+    width: '100%',
+    height: 40,
   },
   colorPreview: {
     flexDirection: 'row',
