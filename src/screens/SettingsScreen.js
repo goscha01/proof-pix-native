@@ -585,6 +585,7 @@ export default function SettingsScreen({ navigation, route }) {
   const [loadingAdminInfo, setLoadingAdminInfo] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
   const [editingTeamName, setEditingTeamName] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
@@ -2640,6 +2641,20 @@ export default function SettingsScreen({ navigation, route }) {
 
           <View style={styles.divider} />
 
+          {/* Contact Us Section */}
+          <Text style={styles.sectionTitle}>{t('settings.contactUs')}</Text>
+          <Text style={styles.sectionDescription}>
+            {t('settings.contactUsDescription')}
+          </Text>
+          <TouchableOpacity
+            style={styles.contactButton}
+            onPress={() => setShowContactModal(true)}
+          >
+            <Text style={styles.contactButtonText}>{t('settings.contactUs')}</Text>
+          </TouchableOpacity>
+
+          <View style={styles.divider} />
+
           <Text style={styles.sectionDescription}>
             {isTeamMember
               ? t('settings.resetTeamMemberDescription')
@@ -3121,6 +3136,14 @@ export default function SettingsScreen({ navigation, route }) {
           onClose={() => setShowEnterpriseModal(false)}
         />
 
+        {/* Contact Us Modal */}
+        <EnterpriseContactModal
+          visible={showContactModal}
+          onClose={() => setShowContactModal(false)}
+          title={t('settings.contactUsTitle')}
+          subtitle={t('settings.contactUsSubtitle')}
+        />
+
         {/* Trial Testing Section - Only in Development */}
         {__DEV__ && (
           <View style={styles.testSection}>
@@ -3597,6 +3620,25 @@ const sliderStyles = StyleSheet.create({
       textAlign: 'right',
       color: COLORS.TEXT,
       fontWeight: '600',
+    },
+    contactButton: {
+      backgroundColor: COLORS.PRIMARY,
+      borderRadius: 12,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginTop: 12,
+      marginBottom: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    contactButtonText: {
+      color: '#000000',
+      fontSize: 16,
+      fontWeight: '600'
     },
     resetButton: {
       backgroundColor: '#FFE6E6',

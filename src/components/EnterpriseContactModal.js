@@ -20,7 +20,7 @@ import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
 import enterpriseContactService from '../services/enterpriseContactService';
 
-export default function EnterpriseContactModal({ visible, onClose }) {
+export default function EnterpriseContactModal({ visible, onClose, title, subtitle }) {
   const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
@@ -88,8 +88,8 @@ export default function EnterpriseContactModal({ visible, onClose }) {
         style={styles.modalOverlay}
       >
         <View style={styles.modalContent}>
-          <Text style={styles.modalTitle}>{t('enterprise.title')}</Text>
-          <Text style={styles.modalSubtitle}>{t('enterprise.subtitle')}</Text>
+          <Text style={styles.modalTitle}>{title || t('enterprise.title')}</Text>
+          <Text style={styles.modalSubtitle}>{subtitle || t('enterprise.subtitle')}</Text>
 
           <TextInput
             style={styles.modalInput}
