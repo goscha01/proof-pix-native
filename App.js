@@ -183,12 +183,18 @@ function AppNavigator() {
   );
 }
 
-// Linking configuration for deep links (OAuth redirect)
+// Linking configuration for deep links (OAuth redirect and invite links)
 const linking = {
   prefixes: ['proofpix://'],
   config: {
     screens: {
       Invite: 'invite/:token',
+      JoinTeam: {
+        path: 'join',
+        parse: {
+          invite: (invite) => decodeURIComponent(invite),
+        },
+      },
       Referral: 'referral',
       ReferralWithCode: {
         path: 'referral/:code',

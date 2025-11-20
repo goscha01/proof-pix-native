@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { useAdmin } from '../context/AdminContext';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -6,11 +6,21 @@ import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
 import { useTranslation } from 'react-i18next';
 
-export default function JoinTeamScreen({ navigation }) {
+export default function JoinTeamScreen({ navigation, route }) {
   const { t } = useTranslation();
-  const [inviteCode, setInviteCode] = useState('');
+  // Check if invite code came from deep link
+  const inviteFromDeepLink = route?.params?.invite || '';
+  const [inviteCode, setInviteCode] = useState(inviteFromDeepLink);
   const [isLoading, setIsLoading] = useState(false);
   const { isAuthenticated } = useAdmin();
+
+  // Auto-fill invite code from deep link (for users who already have the app)
+  useEffect(() => {
+    if (inviteFromDeepLink) {
+      console.log('[JoinTeam] Deep link invite detected:', inviteFromDeepLink);
+      setInviteCode(inviteFromDeepLink);
+    }
+  }, [inviteFromDeepLink]);
 
   const handleJoinTeam = async () => {
     if (!inviteCode.trim()) {

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Join ProofPix Team</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 500px;
+            margin: 50px auto;
+            padding: 20px;
+            text-align: center;
+        }
+        .invite-code {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: monospace;
+            font-size: 14px;
+            margin: 20px 0;
+            word-break: break-all;
+        }
+        .btn {
+            display: inline-block;
+            padding: 15px 30px;
+            margin: 10px;
+            background: #007bff;
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+        .copy-btn {
+            background: #28a745;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎉 You're Invited to Join a ProofPix Team!</h1>
+    
+    <p>Follow these steps to join:</p>
+    
+    <div class="invite-code" id="inviteCode">Loading...</div>
+    
+    <button class="btn copy-btn" onclick="copyCode()">📋 Copy Invite Code</button>
+    
+    <h3>Step 1: Install ProofPix</h3>
+    <a href="YOUR_APP_STORE_LINK" class="btn" id="downloadBtn">Download ProofPix</a>
+    
+    <h3>Step 2: Join Team</h3>
+    <p>Open ProofPix → Settings → Join Team<br>Paste the invite code you copied</p>
+    
+    <script>
+        // Get invite code from URL
+        const params = new URLSearchParams(window.location.search);
+        const invite = params.get('invite');
+        document.getElementById('inviteCode').textContent = invite || 'No invite code provided';
+        
+        // Detect platform and show appropriate store link
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
+        
+        const downloadBtn = document.getElementById('downloadBtn');
+        if (isIOS) {
+            downloadBtn.href = 'YOUR_IOS_APP_STORE_LINK';
+            downloadBtn.textContent = '📱 Download on App Store';
+        } else if (isAndroid) {
+            downloadBtn.href = 'YOUR_GOOGLE_PLAY_LINK';
+            downloadBtn.textContent = '📱 Download on Google Play';
+        }
+        
+        function copyCode() {
+            const code = document.getElementById('inviteCode').textContent;
+            navigator.clipboard.writeText(code);
+            alert('Invite code copied to clipboard!');
+        }
+    </script>
+</body>
+</html>

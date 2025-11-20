@@ -215,13 +215,64 @@ export default function InviteManager({ navigation }) {
       // Create invite code with token and sessionId for proxy server
       const inviteData = `${token}|${proxySessionId}`;
 
+      // Get App Store links from environment variables
+      const iosAppStoreLink = process.env.EXPO_PUBLIC_IOS_APP_STORE_URL || 'https://apps.apple.com/app/proofpix';
+      const androidPlayStoreLink = process.env.EXPO_PUBLIC_ANDROID_PLAY_STORE_URL || 'https://play.google.com/store/apps/details?id=com.proofpix';
+
+      // Share the instructions message first
       await Share.share({
-        message: `Join my ProofPix team!\n\nInvite Code:\n${inviteData}\n\nPaste this code in ProofPix → Settings → Join an Existing Team`,
+        message: `Join my ProofPix team!\n\n📱 Download ProofPix:\niOS: ${iosAppStoreLink}\nAndroid: ${androidPlayStoreLink}\n\nAfter installing, open the app, go to "Join Team" and paste the invite code I'll send you next.`,
         title: 'ProofPix Team Invite'
       });
+
+      // After first share completes, ask user if they want to share the code
+      Alert.alert(
+        'Share Invite Code?',
+        'Now share the invite code as a separate message so your team member can easily copy it.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Share Code',
+            onPress: async () => {
+              await Share.share({
+                message: inviteData,
+                title: 'ProofPix Invite Code'
+              });
+            }
+          }
+        ]
+      );
     } catch (error) {
       Alert.alert('Error', 'Could not share the invite.');
     }
+  };
+
+  const handleDeleteInvite = (token) => {
+    Alert.alert(
+      'Delete Invite',
+      'This will permanently delete this unused invite code. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (proxySessionId) {
+                await proxyService.removeInviteToken(proxySessionId, token);
+                console.log('[INVITE] Token removed from proxy server');
+              }
+              await removeInviteToken(token);
+              await fetchTeamMembers();
+              Alert.alert('Deleted', 'The invite code has been deleted successfully.');
+            } catch (error) {
+              console.error('[INVITE] Failed to delete invite token:', error);
+              Alert.alert('Error', 'Failed to delete invite code. Please try again.');
+            }
+          }
+        }
+      ]
+    );
   };
 
   const renderInviteItem = ({ item }) => (
@@ -239,6 +290,12 @@ export default function InviteManager({ navigation }) {
         </TouchableOpacity>
         <TouchableOpacity onPress={() => handleTestInvite(item)} style={styles.actionButton}>
           <Text style={styles.testButton}>Test</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => handleDeleteInvite(item)}
+          style={[styles.actionButton, styles.deleteButtonContainer]}
+        >
+          <Text style={styles.deleteButton}>✕</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -539,6 +596,18 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderWidth: 1,
     borderColor: '#dc3545',
+  },
+  deleteButton: {
+    color: '#dc3545',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  deleteButtonContainer: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#dc3545',
+    paddingHorizontal: 8,
+    maxWidth: 40,
   },
   generateButton: {
     backgroundColor: '#007bff',
