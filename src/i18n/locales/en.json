@@ -34,7 +34,8 @@
     "select": "Select",
     "all": "All",
     "continue": "Continue",
-    "apply": "Apply"
+    "apply": "Apply",
+    "deleteFromPhoneStorage": "Delete from phone storage"
   },
   "firstLoad": {
     "title": "Welcome to ProofPix",
@@ -119,9 +120,11 @@
     "uploadAll": "Upload All",
     "shareAll": "Share All",
     "deleteAll": "Delete All",
+    "deleteAllMessage": "Are you sure you want to delete all photos? This action cannot be undone.",
+    "deleteSelected": "Delete Selected",
+    "deleteSelectedMessage": "Delete {{count}} selected photo(s)? This action cannot be undone.",
     "uploadSelected": "Upload Selected",
     "shareSelected": "Share Selected",
-    "deleteSelected": "Delete Selected",
     "deselectAll": "Deselect All",
     "noPhotos": "No photos in this project",
     "noPhotosTitle": "No Photos",

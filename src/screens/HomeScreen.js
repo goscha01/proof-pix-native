@@ -28,6 +28,7 @@ import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import RoomEditor from '../components/RoomEditor';
 import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
 import EnterpriseContactModal from '../components/EnterpriseContactModal';
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 60) / 2; // 2 columns with padding
@@ -65,6 +66,9 @@ export default function HomeScreen({ navigation }) {
   const [combinedBaseUris, setCombinedBaseUris] = useState({}); // Cache for combined base image URIs
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
+  const [showDeleteProjectsConfirm, setShowDeleteProjectsConfirm] = useState(false);
+  const deletedProjectIdsRef = useRef([]);
+  const selectedProjectsForDeleteRef = useRef(new Set());
 
   // Get rooms from settings (custom or default)
   const { customRooms, saveCustomRooms, resetCustomRooms } = useSettings();
@@ -778,38 +782,129 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const handleDeleteSelectedProjects = async () => {
-    if (selectedProjects.size === 0) return;
+  const handleDeleteSelectedProjects = () => {
+    console.log('[HomeScreen] 🗑️ Delete selected projects button clicked');
+    console.log('[HomeScreen] Selected projects count:', selectedProjects.size);
+    console.log('[HomeScreen] Selected project IDs:', Array.from(selectedProjects));
     
-    const projectNames = Array.from(selectedProjects).map(id => 
-      projects.find(p => p.id === id)?.name
-    ).filter(Boolean);
+    if (selectedProjects.size === 0) {
+      console.log('[HomeScreen] ⚠️ No projects selected, returning');
+      return;
+    }
     
-    Alert.alert(
-      t('projects.deleteProjects'),
-      t('projects.deleteProjectsConfirm', { count: selectedProjects.size, names: projectNames.join(', ') }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('common.delete'), style: 'destructive', onPress: async () => {
-          const wasActiveProjectSelected = selectedProjects.has(activeProjectId);
-          for (const projectId of selectedProjects) {
-            await deleteProject(projectId, { deleteFromStorage: true });
-          }
-          setSelectedProjects(new Set());
-          setIsMultiSelectMode(false);
-          if (wasActiveProjectSelected) {
-            // After deleting the active project, select the first remaining project
-            const remainingProjects = projects.filter(p => !selectedProjects.has(p.id));
-            if (remainingProjects.length > 0) {
-              setActiveProject(remainingProjects[0].id);
-            } else {
-              setActiveProject(null);
-            }
-          }
-        }}
-      ]
-    );
+    // Store selected projects in ref before opening modal
+    selectedProjectsForDeleteRef.current = new Set(selectedProjects);
+    console.log('[HomeScreen] ✅ Stored selected projects in ref:', Array.from(selectedProjectsForDeleteRef.current));
+    
+    // Close manage projects modal first to avoid modal overlap issues
+    console.log('[HomeScreen] 🚪 Closing manage projects modal');
+    setOpenProjectVisible(false);
+    
+    // Open delete confirmation modal after a short delay to ensure manage modal is closed
+    setTimeout(() => {
+      console.log('[HomeScreen] 📋 Opening delete confirmation modal');
+      setShowDeleteProjectsConfirm(true);
+    }, 300);
   };
+
+  const handleDeleteSelectedProjectsConfirmed = async (deleteFromStorageParam) => {
+    console.log('[HomeScreen] ✅ Delete confirmation clicked');
+    console.log('[HomeScreen] deleteFromStorageParam:', deleteFromStorageParam);
+    
+    try {
+      const shouldDeleteFromStorage = deleteFromStorageParam !== undefined ? deleteFromStorageParam : true;
+      console.log('[HomeScreen] Should delete from storage:', shouldDeleteFromStorage);
+      
+      // Use stored selected projects from ref (set when modal opened)
+      const projectsToDelete = Array.from(selectedProjectsForDeleteRef.current);
+      console.log('[HomeScreen] Projects to delete:', projectsToDelete);
+      console.log('[HomeScreen] Current active project ID:', activeProjectId);
+      
+      const wasActiveProjectSelected = projectsToDelete.includes(activeProjectId);
+      console.log('[HomeScreen] Active project was selected:', wasActiveProjectSelected);
+      
+      // Store project IDs to delete before starting deletion
+      const projectIdsToDelete = projectsToDelete;
+      
+      // Store deleted IDs in ref for useEffect to handle
+      deletedProjectIdsRef.current = projectIdsToDelete;
+      
+      // Close modal immediately to prevent UI freeze
+      console.log('[HomeScreen] 🚪 Closing modal and clearing state');
+      setShowDeleteProjectsConfirm(false);
+      setSelectedProjects(new Set());
+      setIsMultiSelectMode(false);
+      selectedProjectsForDeleteRef.current = new Set(); // Clear the ref
+      
+      console.log('[HomeScreen] 🗑️ Starting deletion of', projectIdsToDelete.length, 'project(s)');
+      
+      // Delete projects sequentially
+      for (let i = 0; i < projectIdsToDelete.length; i++) {
+        const projectId = projectIdsToDelete[i];
+        console.log(`[HomeScreen] 🔄 Deleting project ${i + 1}/${projectIdsToDelete.length}: ${projectId}`);
+        try {
+          await deleteProject(projectId, { deleteFromStorage: shouldDeleteFromStorage });
+          console.log(`[HomeScreen] ✅ Successfully deleted project ${projectId}`);
+        } catch (error) {
+          console.error(`[HomeScreen] ❌ Failed to delete project ${projectId}:`, error);
+          console.error(`[HomeScreen] Error stack:`, error.stack);
+          // Continue with other deletions even if one fails
+        }
+      }
+      
+      console.log('[HomeScreen] ✅ Finished deleting all projects');
+      console.log('[HomeScreen] Remaining projects count:', projects.length);
+      
+      // Handle active project selection if active project was deleted
+      if (wasActiveProjectSelected && deletedProjectIdsRef.current.length > 0) {
+        console.log('[HomeScreen] 📌 Active project was deleted, useEffect will handle selection');
+        // The useEffect below will handle setting the new active project
+        // after projects state updates
+      }
+    } catch (error) {
+      console.error('[HomeScreen] ❌ Error deleting selected projects:', error);
+      console.error('[HomeScreen] Error stack:', error.stack);
+      Alert.alert(t('common.error'), 'Failed to delete some projects. Please try again.');
+      deletedProjectIdsRef.current = [];
+    }
+  };
+
+  // Handle active project selection after projects are deleted
+  useEffect(() => {
+    if (deletedProjectIdsRef.current.length > 0) {
+      console.log('[HomeScreen] 🔄 useEffect triggered after deletion');
+      console.log('[HomeScreen] Deleted project IDs:', deletedProjectIdsRef.current);
+      console.log('[HomeScreen] Current active project ID:', activeProjectId);
+      console.log('[HomeScreen] Available projects:', projects.map(p => ({ id: p.id, name: p.name })));
+      
+      const deletedIds = [...deletedProjectIdsRef.current];
+      // Clear the ref first to prevent re-running
+      deletedProjectIdsRef.current = [];
+      
+      // Check if current active project was deleted
+      if (activeProjectId && deletedIds.includes(activeProjectId)) {
+        console.log('[HomeScreen] 📌 Active project was deleted, finding new active project');
+        // Find first remaining project
+        const remainingProjects = projects.filter(p => !deletedIds.includes(p.id));
+        console.log('[HomeScreen] Remaining projects:', remainingProjects.map(p => ({ id: p.id, name: p.name })));
+        
+        if (remainingProjects.length > 0) {
+          const newActiveProjectId = remainingProjects[0].id;
+          console.log('[HomeScreen] ✅ Setting new active project:', newActiveProjectId);
+          setActiveProject(newActiveProjectId);
+        } else {
+          console.log('[HomeScreen] ⚠️ No remaining projects, setting active project to null');
+          setActiveProject(null);
+        }
+      } else if (!activeProjectId && projects.length > 0) {
+        // If no active project but projects exist, set the first one
+        console.log('[HomeScreen] 📌 No active project, setting first project as active:', projects[0].id);
+        setActiveProject(projects[0].id);
+      } else {
+        console.log('[HomeScreen] ℹ️ Active project selection not needed');
+      }
+    }
+  }, [projects, activeProjectId, setActiveProject]);
 
   const exitMultiSelectMode = () => {
     setIsMultiSelectMode(false);
@@ -1603,6 +1698,31 @@ export default function HomeScreen({ navigation }) {
       <EnterpriseContactModal
         visible={showEnterpriseModal}
         onClose={() => setShowEnterpriseModal(false)}
+      />
+
+      {/* Delete Selected Projects Confirmation Modal */}
+      <DeleteConfirmationModal
+        visible={showDeleteProjectsConfirm}
+        title={t('projects.deleteProjects')}
+        message={showDeleteProjectsConfirm ? (() => {
+          // Use ref to get selected projects (stored when modal opened)
+          const selectedIds = Array.from(selectedProjectsForDeleteRef.current);
+          const projectNames = selectedIds.map(id => 
+            projects.find(p => p.id === id)?.name
+          ).filter(Boolean);
+          return t('projects.deleteProjectsConfirm', { count: selectedIds.length, names: projectNames.join(', ') });
+        })() : ''}
+        onConfirm={handleDeleteSelectedProjectsConfirmed}
+        onCancel={() => {
+          console.log('[HomeScreen] ❌ Delete confirmation cancelled');
+          setShowDeleteProjectsConfirm(false);
+          selectedProjectsForDeleteRef.current = new Set(); // Clear ref on cancel
+          // Reopen manage projects modal if it was open before
+          setTimeout(() => {
+            setOpenProjectVisible(true);
+          }, 100);
+        }}
+        deleteFromStorageDefault={true}
       />
     </SafeAreaView>
   );

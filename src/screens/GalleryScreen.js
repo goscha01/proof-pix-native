@@ -39,6 +39,7 @@ import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
 import { UploadDetailsModal } from '../components/BackgroundUploadStatus';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import UploadCompletionModal from '../components/UploadCompletionModal';
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal';
 import { filterNewPhotos, markPhotosAsUploaded } from '../services/uploadTracker';
 import Share from 'react-native-share';
 import JSZip from 'jszip';
@@ -263,6 +264,8 @@ export default function GalleryScreen({ navigation, route }) {
   }, [showLabels, beforeLabelPosition, afterLabelPosition, labelBackgroundColor, labelTextColor, labelSize, labelFontFamily, labelMarginVertical, labelMarginHorizontal]);
   const [deleteFromStorage, setDeleteFromStorage] = useState(true);
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [showDeleteSelectedConfirm, setShowDeleteSelectedConfirm] = useState(false);
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
   const [selectedShareTypes, setSelectedShareTypes] = useState({ before: true, after: true, combined: true });
   
@@ -2523,15 +2526,16 @@ export default function GalleryScreen({ navigation, route }) {
     }
   };
 
-  const handleDeleteAllConfirmed = async () => {
+  const handleDeleteAllConfirmed = async (deleteFromStorageParam) => {
     try {
+      const shouldDeleteFromStorage = deleteFromStorageParam !== undefined ? deleteFromStorageParam : deleteFromStorage;
       if (activeProjectId) {
         // Delete only the active project and its photos
-        await deleteProject(activeProjectId, { deleteFromStorage });
+        await deleteProject(activeProjectId, { deleteFromStorage: shouldDeleteFromStorage });
         setActiveProject(null);
       } else {
         // No active project: fall back to deleting everything
-        if (deleteFromStorage) {
+        if (shouldDeleteFromStorage) {
           // Delete known photos and also purge any base/combined images saved by editor/capture
           await deletePhotosFromDevice(photos);
           await purgeAllDevicePhotos();
@@ -2540,6 +2544,7 @@ export default function GalleryScreen({ navigation, route }) {
       }
     } finally {
       setConfirmDeleteVisible(false);
+      setShowDeleteAllConfirm(false);
     }
   };
 
@@ -2646,7 +2651,7 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   // Handle delete selected photos
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = () => {
     const selected = getSelectedPhotos();
     const selectedSets = getSelectedPhotoSets();
     
@@ -2655,37 +2660,58 @@ export default function GalleryScreen({ navigation, route }) {
       return;
     }
 
-    Alert.alert(
-      t('gallery.deleteAllTitle'),
-      `Delete ${selected.length + selectedSets.length} selected photo(s)?`,
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Delete individual photos
-              for (const photo of selected) {
-                await deletePhoto(photo.id);
-              }
-              // Delete combined photo sets
-              for (const set of selectedSets) {
-                if (set.before) await deletePhoto(set.before.id);
-                if (set.after) await deletePhoto(set.after.id);
-              }
-              // Clear selection
-              setSelectedPhotos(new Set());
-              isSelectionModeRef.current = false;
-              setIsSelectionMode(false);
-              setShowOnlySelected(false); // Clear filter when deleting selected
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete some photos');
-            }
-          }
+    setShowDeleteSelectedConfirm(true);
+  };
+
+  const handleDeleteSelectedConfirmed = async (deleteFromStorageParam) => {
+    const shouldDeleteFromStorage = deleteFromStorageParam !== undefined ? deleteFromStorageParam : true;
+
+    try {
+      // Get selected photos/sets before starting deletion
+      const selected = getSelectedPhotos();
+      const selectedSets = getSelectedPhotoSets();
+      
+      // Collect all photo IDs to delete
+      const photoIdsToDelete = new Set();
+      selected.forEach(photo => photoIdsToDelete.add(photo.id));
+      selectedSets.forEach(set => {
+        if (set.before) photoIdsToDelete.add(set.before.id);
+        if (set.after) photoIdsToDelete.add(set.after.id);
+      });
+
+      // Close modal immediately to prevent UI freeze
+      setShowDeleteSelectedConfirm(false);
+      setSelectedPhotos(new Set());
+      isSelectionModeRef.current = false;
+      setIsSelectionMode(false);
+      setShowOnlySelected(false); // Clear filter when deleting selected
+
+      // Delete photos sequentially
+      // Note: deletePhoto always deletes from device
+      // TODO: Update deletePhoto to accept options to conditionally skip device deletion
+      // Delete individual photos
+      for (const photo of selected) {
+        try {
+          await deletePhoto(photo.id);
+        } catch (error) {
+          console.error(`[GalleryScreen] Failed to delete photo ${photo.id}:`, error);
+          // Continue with other deletions even if one fails
         }
-      ]
-    );
+      }
+      // Delete combined photo sets
+      for (const set of selectedSets) {
+        try {
+          if (set.before) await deletePhoto(set.before.id);
+          if (set.after) await deletePhoto(set.after.id);
+        } catch (error) {
+          console.error(`[GalleryScreen] Failed to delete photo set:`, error);
+          // Continue with other deletions even if one fails
+        }
+      }
+    } catch (error) {
+      console.error('[GalleryScreen] Error deleting selected photos:', error);
+      Alert.alert(t('common.error'), 'Failed to delete some photos. Please try again.');
+    }
   };
 
   // Handle preview selected photos - filter gallery to show only selected photos
@@ -4217,8 +4243,7 @@ export default function GalleryScreen({ navigation, route }) {
                       style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
                       onPress={() => {
                         setManageVisible(false);
-                        // Delete immediately without confirmation
-                        handleDeleteAllConfirmed();
+                        setShowDeleteAllConfirm(true);
                       }}
                     >
                       <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>
@@ -4573,7 +4598,30 @@ export default function GalleryScreen({ navigation, route }) {
         onMinimize={() => setShowUploadDetails(false)}
       />
 
-      {/* Confirm Delete Modal removed per user request */}
+      {/* Delete All Confirmation Modal */}
+      <DeleteConfirmationModal
+        visible={showDeleteAllConfirm}
+        title={activeProjectId ? t('gallery.deleteProjectTitle') : t('gallery.deleteAll')}
+        message={activeProjectId ? t('gallery.deleteProjectMessage') : t('gallery.deleteAllMessage', { default: 'Are you sure you want to delete all photos? This action cannot be undone.' })}
+        onConfirm={handleDeleteAllConfirmed}
+        onCancel={() => setShowDeleteAllConfirm(false)}
+        deleteFromStorageDefault={true}
+      />
+
+      {/* Delete Selected Confirmation Modal */}
+      <DeleteConfirmationModal
+        visible={showDeleteSelectedConfirm}
+        title={t('gallery.deleteSelected')}
+        message={showDeleteSelectedConfirm ? (() => {
+          const selected = getSelectedPhotos();
+          const selectedSets = getSelectedPhotoSets();
+          const count = selected.length + selectedSets.length;
+          return t('gallery.deleteSelectedMessage', { count, default: `Delete ${count} selected photo(s)? This action cannot be undone.` });
+        })() : ''}
+        onConfirm={handleDeleteSelectedConfirmed}
+        onCancel={() => setShowDeleteSelectedConfirm(false)}
+        deleteFromStorageDefault={true}
+      />
 
     </View>
   );

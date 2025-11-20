@@ -1,17 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Modal,
-  Alert
 } from 'react-native';
 import { COLORS } from '../constants/rooms';
 import { useTranslation } from 'react-i18next';
+import DeleteConfirmationModal from './DeleteConfirmationModal';
 
 const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearCompleted, onDeleteProject }) => {
   const { t } = useTranslation();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  
   if (!completedUploads || completedUploads.length === 0) return null;
 
   const latestUpload = completedUploads[completedUploads.length - 1];
@@ -21,6 +23,23 @@ const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearComp
   const handleClose = () => {
     onClearCompleted();
     onClose();
+  };
+
+  const handleDeleteConfirm = (deleteFromStorage) => {
+    if (onDeleteProject) {
+      // If onDeleteProject accepts a parameter, pass it; otherwise call without parameter
+      if (typeof onDeleteProject === 'function' && onDeleteProject.length > 0) {
+        onDeleteProject(deleteFromStorage);
+      } else {
+        onDeleteProject();
+      }
+    }
+    setShowDeleteConfirm(false);
+    handleClose();
+  };
+
+  const handleDeleteCancel = () => {
+    setShowDeleteConfirm(false);
   };
 
   const getCompletionMessage = () => {
@@ -89,23 +108,7 @@ const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearComp
             
             <TouchableOpacity
               style={[styles.button, styles.deleteButton]}
-              onPress={() => {
-                Alert.alert(
-                  t('gallery.deleteProjectTitle'),
-                  t('gallery.deleteProjectMessage'),
-                  [
-                    { text: t('common.cancel'), style: 'cancel' },
-                    { 
-                      text: t('common.delete'), 
-                      style: 'destructive',
-                      onPress: () => {
-                        onDeleteProject && onDeleteProject();
-                        handleClose();
-                      }
-                    }
-                  ]
-                );
-              }}
+              onPress={() => setShowDeleteConfirm(true)}
             >
               <Text style={styles.deleteButtonText}>
                 🗑️ {t('gallery.deleteProjectButton')}
@@ -114,6 +117,15 @@ const UploadCompletionModal = ({ visible, completedUploads, onClose, onClearComp
           </View>
         </View>
       </View>
+
+      <DeleteConfirmationModal
+        visible={showDeleteConfirm}
+        title={t('gallery.deleteProjectTitle')}
+        message={t('gallery.deleteProjectMessage')}
+        onConfirm={handleDeleteConfirm}
+        onCancel={handleDeleteCancel}
+        deleteFromStorageDefault={true}
+      />
     </Modal>
   );
 };
