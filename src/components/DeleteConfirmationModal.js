@@ -13,6 +13,7 @@ import { COLORS } from '../constants/rooms';
 import { useTranslation } from 'react-i18next';
 
 const DELETE_FROM_STORAGE_KEY = '@delete_from_storage_preference';
+const DELETE_WARNING_SHOWN_KEY = '@delete_warning_shown';
 
 const DeleteConfirmationModal = ({
   visible,
@@ -110,12 +111,58 @@ const DeleteConfirmationModal = ({
     }
   }, [visible, title, message, deleteFromStorageDefault]);
 
-  const handleConfirm = () => {
+  const [showDeleteWarning, setShowDeleteWarning] = useState(false);
+  const pendingDeleteRef = useRef(false); // Track if we're waiting to show warning
+
+  const handleConfirm = async () => {
     console.log('[DeleteConfirmationModal] ✅ Confirm button clicked');
     console.log('[DeleteConfirmationModal] deleteFromStorage:', deleteFromStorage);
+    console.log('[DeleteConfirmationModal] userPlan:', userPlan);
+    
+    // For non-starter users, show warning on first use if checkbox is checked
+    if (deleteFromStorage && userPlan !== 'starter') {
+      try {
+        const warningShown = await AsyncStorage.getItem(DELETE_WARNING_SHOWN_KEY);
+        if (!warningShown) {
+          console.log('[DeleteConfirmationModal] ⚠️ First time delete with checkbox - showing warning');
+          setShowDeleteWarning(true);
+          pendingDeleteRef.current = true; // Mark that we're waiting to confirm
+          return; // Don't proceed yet, wait for warning confirmation
+        }
+      } catch (error) {
+        console.error('[DeleteConfirmationModal] Error checking warning status:', error);
+      }
+    }
+    
+    // Proceed with deletion
     console.log('[DeleteConfirmationModal] Calling onConfirm callback...');
     onConfirm(deleteFromStorage);
     console.log('[DeleteConfirmationModal] ✅ onConfirm callback called');
+  };
+
+  const handleWarningConfirm = async () => {
+    console.log('[DeleteConfirmationModal] ✅ Warning confirmed, proceeding with delete');
+    try {
+      // Mark warning as shown
+      await AsyncStorage.setItem(DELETE_WARNING_SHOWN_KEY, 'true');
+      setShowDeleteWarning(false);
+      pendingDeleteRef.current = false;
+      
+      // Now proceed with deletion
+      onConfirm(deleteFromStorage);
+    } catch (error) {
+      console.error('[DeleteConfirmationModal] Error saving warning status:', error);
+      // Still proceed with deletion even if save fails
+      setShowDeleteWarning(false);
+      pendingDeleteRef.current = false;
+      onConfirm(deleteFromStorage);
+    }
+  };
+
+  const handleWarningCancel = () => {
+    console.log('[DeleteConfirmationModal] ❌ Warning cancelled');
+    setShowDeleteWarning(false);
+    pendingDeleteRef.current = false;
   };
 
   const handleCancel = async () => {
@@ -200,6 +247,39 @@ const DeleteConfirmationModal = ({
           </View>
         </View>
       </View>
+
+      {/* Delete Warning Modal - Shown for non-starter users on first use */}
+      {showDeleteWarning && (
+        <View style={styles.warningModalOverlay}>
+          <View style={styles.warningModalContent}>
+            <View style={styles.warningHeader}>
+              <Text style={styles.warningIcon}>⚠️</Text>
+              <Text style={styles.warningTitle}>{t('common.warning')}</Text>
+            </View>
+            <Text style={styles.warningMessage}>
+              {t('common.deleteFromStorageWarning', { default: 'Checking the "Delete from phone storage" box will permanently delete photos from your device. This action cannot be undone.' })}
+            </Text>
+            <View style={styles.warningFooter}>
+              <TouchableOpacity
+                style={[styles.button, styles.cancelButton]}
+                onPress={handleWarningCancel}
+              >
+                <Text style={styles.cancelButtonText}>
+                  {t('common.cancel')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.button, styles.deleteButton]}
+                onPress={handleWarningConfirm}
+              >
+                <Text style={styles.deleteButtonText}>
+                  {t('common.continue')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      )}
 
       {/* Plan Modal Overlay - Rendered inside delete confirmation modal */}
       {planModalVisible && (
@@ -455,6 +535,58 @@ const styles = StyleSheet.create({
     color: COLORS.GRAY,
     marginTop: 8,
     textAlign: 'center',
+  },
+  warningModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10003,
+    elevation: 10003,
+    padding: 20,
+  },
+  warningModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  warningHeader: {
+    alignItems: 'center',
+    padding: 24,
+    paddingBottom: 16,
+  },
+  warningIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  warningTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.TEXT,
+  },
+  warningMessage: {
+    fontSize: 16,
+    color: COLORS.TEXT,
+    textAlign: 'center',
+    paddingHorizontal: 24,
+    paddingBottom: 24,
+    lineHeight: 22,
+  },
+  warningFooter: {
+    flexDirection: 'row',
+    padding: 24,
+    paddingTop: 16,
+    gap: 12,
   },
   footer: {
     flexDirection: 'row',
