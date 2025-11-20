@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npx expo install expo-device)",
-      "Bash(npx expo start:*)"
+      "Bash(npx expo start:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []
