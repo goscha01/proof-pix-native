@@ -514,6 +514,7 @@ export default function SettingsScreen({ navigation, route }) {
     userMode,
     teamInfo,
     saveFolderId,
+    inviteTokens,
     addInviteToken,
     removeInviteToken,
     adminSignIn,
@@ -740,6 +741,39 @@ export default function SettingsScreen({ navigation, route }) {
       console.log('[SETUP] Running team setup with proxy server...');
       setIsSigningIn(true); // Show a loading indicator
 
+      // Step 0: Check if we have a serverAuthCode - if not, user needs to sign in again
+      const googleAuthService = await import('../services/googleAuthService');
+      const serverAuthCode = await googleAuthService.default.getServerAuthCode();
+      if (!serverAuthCode) {
+        console.log('[SETUP] No serverAuthCode available - prompting user to reconnect');
+        setIsSigningIn(false);
+        Alert.alert(
+          'Reconnect Required',
+          'To set up team features, you need to reconnect with Google Drive to refresh your authorization.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Reconnect Now',
+              onPress: async () => {
+                try {
+                  await signOut();
+                  setTimeout(() => {
+                    Alert.alert(
+                      'Ready to Reconnect',
+                      'Please tap "Connect with Google Drive" below to sign in again and complete team setup.'
+                    );
+                  }, 500);
+                } catch (signOutError) {
+                  console.error('[SETUP] Error signing out for reconnect:', signOutError);
+                  Alert.alert('Error', 'Failed to disconnect. Please try manually disconnecting from Settings.');
+                }
+              }
+            }
+          ]
+        );
+        return;
+      }
+
       // Step 1: Find or create the Google Drive folder
       // Note: makeAuthenticatedRequest will handle checking if user is signed in
       const folderId = await googleDriveService.findOrCreateProofPixFolder();
@@ -766,11 +800,44 @@ export default function SettingsScreen({ navigation, route }) {
 
     } catch (error) {
       console.error('[SETUP] Setup failed:', error.message);
-      Alert.alert(
-        t('settings.setupFailed'),
-        error.message || t('settings.setupFailedMessage'),
-        [{ text: t('common.ok'), style: 'cancel' }]
-      );
+
+      // Check if it's an auth code expiration error
+      const isAuthExpired = error.message?.includes('authorization code has expired') ||
+                           error.message?.includes('already been used');
+
+      if (isAuthExpired) {
+        Alert.alert(
+          'Setup Failed',
+          'Your Google authorization has expired. Please disconnect and sign in again to continue.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Sign In Again',
+              onPress: async () => {
+                try {
+                  await signOut();
+                  // Wait a moment for sign out to complete
+                  setTimeout(() => {
+                    Alert.alert(
+                      'Ready to Sign In',
+                      'Please tap "Connect with Google Drive" below to sign in again.'
+                    );
+                  }, 500);
+                } catch (signOutError) {
+                  console.error('[SETUP] Error signing out:', signOutError);
+                  Alert.alert('Error', 'Failed to disconnect. Please try manually disconnecting from Settings.');
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Setup Failed',
+          error.message || 'An error occurred while setting up team features. Please try again.',
+          [{ text: 'OK', style: 'cancel' }]
+        );
+      }
     } finally {
       setIsSigningIn(false);
     }
@@ -2071,61 +2138,91 @@ export default function SettingsScreen({ navigation, route }) {
                     </TouchableOpacity>
                     
                     {/* Connect Team Button - Always visible */}
+                    {(() => {
+                      const buttonDisabled = isSigningIn;
+                      const isStyleDisabled = (!userPlan || userPlan === 'starter') || userPlan === 'pro' || isSigningIn;
+                      console.log('[TEAM_BUTTON_RENDER] Rendering button - userPlan:', userPlan, 'disabled:', buttonDisabled, 'styledAsDisabled:', isStyleDisabled);
+                      return null;
+                    })()}
                     <TouchableOpacity
                       style={[
                         styles.featureButton,
                         ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || isSigningIn) && styles.buttonDisabled
                       ]}
                       onPress={async () => {
+                        console.log('[TEAM_BUTTON] Button pressed');
+                        console.log('[TEAM_BUTTON] userPlan:', userPlan);
+                        console.log('[TEAM_BUTTON] isAuthenticated:', isAuthenticated);
+                        console.log('[TEAM_BUTTON] userMode:', userMode);
+                        console.log('[TEAM_BUTTON] isSigningIn:', isSigningIn);
+
                         const isStarter = !userPlan || userPlan === 'starter';
                         const isPro = userPlan === 'pro';
                         const isBusiness = userPlan === 'business';
                         const isEnterprise = userPlan === 'enterprise';
-                        
+
+                        console.log('[TEAM_BUTTON] isStarter:', isStarter);
+                        console.log('[TEAM_BUTTON] isPro:', isPro);
+                        console.log('[TEAM_BUTTON] isBusiness:', isBusiness);
+                        console.log('[TEAM_BUTTON] isEnterprise:', isEnterprise);
+
                         // Starter - show plan popup
                         if (isStarter) {
+                          console.log('[TEAM_BUTTON] Showing plan modal for starter');
                           setShowPlanModal(true);
                           return;
                         }
-                        
+
                         // Pro - show popup saying not available
                         if (isPro) {
+                          console.log('[TEAM_BUTTON] Showing unavailable alert for pro');
                           Alert.alert(
                             t('settings.featureUnavailable'),
                             t('settings.teamSetupFeature')
                           );
                           return;
                         }
-                        
+
                         // Business - check team member limit
                         if (isBusiness) {
+                          console.log('[TEAM_BUTTON] Business plan detected');
                           const maxTeamMembers = getLimit('maxTeamMembers', userPlan);
                           const currentTeamMembers = inviteTokens?.length || 0;
-                          
-                          if (exceedsLimit('maxTeamMembers', currentTeamMembers)) {
+                          console.log('[TEAM_BUTTON] maxTeamMembers:', maxTeamMembers, 'currentTeamMembers:', currentTeamMembers);
+
+                          if (exceedsLimit('maxTeamMembers', userPlan, currentTeamMembers)) {
+                            console.log('[TEAM_BUTTON] Team limit exceeded');
                             Alert.alert(
                               t('settings.teamLimitReached'),
                               t('settings.teamLimitMessage', { limit: maxTeamMembers })
                             );
                             return;
                           }
-                          
+
                           if (!isAuthenticated) {
+                            console.log('[TEAM_BUTTON] Not authenticated, showing alert');
                             Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
                             return;
                           }
+                          console.log('[TEAM_BUTTON] Calling handleSetupTeam for business');
                           await handleSetupTeam();
                           return;
                         }
-                        
+
                         // Enterprise - allow unlimited team members
                         if (isEnterprise) {
+                          console.log('[TEAM_BUTTON] Enterprise plan detected');
                           if (!isAuthenticated) {
+                            console.log('[TEAM_BUTTON] Not authenticated, showing alert');
                             Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
                             return;
                           }
+                          console.log('[TEAM_BUTTON] Calling handleSetupTeam for enterprise');
                           await handleSetupTeam();
+                          return;
                         }
+
+                        console.log('[TEAM_BUTTON] No matching plan condition - this should not happen!');
                       }}
                       disabled={isSigningIn}
                     >
@@ -2453,40 +2550,77 @@ export default function SettingsScreen({ navigation, route }) {
                     ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || isSigningIn) && styles.buttonDisabled
                   ]}
                   onPress={async () => {
+                    console.log('[TEAM_BUTTON_2] Button 2 pressed');
+                    console.log('[TEAM_BUTTON_2] userPlan:', userPlan);
+                    console.log('[TEAM_BUTTON_2] isAuthenticated:', isAuthenticated);
+
                     const isPro = userPlan === 'pro';
                     const isBusiness = userPlan === 'business';
                     const isEnterprise = userPlan === 'enterprise';
-                    
+
+                    console.log('[TEAM_BUTTON_2] isPro:', isPro, 'isBusiness:', isBusiness, 'isEnterprise:', isEnterprise);
+
                     // Pro - show popup saying not available
                     if (isPro) {
+                      console.log('[TEAM_BUTTON_2] Showing unavailable for Pro');
                       Alert.alert(
                         t('settings.featureUnavailable'),
                         t('settings.teamSetupFeature')
                       );
                       return;
                     }
-                    
+
                     // Business - check team member limit
                     if (isBusiness) {
-                      const maxTeamMembers = getLimit('maxTeamMembers', userPlan);
-                      const currentTeamMembers = inviteTokens?.length || 0;
-                      
-                      if (exceedsLimit('maxTeamMembers', currentTeamMembers)) {
-                        Alert.alert(
-                          t('settings.teamLimitReached'),
-                          t('settings.teamLimitMessage', { limit: maxTeamMembers })
-                        );
+                      try {
+                        console.log('[TEAM_BUTTON_2] Business plan - checking limits');
+                        console.log('[TEAM_BUTTON_2] getLimit function:', typeof getLimit);
+                        console.log('[TEAM_BUTTON_2] exceedsLimit function:', typeof exceedsLimit);
+
+                        const maxTeamMembers = getLimit('maxTeamMembers', userPlan);
+                        const currentTeamMembers = inviteTokens?.length || 0;
+                        console.log('[TEAM_BUTTON_2] maxTeamMembers:', maxTeamMembers, 'currentTeamMembers:', currentTeamMembers);
+
+                        if (exceedsLimit('maxTeamMembers', userPlan, currentTeamMembers)) {
+                          console.log('[TEAM_BUTTON_2] Team limit exceeded');
+                          Alert.alert(
+                            t('settings.teamLimitReached'),
+                            t('settings.teamLimitMessage', { limit: maxTeamMembers })
+                          );
+                          return;
+                        }
+
+                        if (!isAuthenticated) {
+                          console.log('[TEAM_BUTTON_2] Not authenticated');
+                          Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
+                          return;
+                        }
+
+                        console.log('[TEAM_BUTTON_2] Calling handleSetupTeam for Business');
+                        await handleSetupTeam();
+                        return;
+                      } catch (error) {
+                        console.error('[TEAM_BUTTON_2] Error in Business handler:', error);
+                        console.error('[TEAM_BUTTON_2] Error stack:', error.stack);
+                        Alert.alert('Error', error.message || 'Failed to setup team');
                         return;
                       }
-                      
+                    }
+
+                    // Enterprise - allow unlimited team members
+                    if (isEnterprise) {
+                      console.log('[TEAM_BUTTON_2] Enterprise plan detected');
+                      if (!isAuthenticated) {
+                        console.log('[TEAM_BUTTON_2] Not authenticated');
+                        Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
+                        return;
+                      }
+                      console.log('[TEAM_BUTTON_2] Calling handleSetupTeam for Enterprise');
                       await handleSetupTeam();
                       return;
                     }
-                    
-                    // Enterprise - allow unlimited team members
-                    if (isEnterprise) {
-                      await handleSetupTeam();
-                    }
+
+                    console.log('[TEAM_BUTTON_2] No plan matched - doing nothing');
                   }}
                   disabled={isSigningIn}
                 >

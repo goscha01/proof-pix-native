@@ -599,6 +599,14 @@ export function AdminProvider({ children }) {
    */
   const switchToIndividualMode = async () => {
     try {
+      console.log('[ADMIN] switchToIndividualMode called - starting switch');
+      console.log('[ADMIN] Current state:', {
+        userMode,
+        proxySessionId,
+        inviteTokens: inviteTokens?.length || 0,
+        folderId
+      });
+
       // Get stored individual plan, mode, and name
       const [storedPlan, storedMode, storedName] = await AsyncStorage.multiGet([
         STORAGE_KEYS.STORED_INDIVIDUAL_PLAN,
@@ -611,6 +619,7 @@ export function AdminProvider({ children }) {
       const individualName = storedName[1] || '';
 
       console.log('[ADMIN] Switching back to individual mode:', { plan: individualPlan, mode: individualMode, userName: individualName });
+      console.log('[ADMIN] Stored values from AsyncStorage:', { storedPlan: storedPlan[1], storedMode: storedMode[1], storedName: storedName[1] });
 
       // Clear team member info
       await AsyncStorage.removeItem(STORAGE_KEYS.TEAM_MEMBER_INFO);

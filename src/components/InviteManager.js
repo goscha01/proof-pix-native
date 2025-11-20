@@ -32,18 +32,29 @@ export default function InviteManager({ navigation }) {
 
   // Fetch team members
   const fetchTeamMembers = async () => {
+    console.log('[INVITE_MANAGER] fetchTeamMembers called, proxySessionId:', proxySessionId);
     if (proxySessionId) {
       setLoadingMembers(true);
       try {
+        console.log('[INVITE_MANAGER] Fetching team members from proxy...');
         const result = await proxyService.getTeamMembers(proxySessionId);
+        console.log('[INVITE_MANAGER] Team members result:', result);
         if (result.success && result.teamMembers) {
+          console.log('[INVITE_MANAGER] Setting team members:', result.teamMembers.length, 'members');
           setTeamMembers(result.teamMembers);
+        } else {
+          console.log('[INVITE_MANAGER] No team members found or result not successful');
+          setTeamMembers([]);
         }
       } catch (error) {
-        console.error('Failed to fetch team members:', error);
+        console.error('[INVITE_MANAGER] Failed to fetch team members:', error);
+        setTeamMembers([]);
       } finally {
         setLoadingMembers(false);
       }
+    } else {
+      console.log('[INVITE_MANAGER] No proxySessionId, clearing team members');
+      setTeamMembers([]);
     }
   };
 

@@ -64,6 +64,17 @@ class ProxyService {
       if (!response.ok) {
         const errorText = await response.text();
         console.error('[PROXY] Init error response:', errorText);
+
+        // If it's an auth code error, clear the stored code so it won't be reused
+        if (errorText.includes('authorization code has expired') || errorText.includes('already been used')) {
+          console.log('[PROXY] Clearing expired/used serverAuthCode');
+          try {
+            await googleAuthService.clearServerAuthCode();
+          } catch (clearError) {
+            console.warn('[PROXY] Failed to clear serverAuthCode:', clearError.message);
+          }
+        }
+
         throw new Error(`Failed to initialize proxy session: ${response.status} - ${errorText}`);
       }
 
