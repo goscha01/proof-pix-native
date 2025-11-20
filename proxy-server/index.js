@@ -1055,6 +1055,255 @@ function generateSessionId() {
   ).join('');
 }
 
+// ============================================================================
+// REFERRAL SYSTEM ENDPOINTS
+// ============================================================================
+
+/**
+ * Track referral installation
+ * POST /api/referrals/track-installation
+ * Body: { referralCode, deviceId, timestamp }
+ */
+app.post('/api/referrals/track-installation', async (req, res) => {
+  try {
+    const { referralCode, deviceId, timestamp } = req.body;
+
+    if (!referralCode || !deviceId) {
+      return res.status(400).json({ error: 'Missing referralCode or deviceId' });
+    }
+
+    console.log(`[REFERRAL] Tracking installation for code: ${referralCode}, device: ${deviceId}`);
+
+    // Check if this device already used a referral code
+    const existingReferral = await kv.get(`referral:device:${deviceId}`);
+    if (existingReferral) {
+      console.log(`[REFERRAL] Device ${deviceId} already used referral code`);
+      return res.status(400).json({
+        error: 'Device already used a referral code',
+        existingReferralId: existingReferral
+      });
+    }
+
+    // Get referrer info from referral code
+    const referrerUserId = await kv.get(`referralCode:${referralCode}`);
+    if (!referrerUserId) {
+      console.log(`[REFERRAL] Invalid referral code: ${referralCode}`);
+      return res.status(404).json({ error: 'Invalid referral code' });
+    }
+
+    // Create referral record
+    const referralId = `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const referral = {
+      id: referralId,
+      referrerUserId,
+      referralCode,
+      deviceId,
+      status: 'pending',
+      createdAt: timestamp || new Date().toISOString(),
+      completedAt: null,
+      referredUserId: null
+    };
+
+    // Store referral with 30-day expiration
+    await kv.set(`referral:${referralId}`, referral, { ex: 30 * 24 * 60 * 60 });
+
+    // Map device to referral (prevent multiple uses)
+    await kv.set(`referral:device:${deviceId}`, referralId, { ex: 30 * 24 * 60 * 60 });
+
+    // Add to pending referrals for this referrer
+    await kv.sadd(`referrals:pending:${referrerUserId}`, referralId);
+
+    console.log(`[REFERRAL] Installation tracked successfully: ${referralId}`);
+
+    res.json({
+      success: true,
+      referralId
+    });
+  } catch (error) {
+    console.error('[REFERRAL] Track installation error:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+/**
+ * Complete referral setup (when new user finishes onboarding)
+ * POST /api/referrals/complete-setup
+ * Body: { referralCode, userId, setupCompletedAt }
+ */
+app.post('/api/referrals/complete-setup', async (req, res) => {
+  try {
+    const { referralCode, userId, setupCompletedAt } = req.body;
+
+    if (!referralCode || !userId) {
+      return res.status(400).json({ error: 'Missing referralCode or userId' });
+    }
+
+    console.log(`[REFERRAL] Completing setup for code: ${referralCode}, user: ${userId}`);
+
+    // Get referrer info
+    const referrerUserId = await kv.get(`referralCode:${referralCode}`);
+    if (!referrerUserId) {
+      return res.status(404).json({ error: 'Invalid referral code' });
+    }
+
+    // Prevent self-referral
+    if (referrerUserId === userId) {
+      console.log(`[REFERRAL] Self-referral attempt blocked for user: ${userId}`);
+      return res.status(400).json({ error: 'Cannot use your own referral code' });
+    }
+
+    // Find pending referral for this code
+    const pendingReferrals = await kv.smembers(`referrals:pending:${referrerUserId}`);
+    let referralId = null;
+    let referral = null;
+
+    for (const refId of pendingReferrals) {
+      const ref = await kv.get(`referral:${refId}`);
+      if (ref && ref.referralCode === referralCode && ref.status === 'pending') {
+        referralId = refId;
+        referral = ref;
+        break;
+      }
+    }
+
+    if (!referralId || !referral) {
+      return res.status(404).json({ error: 'No pending referral found for this code' });
+    }
+
+    // Update referral status
+    referral.status = 'completed';
+    referral.completedAt = setupCompletedAt || new Date().toISOString();
+    referral.referredUserId = userId;
+    await kv.set(`referral:${referralId}`, referral);
+
+    // Move from pending to completed
+    await kv.srem(`referrals:pending:${referrerUserId}`, referralId);
+    await kv.sadd(`referrals:completed:${referrerUserId}`, referralId);
+
+    // Calculate reward (stackable: 1st=1mo, 2nd=1mo, 3+=1mo per referral)
+    const completedCount = await kv.scard(`referrals:completed:${referrerUserId}`);
+    const monthsEarned = 1; // Always 1 month per successful referral
+
+    // Apply reward to referrer
+    const reward = {
+      id: `reward_${Date.now()}`,
+      referralId,
+      referrerUserId,
+      monthsEarned,
+      appliedAt: new Date().toISOString()
+    };
+
+    await kv.set(`reward:${reward.id}`, reward);
+    await kv.sadd(`rewards:${referrerUserId}`, reward.id);
+
+    // Update referrer stats
+    await kv.hincrby(`referralStats:${referrerUserId}`, 'completedInvites', 1);
+    await kv.hincrby(`referralStats:${referrerUserId}`, 'monthsEarned', monthsEarned);
+
+    console.log(`[REFERRAL] Setup completed! Referrer ${referrerUserId} earned ${monthsEarned} month(s)`);
+
+    res.json({
+      success: true,
+      referrerId: referrerUserId,
+      monthsEarned,
+      totalCompletedReferrals: completedCount
+    });
+  } catch (error) {
+    console.error('[REFERRAL] Complete setup error:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+/**
+ * Get referral stats for a user
+ * GET /api/referrals/stats?userId=xxx
+ */
+app.get('/api/referrals/stats', async (req, res) => {
+  try {
+    const { userId } = req.query;
+
+    if (!userId) {
+      return res.status(400).json({ error: 'Missing userId parameter' });
+    }
+
+    console.log(`[REFERRAL] Getting stats for user: ${userId}`);
+
+    // Get user's referral code
+    const referralCode = await kv.get(`user:${userId}:referralCode`);
+
+    // Get stats
+    const stats = await kv.hgetall(`referralStats:${userId}`) || {};
+    const completedInvites = parseInt(stats.completedInvites || '0', 10);
+    const monthsEarned = parseInt(stats.monthsEarned || '0', 10);
+
+    // Get pending and completed counts
+    const pendingCount = await kv.scard(`referrals:pending:${userId}`) || 0;
+    const completedCount = await kv.scard(`referrals:completed:${userId}`) || 0;
+
+    res.json({
+      code: referralCode || null,
+      totalInvites: pendingCount + completedCount,
+      completedInvites: completedCount,
+      pendingInvites: pendingCount,
+      monthsEarned
+    });
+  } catch (error) {
+    console.error('[REFERRAL] Get stats error:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+/**
+ * Register a user's referral code
+ * POST /api/referrals/register-code
+ * Body: { userId, referralCode }
+ */
+app.post('/api/referrals/register-code', async (req, res) => {
+  try {
+    const { userId, referralCode } = req.body;
+
+    if (!userId || !referralCode) {
+      return res.status(400).json({ error: 'Missing userId or referralCode' });
+    }
+
+    console.log(`[REFERRAL] Registering code ${referralCode} for user ${userId}`);
+
+    // Check if code already exists
+    const existingUserId = await kv.get(`referralCode:${referralCode}`);
+    if (existingUserId && existingUserId !== userId) {
+      return res.status(400).json({ error: 'Referral code already in use' });
+    }
+
+    // Store mapping: referralCode -> userId
+    await kv.set(`referralCode:${referralCode}`, userId);
+
+    // Store mapping: userId -> referralCode
+    await kv.set(`user:${userId}:referralCode`, referralCode);
+
+    // Initialize stats if not exists
+    const statsExists = await kv.exists(`referralStats:${userId}`);
+    if (!statsExists) {
+      await kv.hset(`referralStats:${userId}`, {
+        completedInvites: 0,
+        monthsEarned: 0
+      });
+    }
+
+    console.log(`[REFERRAL] Code registered successfully`);
+
+    res.json({
+      success: true,
+      userId,
+      referralCode
+    });
+  } catch (error) {
+    console.error('[REFERRAL] Register code error:', error);
+    res.status(500).json({ error: 'Internal server error', message: error.message });
+  }
+});
+
+// ============================================================================
+
 app.listen(PORT, () => {
   console.log(`ProofPix proxy server running on port ${PORT}`);
 });

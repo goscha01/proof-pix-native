@@ -55,11 +55,16 @@ export default function FirstLoadScreen({ navigation, route }) {
   useEffect(() => {
     const checkReferralCode = async () => {
       try {
-        const { acceptReferral } = await import('../services/referralService');
+        const { trackReferralInstallation } = await import('../services/referralService');
         const referralCode = route?.params?.code;
         if (referralCode) {
-          await acceptReferral(referralCode);
-          console.log('[FirstLoad] Referral code accepted:', referralCode);
+          // Track installation on server (also stores locally)
+          const result = await trackReferralInstallation(referralCode);
+          if (result) {
+            console.log('[FirstLoad] Referral tracked on server:', result.referralId);
+          } else {
+            console.log('[FirstLoad] Referral code accepted locally (server tracking failed)');
+          }
         }
       } catch (error) {
         console.error('[FirstLoad] Error processing referral code:', error);

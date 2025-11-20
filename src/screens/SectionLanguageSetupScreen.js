@@ -149,14 +149,27 @@ export default function SectionLanguageSetupScreen({ navigation, route }) {
   const handleContinue = async () => {
     // Process referral reward if user signed up via referral
     try {
-      const { getAcceptedReferral, processReferralReward } = await import('../services/referralService');
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      const { getAcceptedReferral, completeReferralSetup } = await import('../services/referralService');
+
       const acceptedReferral = await getAcceptedReferral();
       if (acceptedReferral && acceptedReferral.code) {
-        const monthsEarned = await processReferralReward(acceptedReferral.code);
-        if (monthsEarned > 0) {
-          console.log('[SectionLanguageSetup] Referral reward processed:', monthsEarned, 'months');
-          // In a real implementation, you would extend the user's subscription here
-          // For now, we just track it locally
+        // Get user ID (device-based for now)
+        let userId = await AsyncStorage.getItem('@user_id');
+        if (!userId) {
+          // Generate a user ID if not exists
+          const deviceId = await AsyncStorage.getItem('@device_id');
+          userId = deviceId ? `user_${deviceId}` : `user_${Date.now()}`;
+          await AsyncStorage.setItem('@user_id', userId);
+        }
+
+        // Complete referral setup on server
+        const result = await completeReferralSetup(acceptedReferral.code, userId);
+        if (result && result.success) {
+          console.log('[SectionLanguageSetup] Referral completed on server!');
+          console.log('[SectionLanguageSetup] Referrer earned:', result.monthsEarned, 'month(s)');
+        } else {
+          console.log('[SectionLanguageSetup] Referral completion failed or already processed');
         }
       }
     } catch (error) {

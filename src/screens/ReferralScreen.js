@@ -20,7 +20,10 @@ import {
   getReferralLink,
   getShareMessage,
   addReferralInvite,
+  initializeReferralCode,
+  getReferralStatsFromServer,
 } from '../services/referralService';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking } from 'react-native';
 
 export default function ReferralScreen({ navigation }) {
@@ -31,6 +34,12 @@ export default function ReferralScreen({ navigation }) {
     rewardsEarned: 0,
     totalMonthsEarned: 0,
   });
+  const [serverStats, setServerStats] = useState({
+    totalInvites: 0,
+    completedInvites: 0,
+    pendingInvites: 0,
+    monthsEarned: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [showInfoModal, setShowInfoModal] = useState(false);
 
@@ -40,9 +49,35 @@ export default function ReferralScreen({ navigation }) {
 
   const loadReferralData = async () => {
     try {
-      const code = await getOrCreateReferralCode();
-      const info = await getReferralInfo();
+      // Initialize referral code and register on server
+      const code = await initializeReferralCode();
       setReferralCode(code);
+
+      // Get user ID for server stats
+      let userId = await AsyncStorage.getItem('@user_id');
+      if (!userId) {
+        // Generate a user ID if not exists
+        const deviceId = await AsyncStorage.getItem('@device_id');
+        userId = deviceId ? `user_${deviceId}` : `user_${Date.now()}`;
+        await AsyncStorage.setItem('@user_id', userId);
+      }
+
+      // Fetch stats from server
+      const stats = await getReferralStatsFromServer(userId);
+      if (stats) {
+        setServerStats({
+          totalInvites: stats.totalInvites || 0,
+          completedInvites: stats.completedInvites || 0,
+          pendingInvites: stats.pendingInvites || 0,
+          monthsEarned: stats.monthsEarned || 0,
+        });
+        console.log('[ReferralScreen] Loaded stats from server:', stats);
+      } else {
+        console.log('[ReferralScreen] Failed to load server stats, using defaults');
+      }
+
+      // Still load local info for backward compatibility
+      const info = await getReferralInfo();
       setReferralInfo(info);
     } catch (error) {
       console.error('[ReferralScreen] Error loading referral data:', error);
@@ -106,15 +141,13 @@ export default function ReferralScreen({ navigation }) {
   };
 
   const getCompletedCount = () => {
-    return referralInfo.invitesSent.filter(inv => inv.status === 'completed').length;
+    // Use server stats if available, fallback to local
+    return serverStats.completedInvites || referralInfo.invitesSent.filter(inv => inv.status === 'completed').length;
   };
 
   const getMonthsEarned = () => {
-    const completed = getCompletedCount();
-    if (completed >= 3) return 3;
-    if (completed >= 2) return 2;
-    if (completed >= 1) return 1;
-    return 0;
+    // Use server stats directly (server calculates this for us)
+    return serverStats.monthsEarned || 0;
   };
 
   if (loading) {

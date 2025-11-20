@@ -1,9 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Random from 'expo-random';
+import * as Device from 'expo-device';
 
 const REFERRAL_STORAGE_KEY = '@user_referral_info';
 const REFERRAL_CODE_KEY = '@user_referral_code';
 const REFERRAL_ACCEPTED_KEY = '@referral_accepted';
+
+// API base URL
+const PROXY_SERVER_URL = process.env.EXPO_PUBLIC_PROXY_URL || 'https://proof-pix-proxy.vercel.app';
 
 /**
  * Referral Service
@@ -216,6 +220,199 @@ export const resetReferralData = async () => {
     console.log('[ReferralService] Referral data reset');
   } catch (error) {
     console.error('[ReferralService] Error resetting referral data:', error);
+  }
+};
+
+// ============================================================================
+// SERVER-SIDE API FUNCTIONS
+// ============================================================================
+
+/**
+ * Get device ID for tracking
+ * @returns {Promise<string>}
+ */
+const getDeviceId = async () => {
+  try {
+    let deviceId = await AsyncStorage.getItem('@device_id');
+    if (!deviceId) {
+      // Generate a unique device ID
+      const bytes = await Random.getRandomBytesAsync(16);
+      deviceId = Array.from(bytes)
+        .map(b => b.toString(16).padStart(2, '0'))
+        .join('');
+      await AsyncStorage.setItem('@device_id', deviceId);
+    }
+    return deviceId;
+  } catch (error) {
+    console.error('[ReferralService] Error getting device ID:', error);
+    return `device_${Date.now()}`;
+  }
+};
+
+/**
+ * Get user ID (from AsyncStorage or context)
+ * @returns {Promise<string|null>}
+ */
+const getUserId = async () => {
+  try {
+    // Try to get userId from AsyncStorage (you might store it during auth)
+    const userId = await AsyncStorage.getItem('@user_id');
+    if (userId) return userId;
+
+    // Fallback: generate a temporary ID based on device
+    const deviceId = await getDeviceId();
+    return `user_${deviceId}`;
+  } catch (error) {
+    console.error('[ReferralService] Error getting user ID:', error);
+    return null;
+  }
+};
+
+/**
+ * Register user's referral code with the server
+ * @param {string} userId - User ID
+ * @param {string} referralCode - Referral code to register
+ * @returns {Promise<boolean>}
+ */
+export const registerReferralCodeOnServer = async (userId, referralCode) => {
+  try {
+    const response = await fetch(`${PROXY_SERVER_URL}/api/referrals/register-code`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        userId,
+        referralCode
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      console.log('[ReferralService] Code registered on server:', referralCode);
+      return true;
+    } else {
+      console.error('[ReferralService] Failed to register code:', data.error);
+      return false;
+    }
+  } catch (error) {
+    console.error('[ReferralService] Error registering code on server:', error);
+    return false;
+  }
+};
+
+/**
+ * Track referral installation on server
+ * @param {string} referralCode - The referral code that was used
+ * @returns {Promise<Object|null>}
+ */
+export const trackReferralInstallation = async (referralCode) => {
+  try {
+    const deviceId = await getDeviceId();
+
+    const response = await fetch(`${PROXY_SERVER_URL}/api/referrals/track-installation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        referralCode,
+        deviceId,
+        timestamp: new Date().toISOString()
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      console.log('[ReferralService] Installation tracked on server:', data.referralId);
+      // Also store locally
+      await acceptReferral(referralCode);
+      return data;
+    } else {
+      console.error('[ReferralService] Failed to track installation:', data.error);
+      return null;
+    }
+  } catch (error) {
+    console.error('[ReferralService] Error tracking installation:', error);
+    return null;
+  }
+};
+
+/**
+ * Complete referral setup on server (when new user finishes onboarding)
+ * @param {string} referralCode - The referral code that was used
+ * @param {string} userId - The new user's ID
+ * @returns {Promise<Object|null>}
+ */
+export const completeReferralSetup = async (referralCode, userId) => {
+  try {
+    const response = await fetch(`${PROXY_SERVER_URL}/api/referrals/complete-setup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        referralCode,
+        userId,
+        setupCompletedAt: new Date().toISOString()
+      })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      console.log('[ReferralService] Setup completed on server. Referrer earned:', data.monthsEarned, 'month(s)');
+      return data;
+    } else {
+      console.error('[ReferralService] Failed to complete setup:', data.error);
+      return null;
+    }
+  } catch (error) {
+    console.error('[ReferralService] Error completing setup:', error);
+    return null;
+  }
+};
+
+/**
+ * Get referral stats from server
+ * @param {string} userId - User ID
+ * @returns {Promise<Object|null>}
+ */
+export const getReferralStatsFromServer = async (userId) => {
+  try {
+    const response = await fetch(`${PROXY_SERVER_URL}/api/referrals/stats?userId=${encodeURIComponent(userId)}`);
+    const data = await response.json();
+
+    if (data.code !== undefined) {
+      console.log('[ReferralService] Got stats from server:', data);
+      return data;
+    } else {
+      console.error('[ReferralService] Failed to get stats:', data.error);
+      return null;
+    }
+  } catch (error) {
+    console.error('[ReferralService] Error getting stats from server:', error);
+    return null;
+  }
+};
+
+/**
+ * Initialize referral code on server (call this when user first creates their code)
+ * @returns {Promise<string>}
+ */
+export const initializeReferralCode = async () => {
+  try {
+    // Get or create local referral code
+    const code = await getOrCreateReferralCode();
+
+    // Get user ID
+    const userId = await getUserId();
+
+    if (userId) {
+      // Register on server
+      await registerReferralCodeOnServer(userId, code);
+    }
+
+    return code;
+  } catch (error) {
+    console.error('[ReferralService] Error initializing referral code:', error);
+    return await getOrCreateReferralCode();
   }
 };
 
