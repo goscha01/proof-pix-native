@@ -2526,6 +2526,22 @@ export default function GalleryScreen({ navigation, route }) {
     }
   };
 
+  // Handle plan modal close - delete confirmation stays open (no need to reopen)
+  const handleSharePlanModalClose = () => {
+    console.log('[GalleryScreen] 🚪 Closing plan modal');
+    setShowSharePlanModal(false);
+  };
+
+  // Debug: Log when plan modal visibility changes
+  useEffect(() => {
+    const shouldShow = showSharePlanModal && !shareOptionsVisible;
+    console.log('[GalleryScreen] 🔍 Plan modal visibility check:', {
+      showSharePlanModal,
+      shareOptionsVisible,
+      shouldShow
+    });
+  }, [showSharePlanModal, shareOptionsVisible]);
+
   const handleDeleteAllConfirmed = async (deleteFromStorageParam) => {
     try {
       const shouldDeleteFromStorage = deleteFromStorageParam !== undefined ? deleteFromStorageParam : deleteFromStorage;
@@ -4496,17 +4512,14 @@ export default function GalleryScreen({ navigation, route }) {
             </View>
           </View>
 
-          {/* Plan Selection Modal Overlay - Rendered as sibling of share modal content */}
-          {showSharePlanModal && (
+          {/* Plan Selection Modal Overlay - Rendered as sibling of share modal content (only when share modal is visible) */}
+          {showSharePlanModal && shareOptionsVisible && (
             <View style={styles.planModalOverlayAbsolute}>
               <View style={styles.planModalContent}>
                 <View style={styles.planModalHeader}>
                   <Text style={styles.planModalTitle}>{t('planModal.title')}</Text>
                   <TouchableOpacity
-                    onPress={() => {
-                      console.log('[GALLERY] Plan modal close button pressed');
-                      setShowSharePlanModal(false);
-                    }}
+                    onPress={handleSharePlanModalClose}
                     style={styles.planModalCloseButton}
                   >
                     <Text style={styles.planModalCloseText}>×</Text>
@@ -4524,7 +4537,7 @@ export default function GalleryScreen({ navigation, route }) {
                       onPress={async () => {
                         console.log('[GALLERY] Plan selected: starter');
                         await updateUserPlan('starter');
-                        setShowSharePlanModal(false);
+                        handleSharePlanModalClose();
                       }}
                     >
                       <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
@@ -4538,7 +4551,7 @@ export default function GalleryScreen({ navigation, route }) {
                       onPress={async () => {
                         console.log('[GALLERY] Plan selected: pro');
                         await updateUserPlan('pro');
-                        setShowSharePlanModal(false);
+                        handleSharePlanModalClose();
                       }}
                     >
                       <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
@@ -4552,7 +4565,7 @@ export default function GalleryScreen({ navigation, route }) {
                       onPress={async () => {
                         console.log('[GALLERY] Plan selected: business');
                         await updateUserPlan('business');
-                        setShowSharePlanModal(false);
+                        handleSharePlanModalClose();
                       }}
                     >
                       <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
@@ -4566,7 +4579,7 @@ export default function GalleryScreen({ navigation, route }) {
                       onPress={async () => {
                         console.log('[GALLERY] Plan selected: enterprise');
                         await updateUserPlan('enterprise');
-                        setShowSharePlanModal(false);
+                        handleSharePlanModalClose();
                       }}
                     >
                       <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
@@ -4580,6 +4593,93 @@ export default function GalleryScreen({ navigation, route }) {
         </View>
       </Modal>
 
+      {/* Standalone Plan Selection Modal - Shown independently (e.g., from delete confirmation) */}
+      <Modal
+        visible={showSharePlanModal && !shareOptionsVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleSharePlanModalClose}
+        statusBarTranslucent={true}
+        hardwareAccelerated={true}
+        presentationStyle="overFullScreen"
+      >
+        <View style={styles.planModalOverlay} pointerEvents="box-none">
+          <View style={styles.planModalContent} pointerEvents="auto">
+            <View style={styles.planModalHeader}>
+              <Text style={styles.planModalTitle}>{t('planModal.title')}</Text>
+              <TouchableOpacity
+                onPress={handleSharePlanModalClose}
+                style={styles.planModalCloseButton}
+              >
+                <Text style={styles.planModalCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={styles.planModalScrollView}
+              contentContainerStyle={styles.planModalScrollViewContent}
+              showsVerticalScrollIndicator={true}
+            >
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    console.log('[GALLERY] Plan selected: starter');
+                    await updateUserPlan('starter');
+                    handleSharePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    console.log('[GALLERY] Plan selected: pro');
+                    await updateUserPlan('pro');
+                    handleSharePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    console.log('[GALLERY] Plan selected: business');
+                    await updateUserPlan('business');
+                    handleSharePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    console.log('[GALLERY] Plan selected: enterprise');
+                    await updateUserPlan('enterprise');
+                    handleSharePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
       {/* Upload Completion Modal */}
       <UploadCompletionModal
         visible={showCompletionModal}
@@ -4587,6 +4687,14 @@ export default function GalleryScreen({ navigation, route }) {
         onClose={() => setShowCompletionModal(false)}
         onClearCompleted={clearCompletedUploads}
         onDeleteProject={handleDeleteAllConfirmed}
+        userPlan={userPlan}
+        onShowPlanModal={() => {
+          console.log('[GalleryScreen] 📝 Opening plan modal from upload completion delete confirmation');
+          setTimeout(() => {
+            setShowSharePlanModal(true);
+          }, 300);
+        }}
+        planModalVisible={showSharePlanModal}
       />
 
       {/* Upload Details Modal */}
@@ -4606,6 +4714,16 @@ export default function GalleryScreen({ navigation, route }) {
         onConfirm={handleDeleteAllConfirmed}
         onCancel={() => setShowDeleteAllConfirm(false)}
         deleteFromStorageDefault={true}
+        userPlan={userPlan}
+        onShowPlanModal={() => {
+          // Show plan modal on top of delete confirmation (don't close delete confirmation)
+          console.log('[GalleryScreen] 📝 Showing plan modal on top of delete all confirmation');
+          setShowSharePlanModal(true);
+        }}
+        planModalVisible={showSharePlanModal && !shareOptionsVisible}
+        onPlanModalClose={handleSharePlanModalClose}
+        updateUserPlan={updateUserPlan}
+        t={t}
       />
 
       {/* Delete Selected Confirmation Modal */}
@@ -4621,6 +4739,16 @@ export default function GalleryScreen({ navigation, route }) {
         onConfirm={handleDeleteSelectedConfirmed}
         onCancel={() => setShowDeleteSelectedConfirm(false)}
         deleteFromStorageDefault={true}
+        userPlan={userPlan}
+        onShowPlanModal={() => {
+          // Show plan modal on top of delete confirmation (don't close delete confirmation)
+          console.log('[GalleryScreen] 📝 Showing plan modal on top of delete selected confirmation');
+          setShowSharePlanModal(true);
+        }}
+        planModalVisible={showSharePlanModal && !shareOptionsVisible}
+        onPlanModalClose={handleSharePlanModalClose}
+        updateUserPlan={updateUserPlan}
+        t={t}
       />
 
     </View>
@@ -5419,10 +5547,15 @@ const styles = StyleSheet.create({
   // Plan Selection Modal styles
   planModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
     justifyContent: 'flex-end',
-    zIndex: 9999,
-    elevation: 9999
+    zIndex: 10001,
+    elevation: 10001,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
   },
   planModalOverlayAbsolute: {
     position: 'absolute',
@@ -5442,10 +5575,14 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     width: '100%',
-    zIndex: 10000,
-    elevation: 10000,
+    zIndex: 10002,
+    elevation: 10002,
     overflow: 'hidden',
-    maxHeight: '75%'
+    maxHeight: '75%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
   planModalHeader: {
     flexDirection: 'row',

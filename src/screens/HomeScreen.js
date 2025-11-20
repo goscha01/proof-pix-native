@@ -911,6 +911,11 @@ export default function HomeScreen({ navigation }) {
     setSelectedProjects(new Set());
   };
 
+  // Handle plan modal close - delete confirmation stays open (no need to reopen)
+  const handlePlanModalClose = () => {
+    setShowPlanModal(false);
+  };
+
   const handleDisabledDeleteClick = () => {
     Alert.alert(
       t('projects.selectToDelete'),
@@ -1623,14 +1628,16 @@ export default function HomeScreen({ navigation }) {
         visible={showPlanModal}
         transparent={true}
         animationType="slide"
-        onRequestClose={() => setShowPlanModal(false)}
+        onRequestClose={() => {
+          handlePlanModalClose();
+        }}
       >
         <View style={styles.planModalOverlay}>
           <View style={styles.planModalContent}>
             <View style={styles.planModalHeader}>
               <Text style={styles.planModalTitle}>{t('planModal.title')}</Text>
               <TouchableOpacity
-                onPress={() => setShowPlanModal(false)}
+                onPress={handlePlanModalClose}
                 style={styles.planModalCloseButton}
               >
                 <Text style={styles.planModalCloseText}>×</Text>
@@ -1643,7 +1650,7 @@ export default function HomeScreen({ navigation }) {
                   style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
                   onPress={async () => {
                     await updateUserPlan('starter');
-                    setShowPlanModal(false);
+                    handlePlanModalClose();
                   }}
                 >
                   <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
@@ -1656,7 +1663,7 @@ export default function HomeScreen({ navigation }) {
                   style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
                   onPress={async () => {
                     await updateUserPlan('pro');
-                    setShowPlanModal(false);
+                    handlePlanModalClose();
                   }}
                 >
                   <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
@@ -1669,7 +1676,7 @@ export default function HomeScreen({ navigation }) {
                   style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
                   onPress={async () => {
                     await updateUserPlan('business');
-                    setShowPlanModal(false);
+                    handlePlanModalClose();
                   }}
                 >
                   <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
@@ -1681,6 +1688,10 @@ export default function HomeScreen({ navigation }) {
                 <TouchableOpacity
                   style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
                   onPress={() => {
+                    // If reopening delete confirm, don't do it here since we're going to enterprise modal
+                    if (reopenDeleteConfirmRef.current) {
+                      reopenDeleteConfirmRef.current = false;
+                    }
                     setShowPlanModal(false);
                     setShowEnterpriseModal(true);
                   }}
@@ -1723,6 +1734,16 @@ export default function HomeScreen({ navigation }) {
           }, 100);
         }}
         deleteFromStorageDefault={true}
+        userPlan={userPlan}
+        onShowPlanModal={() => {
+          // Show plan modal on top of delete confirmation (don't close delete confirmation)
+          console.log('[HomeScreen] 📝 Showing plan modal on top of delete confirmation');
+          setShowPlanModal(true);
+        }}
+        planModalVisible={showPlanModal}
+        onPlanModalClose={handlePlanModalClose}
+        updateUserPlan={updateUserPlan}
+        t={t}
       />
     </SafeAreaView>
   );
@@ -2157,15 +2178,19 @@ const styles = StyleSheet.create({
   // Plan Modal Styles
   planModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end'
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+    zIndex: 10001,
+    elevation: 10001
   },
   planModalContent: {
     backgroundColor: 'white',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '80%',
-    paddingBottom: 20
+    paddingBottom: 20,
+    zIndex: 10002,
+    elevation: 10002
   },
   planModalHeader: {
     flexDirection: 'row',

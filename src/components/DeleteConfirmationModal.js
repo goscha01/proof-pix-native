@@ -1,13 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   Modal,
+  ScrollView,
+  Dimensions,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../constants/rooms';
 import { useTranslation } from 'react-i18next';
+
+const DELETE_FROM_STORAGE_KEY = '@delete_from_storage_preference';
 
 const DeleteConfirmationModal = ({
   visible,
@@ -16,9 +21,82 @@ const DeleteConfirmationModal = ({
   onConfirm,
   onCancel,
   deleteFromStorageDefault = true,
+  userPlan = 'starter',
+  onShowPlanModal,
+  planModalVisible = false,
+  onPlanModalClose,
+  updateUserPlan,
+  t: translate,
 }) => {
   const { t } = useTranslation();
   const [deleteFromStorage, setDeleteFromStorage] = useState(deleteFromStorageDefault);
+
+  // Load saved checkbox state on mount and when visible changes
+  useEffect(() => {
+    const loadSavedState = async () => {
+      try {
+        const saved = await AsyncStorage.getItem(DELETE_FROM_STORAGE_KEY);
+        if (saved !== null) {
+          const savedValue = JSON.parse(saved);
+          // Use saved value if available
+          setDeleteFromStorage(savedValue);
+          console.log('[DeleteConfirmationModal] 📦 Loaded saved checkbox state:', savedValue);
+        } else {
+          // No saved state - use tier-based default
+          const defaultForTier = userPlan !== 'starter';
+          setDeleteFromStorage(defaultForTier);
+          console.log('[DeleteConfirmationModal] 📦 Using tier-based default:', defaultForTier, 'for plan:', userPlan);
+        }
+      } catch (error) {
+        console.error('[DeleteConfirmationModal] Error loading saved state:', error);
+        // Fallback to tier-based default
+        const defaultForTier = userPlan !== 'starter';
+        setDeleteFromStorage(defaultForTier);
+      }
+    };
+
+    if (visible) {
+      loadSavedState();
+    }
+  }, [visible, userPlan]);
+
+  const isShowingPlanModalRef = useRef(false); // Prevent multiple calls
+
+  // Save checkbox state when it changes
+  const handleCheckboxToggle = async () => {
+    // Prevent multiple rapid calls
+    if (isShowingPlanModalRef.current) {
+      console.log('[DeleteConfirmationModal] ⏭️ Plan modal already being shown, skipping');
+      return;
+    }
+
+    const newValue = !deleteFromStorage;
+    
+    // If starter tries to check, show plan modal
+    if (newValue && userPlan === 'starter') {
+      console.log('[DeleteConfirmationModal] 🚫 Starter user trying to check - showing plan modal');
+      isShowingPlanModalRef.current = true;
+      if (onShowPlanModal) {
+        onShowPlanModal();
+      }
+      // Reset after a delay to allow modal to show
+      setTimeout(() => {
+        isShowingPlanModalRef.current = false;
+      }, 500);
+      return; // Don't toggle
+    }
+
+    // Update state
+    setDeleteFromStorage(newValue);
+    
+    // Save to AsyncStorage
+    try {
+      await AsyncStorage.setItem(DELETE_FROM_STORAGE_KEY, JSON.stringify(newValue));
+      console.log('[DeleteConfirmationModal] 💾 Saved checkbox state:', newValue);
+    } catch (error) {
+      console.error('[DeleteConfirmationModal] Error saving state:', error);
+    }
+  };
 
   // Log when modal visibility changes
   useEffect(() => {
@@ -40,9 +118,22 @@ const DeleteConfirmationModal = ({
     console.log('[DeleteConfirmationModal] ✅ onConfirm callback called');
   };
 
-  const handleCancel = () => {
+  const handleCancel = async () => {
     console.log('[DeleteConfirmationModal] ❌ Cancel button clicked');
-    setDeleteFromStorage(deleteFromStorageDefault);
+    // Reset to saved state or tier-based default on cancel
+    try {
+      const saved = await AsyncStorage.getItem(DELETE_FROM_STORAGE_KEY);
+      if (saved !== null) {
+        const savedValue = JSON.parse(saved);
+        setDeleteFromStorage(savedValue);
+      } else {
+        const defaultForTier = userPlan !== 'starter';
+        setDeleteFromStorage(defaultForTier);
+      }
+    } catch (error) {
+      const defaultForTier = userPlan !== 'starter';
+      setDeleteFromStorage(defaultForTier);
+    }
     onCancel();
   };
 
@@ -68,12 +159,20 @@ const DeleteConfirmationModal = ({
             <View style={styles.checkboxContainer}>
               <TouchableOpacity
                 style={styles.checkbox}
-                onPress={() => setDeleteFromStorage(!deleteFromStorage)}
+                onPress={handleCheckboxToggle}
+                disabled={false}
               >
-                <View style={[styles.checkboxBox, deleteFromStorage && styles.checkboxBoxChecked]}>
+                <View style={[
+                  styles.checkboxBox, 
+                  deleteFromStorage && styles.checkboxBoxChecked,
+                  userPlan === 'starter' && !deleteFromStorage && styles.checkboxBoxDisabled
+                ]}>
                   {deleteFromStorage && <Text style={styles.checkboxCheck}>✓</Text>}
                 </View>
-                <Text style={styles.checkboxLabel}>
+                <Text style={[
+                  styles.checkboxLabel,
+                  userPlan === 'starter' && !deleteFromStorage && styles.checkboxLabelDisabled
+                ]}>
                   {t('common.deleteFromPhoneStorage')}
                 </Text>
               </TouchableOpacity>
@@ -101,6 +200,97 @@ const DeleteConfirmationModal = ({
           </View>
         </View>
       </View>
+
+      {/* Plan Modal Overlay - Rendered inside delete confirmation modal */}
+      {planModalVisible && (
+        <View style={styles.planModalOverlay}>
+          <View style={styles.planModalContent}>
+            <View style={styles.planModalHeader}>
+              <Text style={styles.planModalTitle}>{translate('planModal.title')}</Text>
+              <TouchableOpacity
+                onPress={onPlanModalClose}
+                style={styles.planModalCloseButton}
+              >
+                <Text style={styles.planModalCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={styles.planModalScrollView}
+              contentContainerStyle={styles.planModalScrollViewContent}
+              showsVerticalScrollIndicator={true}
+            >
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    if (updateUserPlan) {
+                      await updateUserPlan('starter');
+                    }
+                    onPlanModalClose && onPlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>
+                    {translate('planModal.starter')}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{translate('planModal.starterDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    if (updateUserPlan) {
+                      await updateUserPlan('pro');
+                    }
+                    onPlanModalClose && onPlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>
+                    {translate('planModal.pro')}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{translate('planModal.proDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    if (updateUserPlan) {
+                      await updateUserPlan('business');
+                    }
+                    onPlanModalClose && onPlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>
+                    {translate('planModal.business')}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{translate('planModal.businessDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    if (updateUserPlan) {
+                      await updateUserPlan('enterprise');
+                    }
+                    onPlanModalClose && onPlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>
+                    {translate('planModal.enterprise')}
+                  </Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{translate('planModal.enterpriseDescription')}</Text>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      )}
     </Modal>
   );
 };
@@ -114,6 +304,7 @@ const styles = StyleSheet.create({
     padding: 20,
     zIndex: 9999,
     elevation: 9999,
+    position: 'relative',
   },
   modalContent: {
     backgroundColor: 'white',
@@ -123,6 +314,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     zIndex: 10000,
     elevation: 10000,
+    // Lower z-index than plan modal so plan modal appears on top
   },
   body: {
     paddingHorizontal: 24,
@@ -174,6 +366,95 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT,
     fontWeight: '500',
     flex: 1,
+  },
+  checkboxLabelDisabled: {
+    color: '#999',
+  },
+  checkboxBoxDisabled: {
+    borderColor: '#CCC',
+    opacity: 0.6,
+  },
+  planModalOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'flex-end',
+    zIndex: 10001,
+    elevation: 10001,
+  },
+  planModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    width: '100%',
+    maxHeight: '75%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  planModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#E0E0E0',
+  },
+  planModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.TEXT,
+  },
+  planModalCloseButton: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  planModalCloseText: {
+    fontSize: 24,
+    color: COLORS.GRAY,
+  },
+  planModalScrollView: {
+    maxHeight: Dimensions.get('window').height * 0.6,
+  },
+  planModalScrollViewContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 40,
+  },
+  planContainer: {
+    marginBottom: 20,
+  },
+  planButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    alignItems: 'center',
+  },
+  planButtonSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY,
+  },
+  planButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.PRIMARY,
+  },
+  planButtonTextSelected: {
+    color: '#000000',
+  },
+  planSubtext: {
+    fontSize: 14,
+    color: COLORS.GRAY,
+    marginTop: 8,
+    textAlign: 'center',
   },
   footer: {
     flexDirection: 'row',
