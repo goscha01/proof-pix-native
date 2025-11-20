@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
@@ -76,7 +76,7 @@ const UploadDetailsModal = ({ visible, uploadStatus, onClose, onCancelUpload, on
   const { activeUploads, queueLength } = uploadStatus;
 
   // Auto-close when no active uploads and no queue
-  React.useEffect(() => {
+  useEffect(() => {
     if (visible && activeUploads.length === 0 && queueLength === 0) {
       onClose();
     }

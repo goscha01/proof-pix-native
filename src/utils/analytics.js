@@ -35,6 +35,7 @@ export const logEvent = async (eventName, params = {}) => {
 
 /**
  * Log screen view to Firebase Analytics
+ * Uses logEvent with screen_view event name (migrated from deprecated logScreenView)
  * @param {string} screenName - Name of the screen
  * @param {string} screenClass - Class of the screen (optional)
  */
@@ -44,7 +45,7 @@ export const logScreenView = async (screenName, screenClass = screenName) => {
   }
 
   try {
-    await analytics().logScreenView({
+    await analytics().logEvent('screen_view', {
       screen_name: screenName,
       screen_class: screenClass,
     });

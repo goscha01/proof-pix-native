@@ -27,7 +27,13 @@
     "tryAgain": "Спробуйте ще раз",
     "somethingWentWrong": "Щось пішло не так.",
     "requiredField": "Це поле є обов'язковим.",
-    "invalidValue": "Неправильне значення."
+    "invalidValue": "Неправильне значення.",
+    "selectAll": "Вибрати Все",
+    "deselectAll": "Зняти Вибир",
+    "selected": "вибрано",
+    "select": "Вибрати",
+    "all": "Всі",
+    "continue": "Продовжити"
   },
   "firstLoad": {
     "title": "Ласкаво просимо до ProofPix",
@@ -39,6 +45,7 @@
     "joinTeam": "Приєднатися до команди",
     "useIndividual": "Використовувати як приватна особа",
     "individualSubtext": "Керуйте своїми проектами з безкоштовними та платними планами.",
+    "chooseAppLanguage": "Вибрати Мову Додатку",
     "back": "Назад",
     "choosePlan": "Оберіть план",
     "starter": "Стартовий",
@@ -104,7 +111,9 @@
     "noPhotosYet": "Поки що немає фотографій",
     "selectProjectToView": "Оберіть проект для перегляду фотографій",
     "takePhotosToStart": "Зробіть кілька фотографій до/після для початку",
-    "share": "Поділитися"
+    "share": "Поділитися",
+    "whatToShare": "Вибрати формати для обміну",
+    "startToShare": "Почати Обмін"
   },
   "camera": {
     "before": "ДО",
@@ -165,6 +174,8 @@
     "signInRequired": "Потрібен вхід",
     "connectGoogleFirst": "Будь ласка, спочатку підключіться до Google",
     "setUpTeam": "Налаштувати команду",
+    "multiprofile": "Кілька Профілів",
+    "contactDeveloper": "Будь ласка, зв'яжіться з {{email}}, щоб увімкнути кілька профілів.",
     "expoGoWarning": "⚠️ Попередження: Функції команди не працюють в Expo Go.",
     "expoGoWarningCommand": "Виконайте: npx expo run:android або npx expo run:ios",
     "upgradePlan": "Оновити план",
@@ -275,6 +286,17 @@
     "cornerStyle": "Стиль кутів",
     "rounded": "Закруглені",
     "straight": "Прямі"
+  },
+  "labelLanguageSetup": {
+    "title": "Вибрати Мову Міток",
+    "subtitle": "Виберіть мову для міток ваших фотографій (До, Після, Комбіноване)",
+    "previewDescription": "Попередній перегляд міток вибраною мовою"
+  },
+  "sectionLanguageSetup": {
+    "title": "Вибрати Мову Розділів",
+    "subtitle": "Виберіть мову для розділів вашого проекту (Кухня, Ванна кімната тощо)",
+    "previewDescription": "Попередній перегляд розділів вибраною мовою",
+    "industryTemplate": "Шаблони галузі"
   },
   "googleSignUp": {
     "title": "Підключіть Ваш Акаунт",

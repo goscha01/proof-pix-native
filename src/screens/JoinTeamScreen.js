@@ -1,17 +1,26 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, KeyboardAvoidingView, Platform, ScrollView, Image } from 'react-native';
 import { useAdmin } from '../context/AdminContext';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
 import { useTranslation } from 'react-i18next';
 
-export default function JoinTeamScreen({ navigation }) {
+export default function JoinTeamScreen({ navigation, route }) {
   const { t } = useTranslation();
-  const [inviteCode, setInviteCode] = useState('');
+  // Check if invite code came from deep link
+  const inviteFromDeepLink = route?.params?.invite || '';
+  const [inviteCode, setInviteCode] = useState(inviteFromDeepLink);
   const [isLoading, setIsLoading] = useState(false);
   const { isAuthenticated } = useAdmin();
-  const insets = useSafeAreaInsets();
+
+  // Auto-fill invite code from deep link (for users who already have the app)
+  useEffect(() => {
+    if (inviteFromDeepLink) {
+      console.log('[JoinTeam] Deep link invite detected:', inviteFromDeepLink);
+      setInviteCode(inviteFromDeepLink);
+    }
+  }, [inviteFromDeepLink]);
 
   const handleJoinTeam = async () => {
     if (!inviteCode.trim()) {
@@ -51,17 +60,17 @@ export default function JoinTeamScreen({ navigation }) {
 
   return (
     <SafeAreaView style={styles.container}>
-      <TouchableOpacity
-        style={[styles.backButton, { top: insets.top, left: insets.left + 10 }]}
-        onPress={handleGoBack}
-      >
-        <Text style={styles.backButtonText}>←</Text>
-      </TouchableOpacity>
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={{ flex: 1 }}
       >
         <ScrollView contentContainerStyle={styles.scrollContent}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handleGoBack}
+          >
+            <Text style={styles.backButtonText}>← Back</Text>
+          </TouchableOpacity>
           <View style={styles.formContainer}>
             <Text style={styles.title}>Join a Team</Text>
             <Text style={styles.subtitle}>
@@ -125,7 +134,7 @@ const styles = StyleSheet.create({
     color: '#000000',
     textAlign: 'center',
     marginBottom: 12,
-    marginTop: 40, // Add margin to avoid overlap with back button
+    marginTop: 20,
   },
   subtitle: {
     fontSize: 16,
@@ -157,14 +166,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   backButton: {
-    position: 'absolute',
-    padding: 10,
-    zIndex: 10,
+    marginBottom: 20,
+    alignSelf: 'flex-start',
   },
   backButtonText: {
-    color: COLORS.PRIMARY,
-    fontSize: 24,
-    fontWeight: 'bold',
+    fontSize: 16,
+    color: '#000',
+    fontWeight: '600',
   },
   logoContainer: {
     alignItems: 'center',

@@ -24,6 +24,9 @@
     "confirmation": "Confirmation",
     "areYouSure": "Are you sure?",
     "actionCantBeUndone": "This action cannot be undone.",
+    "warning": "Warning",
+    "continue": "Continue",
+    "deleteFromStorageWarning": "Checking the \"Delete from phone storage\" box will permanently delete photos from your device. This action cannot be undone.",
     "tryAgain": "Try Again",
     "somethingWentWrong": "Something went wrong.",
     "requiredField": "This field is required.",
@@ -32,7 +35,10 @@
     "deselectAll": "Deselect All",
     "selected": "selected",
     "select": "Select",
-    "all": "All"
+    "all": "All",
+    "continue": "Continue",
+    "apply": "Apply",
+    "deleteFromPhoneStorage": "Delete from phone storage"
   },
   "firstLoad": {
     "title": "Welcome to ProofPix",
@@ -44,6 +50,7 @@
     "joinTeam": "Join a Team",
     "useIndividual": "Use as an Individual",
     "individualSubtext": "Manage your own projects, with free and paid plans.",
+    "chooseAppLanguage": "Choose App Language",
     "back": "Back",
     "choosePlan": "Choose a Plan",
     "starter": "Starter",
@@ -54,6 +61,24 @@
     "businessDesc": "For small teams. Includes team management.",
     "enterprise": "Enterprise",
     "enterpriseDesc": "For growing organizations. Unlimited members, multi-location support."
+  },
+  "enterprise": {
+    "title": "Enterprise Plan Request",
+    "subtitle": "We will connect with you within 24 hours via email or phone.",
+    "namePlaceholder": "Your Name",
+    "emailPlaceholder": "Email Address",
+    "phonePlaceholder": "Phone Number (optional)",
+    "descriptionPlaceholder": "Tell us about your needs...",
+    "submit": "Send Request",
+    "submitting": "Sending...",
+    "error": "Error",
+    "nameRequired": "Please enter your name",
+    "emailRequired": "Please enter your email address",
+    "invalidEmail": "Please enter a valid email address",
+    "emailAppError": "Unable to open email app. Please email us directly at info@geos-ai.com",
+    "submitError": "Failed to send request. Please try again.",
+    "successTitle": "Request Sent",
+    "successMessage": "Thank you for your interest! We will contact you within 24 hours."
   },
   "home": {
     "title": "Home",
@@ -98,9 +123,11 @@
     "uploadAll": "Upload All",
     "shareAll": "Share All",
     "deleteAll": "Delete All",
+    "deleteAllMessage": "Are you sure you want to delete all photos? This action cannot be undone.",
+    "deleteSelected": "Delete Selected",
+    "deleteSelectedMessage": "Delete {{count}} selected photo(s)? This action cannot be undone.",
     "uploadSelected": "Upload Selected",
     "shareSelected": "Share Selected",
-    "deleteSelected": "Delete Selected",
     "deselectAll": "Deselect All",
     "noPhotos": "No photos in this project",
     "noPhotosTitle": "No Photos",
@@ -139,8 +166,9 @@
     "preparingPhotosWithLabels": "Adding labels to photos...",
     "preparingPhotosCopying": "Preparing photos...",
     "mayTakeFewSeconds": "This may take a few seconds",
-    "whatToShare": "What would you like to share?",
+    "whatToShare": "Choose shared formats",
     "prepareToShare": "Prepare to Share",
+    "startToShare": "Start to Share",
     "sharePhotoError": "Failed to share photo.",
     "prepareShareError": "Failed to prepare photos for sharing.",
     "teamInfoMissing": "Team information is missing. Please re-join the team.",
@@ -286,6 +314,8 @@
     "signInRequired": "Sign-In Required",
     "connectGoogleFirst": "Please connect to Google first",
     "setUpTeam": "Set Up Team",
+    "multiprofile": "Multiple Profiles",
+    "contactDeveloper": "Please contact {{email}} to enable multiple profiles.",
     "expoGoWarning": "⚠️ Warning: Team features don't work in Expo Go.",
     "expoGoWarningCommand": "Run: npx expo run:android or npx expo run:ios",
     "upgradePlan": "Upgrade Plan",
@@ -344,6 +374,10 @@
     "accountData": "Account & Data",
     "userName": "User Name",
     "enterYourName": "Enter your name",
+    "contactUs": "Contact Us",
+    "contactUsDescription": "Have questions or need help? Get in touch with our support team.",
+    "contactUsTitle": "Tell us what you think",
+    "contactUsSubtitle": "We'd love to hear your feedback, suggestions, or answer any questions you may have.",
     "resetTeamMemberDescription": "Reset will disconnect you from the team and clear all local data",
     "resetIndividualDescription": "This will clear all projects, photos, and settings",
     "resetUserData": "Reset User Data",
@@ -397,6 +431,17 @@
     "rounded": "Rounded",
     "straight": "Straight"
   },
+  "labelLanguageSetup": {
+    "title": "Choose Label Language",
+    "subtitle": "Select the language for your photo labels (Before, After, Combined)",
+    "previewDescription": "Preview of labels in selected language"
+  },
+  "sectionLanguageSetup": {
+    "title": "Choose Section Language",
+    "subtitle": "Select the language for your project sections (Kitchen, Bathroom, etc.)",
+    "previewDescription": "Preview of sections in selected language",
+    "industryTemplate": "Industry templates"
+  },
   "googleSignUp": {
     "title": "Connect Your Account",
     "subtitle": "Sign up with Google to enable cloud sync, bulk uploads, and team features for Pro and Business plans.",
@@ -448,7 +493,10 @@
       "enterColorCode": "Enter Color Code",
       "hexPlaceholder": "#RRGGBB or rgb(r,g,b)",
       "hexPlaceholderLong": "#FFFFFF or rgb(255, 255, 255)",
-      "hexError": "Enter #RRGGBB, #RGB, or rgb(r, g, b)"
+      "hexError": "Enter #RRGGBB, #RGB, or rgb(r, g, b)",
+      "hue": "Hue: {{value}}°",
+      "saturation": "Saturation: {{value}}%",
+      "lightness": "Lightness: {{value}}%"
     },
     "fontModal": {
       "title": "Choose Font",

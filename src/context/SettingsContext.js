@@ -110,7 +110,20 @@ export const SettingsProvider = ({ children }) => {
   // Load settings on mount
   useEffect(() => {
     loadSettings();
+    // Check trial expiration on app startup
+    checkTrialExpiration();
   }, []);
+
+  // Check if trial has expired and mark as inactive
+  const checkTrialExpiration = async () => {
+    try {
+      const { isTrialActive } = await import('../services/trialService');
+      // This will automatically mark trial as inactive if expired
+      await isTrialActive();
+    } catch (error) {
+      console.error('[SettingsContext] Error checking trial expiration:', error);
+    }
+  };
 
   const loadSettings = async () => {
     try {
@@ -218,9 +231,9 @@ export const SettingsProvider = ({ children }) => {
     await saveSettings({ showLabels: newValue });
   };
 
-  const toggleWatermark = async () => {
+  const toggleWatermark = async (value) => {
     const wasEnabled = customWatermarkEnabled;
-    const newValue = !wasEnabled;
+    const newValue = value !== undefined ? value : !wasEnabled;
     setCustomWatermarkEnabled(newValue);
     let nextShowWatermark = showWatermark;
     const normalizedLabelColor = normalizeColorHex(labelBackgroundColor, DEFAULT_LABEL_BACKGROUND);
@@ -229,31 +242,37 @@ export const SettingsProvider = ({ children }) => {
     let nextWatermarkOpacity = typeof watermarkOpacity === 'number'
       ? watermarkOpacity
       : DEFAULT_WATERMARK_OPACITY;
+    
     if (!newValue) {
+      // Turning OFF - just ensure watermark shows
       nextShowWatermark = true;
       setShowWatermark(true);
-    } else if (!watermarkText?.trim()) {
-      nextShowWatermark = false;
-      setShowWatermark(false);
-    }
-    if (newValue) {
-      nextWatermarkColor =
-        !wasEnabled && (!existingColor || existingColor === DEFAULT_LABEL_BACKGROUND)
-          ? normalizedLabelColor
-          : existingColor || normalizedLabelColor;
+    } else {
+      // Turning ON - reset all parameters to defaults
+      setWatermarkText(DEFAULT_WATERMARK_TEXT);
+      setWatermarkLink(DEFAULT_WATERMARK_LINK);
+      nextWatermarkColor = DEFAULT_LABEL_BACKGROUND;
+      nextWatermarkOpacity = DEFAULT_WATERMARK_OPACITY;
       setWatermarkColor(nextWatermarkColor);
-      if (typeof watermarkOpacity !== 'number') {
-        nextWatermarkOpacity = DEFAULT_WATERMARK_OPACITY;
-        setWatermarkOpacity(nextWatermarkOpacity);
+      setWatermarkOpacity(nextWatermarkOpacity);
+      
+      // Check if default text is empty (shouldn't be, but just in case)
+      if (!DEFAULT_WATERMARK_TEXT?.trim()) {
+        nextShowWatermark = false;
+        setShowWatermark(false);
+      } else {
+        nextShowWatermark = true;
+        setShowWatermark(true);
       }
     }
+    
     await saveSettings({
       customWatermarkEnabled: newValue,
       showWatermark: nextShowWatermark,
+      watermarkText: newValue ? DEFAULT_WATERMARK_TEXT : watermarkText,
+      watermarkLink: newValue ? DEFAULT_WATERMARK_LINK : watermarkLink,
       watermarkColor: newValue ? nextWatermarkColor : existingColor,
-      watermarkOpacity: newValue
-        ? nextWatermarkOpacity
-        : watermarkOpacity,
+      watermarkOpacity: newValue ? nextWatermarkOpacity : watermarkOpacity,
     });
   };
 
@@ -275,6 +294,11 @@ export const SettingsProvider = ({ children }) => {
   const updateWatermarkLink = async (link) => {
     setWatermarkLink(link);
     await saveSettings({ watermarkLink: link });
+  };
+
+  const updateShowWatermark = async (value) => {
+    setShowWatermark(value);
+    await saveSettings({ showWatermark: value });
   };
 
   const updateWatermarkColor = async (color) => {
@@ -477,7 +501,7 @@ export const SettingsProvider = ({ children }) => {
     }
   };
 
-  const shouldShowWatermark = customWatermarkEnabled ? Boolean(watermarkText?.trim()) : showWatermark;
+  const shouldShowWatermark = showWatermark && (customWatermarkEnabled ? Boolean(watermarkText?.trim()) : true);
 
   const value = {
     showLabels,
@@ -490,6 +514,7 @@ export const SettingsProvider = ({ children }) => {
     watermarkColor,
     watermarkOpacity,
     toggleWatermark,
+    updateShowWatermark,
     updateWatermarkText,
     updateWatermarkLink,
     updateWatermarkColor,

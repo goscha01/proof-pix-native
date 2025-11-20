@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   Dimensions,
   ScrollView,
   TextInput,
-  Modal
+  Modal,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
@@ -36,13 +38,40 @@ const LANGUAGES = [
   { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
 ];
 
-export default function FirstLoadScreen({ navigation }) {
+export default function FirstLoadScreen({ navigation, route }) {
   const { t, i18n } = useTranslation();
   const { individualSignIn } = useAdmin();
   const { updateUserInfo, updateUserPlan } = useSettings();
   const [userName, setUserName] = useState('');
-  const [selection, setSelection] = useState(null); // 'team' or 'individual'
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  const scrollViewRef = useRef(null);
+  const nameInputRef = useRef(null);
+  const inputContainerRef = useRef(null);
+  const formContainerRef = useRef(null);
+  const [inputYPosition, setInputYPosition] = useState(0);
+  const [formYPosition, setFormYPosition] = useState(0);
+
+  // Check for referral code from route params or deep link
+  useEffect(() => {
+    const checkReferralCode = async () => {
+      try {
+        const { trackReferralInstallation } = await import('../services/referralService');
+        const referralCode = route?.params?.code;
+        if (referralCode) {
+          // Track installation on server (also stores locally)
+          const result = await trackReferralInstallation(referralCode);
+          if (result) {
+            console.log('[FirstLoad] Referral tracked on server:', result.referralId);
+          } else {
+            console.log('[FirstLoad] Referral code accepted locally (server tracking failed)');
+          }
+        }
+      } catch (error) {
+        console.error('[FirstLoad] Error processing referral code:', error);
+      }
+    };
+    checkReferralCode();
+  }, [route?.params?.code]);
 
   const changeLanguage = (languageCode) => {
     i18n.changeLanguage(languageCode);
@@ -64,32 +93,54 @@ export default function FirstLoadScreen({ navigation }) {
   const handleSelectTeam = async () => {
     if (!validateName()) return;
     await updateUserInfo(userName.trim());
-    await updateUserPlan('Team Member');
+    await updateUserPlan('team');
     navigation.navigate('JoinTeam');
   };
 
   const handleSelectIndividual = async () => {
     if (!validateName()) return;
     await updateUserInfo(userName.trim());
-    setSelection('individual');
+    navigation.navigate('PlanSelection');
   };
 
-  const handleSelectPlan = async (plan) => {
-    await updateUserPlan(plan);
-    if (plan === 'starter') {
-      // For Starter plan, go home without Google Sign-In
-      navigation.replace('Home');
-    } else {
-      // For Pro, Business, Enterprise, go to the Google Sign-Up screen
-      navigation.navigate('GoogleSignUp', { plan });
-    }
+  const handleFormContainerLayout = (event) => {
+    const { y } = event.nativeEvent.layout;
+    setFormYPosition(y);
+  };
+
+  const handleInputContainerLayout = (event) => {
+    const { y } = event.nativeEvent.layout;
+    setInputYPosition(y);
+  };
+
+  const handleNameInputFocus = () => {
+    // Scroll to show the input field and buttons when keyboard appears
+    // Calculate total Y position: formContainer Y + inputContainer Y
+    const totalY = formYPosition + inputYPosition;
+    setTimeout(() => {
+      if (scrollViewRef.current) {
+        scrollViewRef.current.scrollTo({
+          y: Math.max(0, totalY - 150), // Offset to ensure buttons are visible above keyboard
+          animated: true
+        });
+      }
+    }, 300);
   };
 
   const renderInitialSelection = () => (
-    <View style={styles.formContainer}>
-      <View style={styles.inputContainer}>
+    <View 
+      ref={formContainerRef}
+      style={styles.formContainer}
+      onLayout={handleFormContainerLayout}
+    >
+      <View 
+        ref={inputContainerRef} 
+        style={styles.inputContainer}
+        onLayout={handleInputContainerLayout}
+      >
         <Text style={styles.inputLabel}>{t('firstLoad.yourName')}</Text>
         <TextInput
+          ref={nameInputRef}
           style={styles.textInput}
           value={userName}
           onChangeText={setUserName}
@@ -97,6 +148,7 @@ export default function FirstLoadScreen({ navigation }) {
           placeholderTextColor="#999"
           autoCapitalize="words"
           autoCorrect={false}
+          onFocus={handleNameInputFocus}
         />
       </View>
 
@@ -118,75 +170,48 @@ export default function FirstLoadScreen({ navigation }) {
         </TouchableOpacity>
         <Text style={styles.selectionSubtext}>{t('firstLoad.individualSubtext')}</Text>
       </View>
-    </View>
-  );
 
-  const renderPlanSelection = () => (
-    <View style={styles.formContainer}>
-      <TouchableOpacity onPress={() => setSelection(null)} style={styles.backLink}>
-        <Text style={styles.backLinkText}>&larr; {t('firstLoad.back')}</Text>
-      </TouchableOpacity>
-      <Text style={styles.welcomeText}>{t('firstLoad.choosePlan')}</Text>
-
-      <View style={styles.planContainer}>
-        <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('starter')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.starter')}</Text>
+      <View style={{marginTop: 16}}>
+        <TouchableOpacity
+          style={[styles.selectionButton, styles.languageButton]}
+          onPress={() => setLanguageModalVisible(true)}
+        >
+          <Text style={[styles.selectionButtonText, styles.languageButtonText]}>
+            {t('firstLoad.chooseAppLanguage')}
+          </Text>
         </TouchableOpacity>
-        <Text style={styles.planSubtext}>{t('firstLoad.starterDesc')}</Text>
-      </View>
-
-      <View style={styles.planContainer}>
-        <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('pro')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.pro')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.planSubtext}>{t('firstLoad.proDesc')}</Text>
-      </View>
-      
-      <View style={styles.planContainer}>
-        <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('business')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.business')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.planSubtext}>{t('firstLoad.businessDesc')}</Text>
-      </View>
-      
-      <View style={styles.planContainer}>
-        <TouchableOpacity style={[styles.selectionButton, styles.planButton]} onPress={() => handleSelectPlan('enterprise')}>
-          <Text style={[styles.selectionButtonText, styles.planButtonText]}>{t('firstLoad.enterprise')}</Text>
-        </TouchableOpacity>
-        <Text style={styles.planSubtext}>{t('firstLoad.enterpriseDesc')}</Text>
       </View>
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-
-        {/* Language Selector Button */}
-        <TouchableOpacity
-          style={styles.languageButton}
-          onPress={() => setLanguageModalVisible(true)}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <ScrollView
+          ref={scrollViewRef}
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.languageButtonText}>
-            {getCurrentLanguage().flag} {getCurrentLanguage().name}
-          </Text>
-        </TouchableOpacity>
 
-        {selection !== 'individual' && (
-          <View style={styles.logoContainer}>
-            <Image
-              source={require('../../assets/PP_logo_app.png')}
-              style={styles.logo}
-              resizeMode="contain"
-            />
-            <Text style={styles.appTitle}>ProofPix</Text>
-            <Text style={styles.appSubtitle}>{t('firstLoad.subtitle')}</Text>
-          </View>
-        )}
+        <View style={styles.logoContainer}>
+          <Image
+            source={require('../../assets/PP_logo.png')}
+            style={styles.logo}
+            resizeMode="contain"
+          />
+          <Text style={styles.appTitle}>ProofPix</Text>
+          <Text style={styles.appSubtitle}>{t('firstLoad.subtitle')}</Text>
+        </View>
 
-        {selection === 'individual' ? renderPlanSelection() : renderInitialSelection()}
+        {renderInitialSelection()}
 
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       {/* Language Selection Modal */}
       <Modal
@@ -240,6 +265,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F2C31B'
+  },
+  keyboardAvoidingView: {
+    flex: 1,
   },
   scrollContent: {
     flexGrow: 1,
@@ -374,17 +402,11 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   languageButton: {
-    alignSelf: 'flex-end',
-    backgroundColor: 'rgba(0, 0, 0, 0.1)',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginBottom: 20,
+    backgroundColor: '#28a745',
+    borderColor: '#1e7e34',
   },
   languageButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#000',
+    color: '#fff',
   },
   modalOverlay: {
     flex: 1,

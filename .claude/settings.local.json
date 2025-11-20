@@ -29,7 +29,10 @@
       "Bash(ping:*)",
       "Bash(netstat:*)",
       "Bash(findstr:*)",
-      "Bash(taskkill:*)"
+      "Bash(taskkill:*)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm start)",
+      "Bash(find src -name \"*.js\" -exec sh -c 'if grep -q \"\"^import React from\"\" \"\"$1\"\" && grep -q \"\"useEffect\"\" \"\"$1\"\" && ! grep -q \"\"useEffect\"\" \"\"$1\"\" | head -1 | grep -q \"\"import.*{.*useEffect\"\"; then echo \"\"$1\"\"; fi' _ {} ;)"
     ],
     "deny": [],
     "ask": []

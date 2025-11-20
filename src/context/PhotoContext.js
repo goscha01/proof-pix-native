@@ -326,15 +326,18 @@ export const PhotoProvider = ({ children }) => {
         const fname = (uriStr || '').split('/').pop();
         if (fname) filenamesSet.add(fname);
       }
-
+      
       try {
         for (const path of filePaths) {
           try {
             await FileSystem.deleteAsync(path, { idempotent: true });
           } catch (e) {
+            console.error(`[PhotoContext] ⚠️ Failed to delete file ${path}:`, e);
           }
         }
-      } catch {}
+      } catch (err) {
+        console.error(`[PhotoContext] ❌ Error deleting local files:`, err);
+      }
 
       // 2) Remove project-scoped derived files via asset map (handled below)
 
@@ -342,9 +345,10 @@ export const PhotoProvider = ({ children }) => {
       try {
         await deleteProjectAssets(projectId);
       } catch (projErr) {
+        console.error(`[PhotoContext] ❌ Error deleting project assets:`, projErr);
       }
-    } else {
     }
+    
     // Remove only metadata for this project's photos
     const remaining = photos.filter(p => p.projectId !== projectId);
     await savePhotos(remaining);

@@ -27,7 +27,13 @@
     "tryAgain": "Erneut versuchen",
     "somethingWentWrong": "Etwas ist schief gelaufen.",
     "requiredField": "Dieses Feld ist erforderlich.",
-    "invalidValue": "Ungültiger Wert."
+    "invalidValue": "Ungültiger Wert.",
+    "selectAll": "Alle Auswählen",
+    "deselectAll": "Alle Abwählen",
+    "selected": "ausgewählt",
+    "select": "Auswählen",
+    "all": "Alle",
+    "continue": "Fortfahren"
   },
   "firstLoad": {
     "title": "Willkommen bei ProofPix",
@@ -39,6 +45,7 @@
     "joinTeam": "Team Beitreten",
     "useIndividual": "Als Einzelperson Nutzen",
     "individualSubtext": "Verwalten Sie Ihre eigenen Projekte mit kostenlosen und kostenpflichtigen Plänen.",
+    "chooseAppLanguage": "App-Sprache Wählen",
     "back": "Zurück",
     "choosePlan": "Plan Wählen",
     "starter": "Starter",
@@ -49,6 +56,24 @@
     "businessDesc": "Für kleine Teams. Enthält Teamverwaltung.",
     "enterprise": "Enterprise",
     "enterpriseDesc": "Für wachsende Organisationen. Unbegrenzte Mitglieder, Multi-Standort-Unterstützung."
+  },
+  "enterprise": {
+    "title": "Enterprise-Plan Anfrage",
+    "subtitle": "Wir melden uns innerhalb von 24 Stunden per E-Mail oder Telefon bei Ihnen.",
+    "namePlaceholder": "Ihr Name",
+    "emailPlaceholder": "E-Mail-Adresse",
+    "phonePlaceholder": "Telefonnummer (optional)",
+    "descriptionPlaceholder": "Erzählen Sie uns von Ihren Anforderungen...",
+    "submit": "Anfrage senden",
+    "submitting": "Wird gesendet...",
+    "error": "Fehler",
+    "nameRequired": "Bitte geben Sie Ihren Namen ein",
+    "emailRequired": "Bitte geben Sie Ihre E-Mail-Adresse ein",
+    "invalidEmail": "Bitte geben Sie eine gültige E-Mail-Adresse ein",
+    "emailAppError": "E-Mail-App konnte nicht geöffnet werden. Bitte kontaktieren Sie uns direkt unter info@geos-ai.com",
+    "submitError": "Anfrage konnte nicht gesendet werden. Bitte versuchen Sie es erneut.",
+    "successTitle": "Anfrage gesendet",
+    "successMessage": "Vielen Dank für Ihr Interesse! Wir werden Sie innerhalb von 24 Stunden kontaktieren."
   },
   "home": {
     "title": "Startseite",
@@ -101,7 +126,9 @@
     "noPhotosYet": "Noch keine Fotos",
     "selectProjectToView": "Wählen Sie ein Projekt zum Anzeigen von Fotos aus",
     "takePhotosToStart": "Machen Sie einige Vorher/Nachher-Fotos, um zu beginnen",
-    "share": "Teilen"
+    "share": "Teilen",
+    "whatToShare": "Zu teilende Formate wählen",
+    "startToShare": "Teilen Starten"
   },
   "camera": {
     "before": "VORHER",
@@ -162,6 +189,8 @@
     "signInRequired": "Anmeldung Erforderlich",
     "connectGoogleFirst": "Bitte verbinden Sie sich zuerst mit Google",
     "setUpTeam": "Team Einrichten",
+    "multiprofile": "Mehrere Profile",
+    "contactDeveloper": "Bitte kontaktieren Sie {{email}}, um mehrere Profile zu aktivieren.",
     "expoGoWarning": "⚠️ Warnung: Teamfunktionen funktionieren nicht in Expo Go.",
     "expoGoWarningCommand": "Ausführen: npx expo run:android oder npx expo run:ios",
     "upgradePlan": "Plan Upgraden",
@@ -272,6 +301,17 @@
     "cornerStyle": "Eckenstil",
     "rounded": "Abgerundet",
     "straight": "Gerade"
+  },
+  "labelLanguageSetup": {
+    "title": "Etikettensprache Wählen",
+    "subtitle": "Wählen Sie die Sprache für Ihre Fotoetiketten (Vorher, Nachher, Kombiniert)",
+    "previewDescription": "Vorschau der Etiketten in der ausgewählten Sprache"
+  },
+  "sectionLanguageSetup": {
+    "title": "Bereichssprache Wählen",
+    "subtitle": "Wählen Sie die Sprache für Ihre Projektbereiche (Küche, Badezimmer, etc.)",
+    "previewDescription": "Vorschau der Bereiche in der ausgewählten Sprache",
+    "industryTemplate": "Industrievorlagen"
   },
   "googleSignUp": {
     "title": "Verbinden Sie Ihr Konto",

@@ -39,6 +39,7 @@ import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
 import { UploadDetailsModal } from '../components/BackgroundUploadStatus';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import UploadCompletionModal from '../components/UploadCompletionModal';
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal';
 import { filterNewPhotos, markPhotosAsUploaded } from '../services/uploadTracker';
 import Share from 'react-native-share';
 import JSZip from 'jszip';
@@ -52,6 +53,8 @@ import {
   cleanupOldCache,
   invalidateCache,
 } from '../services/labelCacheService';
+import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
+import { FEATURES } from '../constants/featurePermissions';
 
 const { width } = Dimensions.get('window');
 const CONTAINER_PADDING = 32; // 16px on each side
@@ -95,7 +98,9 @@ export default function GalleryScreen({ navigation, route }) {
     sectionLanguage,
     cleaningServiceEnabled,
     getRooms,
+    updateUserPlan,
   } = useSettings();
+  const { canUse } = useFeaturePermissions();
   const { userMode, teamInfo, isAuthenticated, folderId, proxySessionId, initializeProxySession } = useAdmin(); // Get userMode, teamInfo, and auth info
   const { uploadStatus, startBackgroundUpload, cancelUpload, cancelAllUploads, clearCompletedUploads } = useBackgroundUpload();
   const [fullScreenPhoto, setFullScreenPhoto] = useState(null);
@@ -259,11 +264,18 @@ export default function GalleryScreen({ navigation, route }) {
   }, [showLabels, beforeLabelPosition, afterLabelPosition, labelBackgroundColor, labelTextColor, labelSize, labelFontFamily, labelMarginVertical, labelMarginHorizontal]);
   const [deleteFromStorage, setDeleteFromStorage] = useState(true);
   const [confirmDeleteVisible, setConfirmDeleteVisible] = useState(false); // retained but unused to avoid modal
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [showDeleteSelectedConfirm, setShowDeleteSelectedConfirm] = useState(false);
   const [selectedTypes, setSelectedTypes] = useState({ before: true, after: true, combined: true });
   const [selectedShareTypes, setSelectedShareTypes] = useState({ before: true, after: true, combined: true });
-  const [shareAsArchive, setShareAsArchive] = useState(false); // Default: share individual photos
-  const [shareToSameApp, setShareToSameApp] = useState(true); // Default: reuse same app for all photos
+  
+  // Default: unchecked for all tiers. Users can check/uncheck freely.
+  // For starter users, unchecking (when checked) will show tier popup (handled in checkbox onPress)
+  const [shareAsArchive, setShareAsArchive] = useState(false);
+  
   const [uploadDestinations, setUploadDestinations] = useState({ google: true, dropbox: false }); // Default: Google only
+  const [showAdvancedShareFormats, setShowAdvancedShareFormats] = useState(false);
+  const [showSharePlanModal, setShowSharePlanModal] = useState(false);
   const [isDropboxConnected, setIsDropboxConnected] = useState(false);
   const [selectedFormats, setSelectedFormats] = useState(() => {
     // Default: only square formats enabled by default
@@ -286,6 +298,8 @@ export default function GalleryScreen({ navigation, route }) {
   const combinedCaptureRef = useRef(null);
   const [showUploadDetails, setShowUploadDetails] = useState(false);
   const [showCompletionModal, setShowCompletionModal] = useState(false);
+  const [showUploadAlertModal, setShowUploadAlertModal] = useState(false);
+  const [uploadAlertConfig, setUploadAlertConfig] = useState(null);
 
   // Handle navigation parameter to show upload details
   useEffect(() => {
@@ -334,9 +348,22 @@ export default function GalleryScreen({ navigation, route }) {
 
   const FREE_FORMATS = new Set([]);
   const handleFormatToggle = (key) => {
+    console.log('[GALLERY] handleFormatToggle called with key:', key);
+    console.log('[GALLERY] userPlan:', userPlan);
+    console.log('[GALLERY] canUse(ADVANCED_TEMPLATES):', canUse(FEATURES.ADVANCED_TEMPLATES));
+    console.log('[GALLERY] FEATURES.ADVANCED_TEMPLATES:', FEATURES.ADVANCED_TEMPLATES);
+    
+    // Check if user has access to advanced templates
+    if (!canUse(FEATURES.ADVANCED_TEMPLATES)) {
+      console.log('[GALLERY] User does not have access to advanced templates, showing plan modal');
+      // Show plan modal on top of share modal
+      setShowSharePlanModal(true);
+      return;
+    }
     try {
       setSelectedFormats(prev => ({ ...prev, [key]: !prev[key] }));
     } catch (e) {
+      console.error('[GALLERY] Error toggling format:', e);
     }
   };
 
@@ -523,9 +550,11 @@ export default function GalleryScreen({ navigation, route }) {
     
     // Check if we're sharing selected photos
     let sourcePhotos;
+    let selectedSets = [];
     if (shareSelectedPhotos) {
       // Use selected photos
       sourcePhotos = shareSelectedPhotos.individual;
+      selectedSets = shareSelectedPhotos.sets || [];
       // Reset the selected photos flag after using it
       setShareSelectedPhotos(null);
     } else {
@@ -533,7 +562,7 @@ export default function GalleryScreen({ navigation, route }) {
       sourcePhotos = activeProjectId ? photos.filter(p => p.projectId === activeProjectId) : photos;
     }
     
-    if (sourcePhotos.length === 0) {
+    if (sourcePhotos.length === 0 && selectedSets.length === 0) {
         Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosInProject'));
         setSharing(false);
         return;
@@ -549,14 +578,88 @@ export default function GalleryScreen({ navigation, route }) {
     let combinedPhotosToShare = [];
     if (selectedShareTypes.combined) {
         try {
-            const beforePhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.BEFORE);
-            const afterPhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.AFTER);
+            // First, check if there are selected sets (combined photos directly selected)
+            // These don't require both before and after to be in sourcePhotos
             const dir = FileSystem.documentDirectory;
             const entries = await FileSystem.readDirectoryAsync(dir);
+            
+            for (const photoSet of selectedSets) {
+                if (photoSet.before && photoSet.after) {
+                    const beforePhoto = photoSet.before;
+                    const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
+                    const projectId = beforePhoto.projectId;
+                    const projectIdSuffix = projectId ? `_P${projectId}` : '';
+                    
+                    const extractTimestamp = (filename) => {
+                        const match = filename.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+                        return match ? parseInt(match[1], 10) : 0;
+                    };
+                    
+                    // Prioritize STACK over SIDE variant
+                    const stackPrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_STACK_`;
+                    const sidePrefix = `${beforePhoto.room}_${safeName}_COMBINED_BASE_SIDE_`;
+                    
+                    let newestUri = null;
+                    let newestTs = -1;
+                    
+                    // First, try to find STACK variant
+                    const stackMatches = entries.filter(name => {
+                        if (!name.startsWith(stackPrefix)) return false;
+                        if (projectId && !name.includes(projectIdSuffix)) return false;
+                        return true;
+                    });
+                    
+                    for (const filename of stackMatches) {
+                        const ts = extractTimestamp(filename);
+                        if (ts > newestTs) {
+                            newestTs = ts;
+                            newestUri = `${dir}${filename}`;
+                        }
+                    }
+                    
+                    // Only use SIDE if no STACK found
+                    if (!newestUri) {
+                        const sideMatches = entries.filter(name => {
+                            if (!name.startsWith(sidePrefix)) return false;
+                            if (projectId && !name.includes(projectIdSuffix)) return false;
+                            return true;
+                        });
+                        
+                        for (const filename of sideMatches) {
+                            const ts = extractTimestamp(filename);
+                            if (ts > newestTs) {
+                                newestTs = ts;
+                                newestUri = `${dir}${filename}`;
+                            }
+                        }
+                    }
+                    
+                    if (newestUri) {
+                        // Create a photo object for the combined photo
+                        combinedPhotosToShare.push({
+                            uri: newestUri,
+                            mode: PHOTO_MODES.COMBINED,
+                            name: beforePhoto.name,
+                            room: beforePhoto.room,
+                            projectId: beforePhoto.projectId,
+                            id: `combined_${beforePhoto.id}`, // Unique ID for combined photo
+                        });
+                        console.log(`[GALLERY] Found combined photo from selected set: ${beforePhoto.name}`);
+                    }
+                }
+            }
+            
+            // Also find combined photos based on before/after pairs in sourcePhotos
+            const beforePhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.BEFORE);
+            const afterPhotos = sourcePhotos.filter(p => p.mode === PHOTO_MODES.AFTER);
             
             for (const beforePhoto of beforePhotos) {
                 const afterPhoto = afterPhotos.find(p => p.beforePhotoId === beforePhoto.id);
                 if (!afterPhoto) continue;
+                
+                // Skip if already added from selectedSets
+                const alreadyAdded = combinedPhotosToShare.some(cp => cp.id === `combined_${beforePhoto.id}`);
+                if (alreadyAdded) continue;
                 
                 const safeName = (beforePhoto.name || 'Photo').replace(/\s+/g, '_');
                 const projectId = beforePhoto.projectId;
@@ -642,23 +745,269 @@ export default function GalleryScreen({ navigation, route }) {
     const projectName = projects.find(p => p.id === activeProjectId)?.name || 'Shared-Photos';
     const tempFiles = []; // Track temporary files for cleanup
     
+    // Calculate settings hash once for all photos (needed for both ZIP and non-ZIP paths)
+    const settingsHash = calculateSettingsHash({
+        showLabels,
+        beforeLabelPosition,
+        afterLabelPosition,
+        labelBackgroundColor,
+        labelTextColor,
+        labelSize,
+        labelFontFamily,
+        labelMarginVertical,
+        labelMarginHorizontal,
+    });
+    
+    console.log(`[GALLERY] Settings hash calculated: ${settingsHash}, showLabels: ${showLabels}`);
+    
+    // Check cache for all photos first to determine if we need to show loading
+    // Also store cache results to avoid duplicate checks (used for both ZIP and non-ZIP)
+    let needsPreparation = false;
+    const cachedPhotoUris = new Map(); // Map photo ID to cached URI
+    
+    if (showLabels) {
+        console.log('[GALLERY] Checking cache for all photos before showing loading indicator...');
+        for (const item of allItemsToShare) {
+            if (item.mode) {
+                try {
+                    const cachedUri = await getCachedLabeledPhoto(item, settingsHash);
+                    if (cachedUri) {
+                        // Store the cached URI for reuse
+                        cachedPhotoUris.set(item.id, cachedUri);
+                        console.log(`[GALLERY] Photo ${item.id} (${item.mode}) found in cache`);
+                    } else {
+                        needsPreparation = true;
+                        console.log(`[GALLERY] Photo ${item.id} (${item.mode}) needs preparation`);
+                        // Don't break - continue checking all photos to populate cache map
+                    }
+                } catch (error) {
+                    // If cache check fails, assume preparation is needed
+                    needsPreparation = true;
+                    console.log(`[GALLERY] Cache check failed for photo ${item.id}, will prepare`);
+                }
+            }
+        }
+        console.log(`[GALLERY] Cache check complete. Needs preparation: ${needsPreparation}, Cached: ${cachedPhotoUris.size}/${allItemsToShare.length}`);
+    } else {
+        // If labels are disabled, no preparation needed - photos can be shared directly
+        console.log('[GALLERY] Labels disabled - no preparation needed');
+    }
+    
+    // Helper function to capture a photo with label if showLabels is enabled
+    // This is used by both ZIP and non-ZIP sharing paths
+    const capturePhotoWithLabel = async (photo, index) => {
+        console.log(`[GALLERY] capturePhotoWithLabel called for photo ${index + 1}, mode: ${photo.mode}, id: ${photo.id}`);
+        
+        // Check if we already have this photo in cache from the initial check
+        if (showLabels && photo.mode && cachedPhotoUris.has(photo.id)) {
+            const cachedUri = cachedPhotoUris.get(photo.id);
+            console.log(`[GALLERY] ✅ Using cached labeled photo ${index + 1} (${photo.mode}) from initial check: ${cachedUri}`);
+            await updateCacheLastUsed(photo);
+            return cachedUri;
+        }
+        
+        // If not in initial cache check, check cache now (for photos that weren't checked initially)
+        if (showLabels && photo.mode) {
+            try {
+                console.log(`[GALLERY] Checking cache for photo ${index + 1} (${photo.mode}), photoId: ${photo.id}, settingsHash: ${settingsHash}`);
+                const cachedUri = await getCachedLabeledPhoto(photo, settingsHash);
+                if (cachedUri) {
+                    console.log(`[GALLERY] ✅ Using cached labeled photo ${index + 1} (${photo.mode}): ${cachedUri}`);
+                    await updateCacheLastUsed(photo);
+                    return cachedUri;
+                } else {
+                    console.log(`[GALLERY] ❌ No cache found for photo ${index + 1} (${photo.mode}), will prepare now`);
+                }
+            } catch (cacheError) {
+                console.error(`[GALLERY] Error checking cache for photo ${index + 1}:`, cacheError);
+                // Continue with preparation if cache check fails
+            }
+        }
+
+        // Handle combined photos specially - need to find before and after photos
+        if (photo.mode === PHOTO_MODES.COMBINED || photo.mode === 'mix' || photo.mode === 'combined') {
+            // Find the corresponding before and after photos
+            const beforePhoto = photos.find(p => 
+                p.mode === PHOTO_MODES.BEFORE && 
+                p.name === photo.name && 
+                p.room === photo.room &&
+                p.projectId === photo.projectId
+            );
+            const afterPhoto = photos.find(p => 
+                p.mode === PHOTO_MODES.AFTER && 
+                p.beforePhotoId === beforePhoto?.id &&
+                p.projectId === photo.projectId
+            );
+            
+            if (beforePhoto && afterPhoto && showLabels) {
+                // Capture combined view with both labels
+                return new Promise((resolve, reject) => {
+                    // Get dimensions of both photos
+                    Image.getSize(beforePhoto.uri, (beforeWidth, beforeHeight) => {
+                        Image.getSize(afterPhoto.uri, (afterWidth, afterHeight) => {
+                            // Determine layout based on photo orientation
+                            const phoneOrientation = beforePhoto.orientation || 'portrait';
+                            const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
+                            const isLetterbox = beforePhoto.templateType === 'letterbox' || 
+                                              (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
+                            
+                            // Use combined photo dimensions if available, otherwise calculate
+                            Image.getSize(photo.uri, (combinedWidth, combinedHeight) => {
+                                // Set the combined photo to capture (triggers useEffect)
+                                setCapturingPhoto({ 
+                                    photo: {
+                                        ...photo,
+                                        beforePhoto,
+                                        afterPhoto,
+                                        isCombined: true,
+                                        isLetterbox
+                                    }, 
+                                    index, 
+                                    width: combinedWidth, 
+                                    height: combinedHeight, 
+                                    labelPosition: null, // Not used for combined
+                                    resolve, 
+                                    reject 
+                                });
+                            }, (error) => {
+                                // If getSize fails, use before photo dimensions
+                                const totalWidth = beforeWidth * 2; // Side by side
+                                const totalHeight = isLetterbox ? beforeHeight * 2 : beforeHeight; // Stacked or side by side
+                                setCapturingPhoto({ 
+                                    photo: {
+                                        ...photo,
+                                        beforePhoto,
+                                        afterPhoto,
+                                        isCombined: true,
+                                        isLetterbox
+                                    }, 
+                                    index, 
+                                    width: totalWidth, 
+                                    height: totalHeight, 
+                                    labelPosition: null,
+                                    resolve, 
+                                    reject 
+                                });
+                            });
+                        }, (error) => {
+                            // If getSize fails, just copy original combined photo
+                            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                            const tempUri = FileSystem.cacheDirectory + tempFileName;
+                            FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
+                                resolve(tempUri);
+                            }).catch(reject);
+                        });
+                    }, (error) => {
+                        // If getSize fails, just copy original combined photo
+                        const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                        const tempUri = FileSystem.cacheDirectory + tempFileName;
+                        FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
+                            resolve(tempUri);
+                        }).catch(reject);
+                    });
+                });
+            } else {
+                // No labels or couldn't find before/after photos, just copy original
+                const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                const tempUri = FileSystem.cacheDirectory + tempFileName;
+                await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+                return tempUri;
+            }
+        }
+        
+        if (!showLabels || !photo.mode) {
+            // No labels needed, just copy the original
+            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+            const tempUri = FileSystem.cacheDirectory + tempFileName;
+            await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
+            return tempUri;
+        }
+        
+        // Need to capture with label - use state-based approach with hidden modal
+        return new Promise((resolve, reject) => {
+            // Get image dimensions first
+            Image.getSize(photo.uri, (width, height) => {
+                // Determine label position based on photo mode
+                let labelPosition;
+                if (photo.mode === PHOTO_MODES.BEFORE) {
+                    labelPosition = beforeLabelPosition || 'top-left';
+                } else if (photo.mode === PHOTO_MODES.AFTER) {
+                    labelPosition = afterLabelPosition || 'top-right';
+                } else {
+                    labelPosition = 'top-left'; // Default for combined
+                }
+                
+                // Set the photo to capture (triggers useEffect to render and capture)
+                setCapturingPhoto({ 
+                    photo, 
+                    index, 
+                    width, 
+                    height, 
+                    labelPosition,
+                    resolve, 
+                    reject 
+                });
+            }, (error) => {
+                // If getSize fails, just copy original
+                const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
+                const tempUri = FileSystem.cacheDirectory + tempFileName;
+                FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
+                    resolve(tempUri);
+                }).catch(reject);
+            });
+        });
+    };
+    
     try {
         if (shareAsArchive) {
-            // For ZIP, always show loading since we need to copy files
-            setSharing(true);
+            // For ZIP, only show loading if preparation is actually needed
+            // (Copying cached files to ZIP is fast and doesn't need a spinner)
+            if (needsPreparation) {
+                console.log('[GALLERY] Showing loading spinner for ZIP - some photos need preparation');
+                setSharing(true);
+            } else {
+                console.log('[GALLERY] All photos cached for ZIP - skipping loading spinner');
+            }
+            
             // Share as ZIP archive
             const zipFileName = `${projectName.replace(/\s+/g, '_')}_${Date.now()}.zip`;
             const zipPath = FileSystem.cacheDirectory + zipFileName;
             const zip = new JSZip();
             
             for (const item of allItemsToShare) {
+                // Use cached labeled photo if available, otherwise use original
+                let photoUri = item.uri;
+                if (showLabels && cachedPhotoUris.has(item.id)) {
+                    const cachedUri = cachedPhotoUris.get(item.id);
+                    console.log(`[GALLERY] Using cached labeled photo ${item.id} for ZIP: ${cachedUri.substring(0, 80)}...`);
+                    photoUri = cachedUri;
+                    await updateCacheLastUsed(item);
+                } else if (showLabels && item.mode && needsPreparation) {
+                    // Need to prepare this photo with labels
+                    console.log(`[GALLERY] Preparing photo ${item.id} (${item.mode}) for ZIP...`);
+                    const preparedUri = await capturePhotoWithLabel(item, allItemsToShare.indexOf(item));
+                    if (preparedUri) {
+                        photoUri = preparedUri;
+                        // Save to cache for future use
+                        try {
+                            const cachedUri = await saveCachedLabeledPhoto(item, preparedUri, settingsHash);
+                            if (cachedUri) {
+                                console.log(`[GALLERY] ✅ Saved photo ${item.id} to cache: ${cachedUri}`);
+                                cachedPhotoUris.set(item.id, cachedUri);
+                            }
+                        } catch (cacheError) {
+                            console.error(`[GALLERY] Error saving to cache:`, cacheError);
+                        }
+                    }
+                }
+                
                 // Copy photo to temp location first to ensure it's accessible
                 const tempFileName = `temp_${Date.now()}_${Math.random().toString(36).substring(7)}.jpg`;
                 const tempUri = FileSystem.cacheDirectory + tempFileName;
-                await FileSystem.copyAsync({ from: item.uri, to: tempUri });
+                await FileSystem.copyAsync({ from: photoUri, to: tempUri });
                 tempFiles.push(tempUri);
                 
-                const filename = item.uri.split('/').pop();
+                const filename = photoUri.split('/').pop();
                 const content = await FileSystem.readAsStringAsync(tempUri, {
                     encoding: FileSystem.EncodingType.Base64,
                 });
@@ -691,21 +1040,24 @@ export default function GalleryScreen({ navigation, route }) {
                 const result = await Promise.race([sharePromise, timeoutPromise]);
                 console.log('[GALLERY] ZIP share completed successfully:', result);
             } catch (shareError) {
-                console.error('[GALLERY] ZIP share error caught:', shareError);
-                console.error('[GALLERY] Error message:', shareError?.message);
-                
-                // User cancelled or error occurred - this is fine, just log it
-                if (shareError?.message?.includes('User did not share') || 
+                // Check if user cancelled first - don't log cancellation as error
+                const isUserCancellation = shareError?.message?.includes('User did not share') || 
                     shareError?.message?.includes('cancelled') ||
-                    shareError?.message?.includes('User Cancel')) {
-                    // User cancelled - no need to show error
+                    shareError?.message?.includes('User Cancel') ||
+                    shareError?.code === 'E_USER_CANCELLED';
+                
+                if (isUserCancellation) {
+                    // User cancelled - this is normal, not an error
                     console.log('[GALLERY] User cancelled sharing ZIP');
+                    return; // Exit gracefully
                 } else if (shareError?.message?.includes('timed out')) {
                     // Timeout - show error but don't rethrow
                     console.error('[GALLERY] ZIP share operation timed out');
                     Alert.alert(t('common.error'), 'Share operation took too long. Please try again.');
                 } else {
-                    // Real error - rethrow to be caught by outer catch
+                    // Real error - log and rethrow
+                    console.error('[GALLERY] ZIP share error caught:', shareError);
+                    console.error('[GALLERY] Error message:', shareError?.message);
                     throw shareError;
                 }
             }
@@ -714,55 +1066,15 @@ export default function GalleryScreen({ navigation, route }) {
             console.log(`[GALLERY] ========== STARTING SHARING (NOT ARCHIVE) ==========`);
             console.log(`[GALLERY] shareAsArchive: ${shareAsArchive}, allItemsToShare.length: ${allItemsToShare.length}`);
             console.log(`[GALLERY] showLabels: ${showLabels}`);
-            
-            // Calculate settings hash once for all photos
-            const settingsHash = calculateSettingsHash({
-                showLabels,
-                beforeLabelPosition,
-                afterLabelPosition,
-                labelBackgroundColor,
-                labelTextColor,
-                labelSize,
-                labelFontFamily,
-                labelMarginVertical,
-                labelMarginHorizontal,
-            });
-            
-            console.log(`[GALLERY] Settings hash calculated: ${settingsHash}, showLabels: ${showLabels}`);
-            
-            // Check cache for all photos first to determine if we need to show loading
-            // Also store cache results to avoid duplicate checks
-            let needsPreparation = false;
-            const cachedPhotoUris = new Map(); // Map photo ID to cached URI
-            
-            if (showLabels) {
-                console.log('[GALLERY] Checking cache for all photos before showing loading indicator...');
-                for (const item of allItemsToShare) {
-                    if (item.mode) {
-                        try {
-                            const cachedUri = await getCachedLabeledPhoto(item, settingsHash);
-                            if (cachedUri) {
-                                // Store the cached URI for reuse
-                                cachedPhotoUris.set(item.id, cachedUri);
-                                console.log(`[GALLERY] Photo ${item.id} (${item.mode}) found in cache`);
-                            } else {
-                                needsPreparation = true;
-                                console.log(`[GALLERY] Photo ${item.id} (${item.mode}) needs preparation`);
-                                // Don't break - continue checking all photos to populate cache map
-                            }
-                        } catch (error) {
-                            // If cache check fails, assume preparation is needed
-                            needsPreparation = true;
-                            console.log(`[GALLERY] Cache check failed for photo ${item.id}, will prepare`);
-                        }
-                    }
-                }
-                console.log(`[GALLERY] Cache check complete. Needs preparation: ${needsPreparation}, Cached: ${cachedPhotoUris.size}/${allItemsToShare.length}`);
-            }
+            // Note: settingsHash, needsPreparation, and cachedPhotoUris are already calculated above
             
             // Only show loading indicator if preparation is actually needed
+            // Don't show spinner if all photos are cached (fast path)
             if (needsPreparation) {
+                console.log('[GALLERY] Showing loading spinner - some photos need preparation');
                 setSharing(true);
+            } else {
+                console.log('[GALLERY] All photos cached or no labels - skipping loading spinner');
             }
             
             // Process all photos to add labels if needed
@@ -806,172 +1118,7 @@ export default function GalleryScreen({ navigation, route }) {
                 }
             }
 
-            // Helper function to capture a photo with label if showLabels is enabled
-            const capturePhotoWithLabel = async (photo, index) => {
-                    console.log(`[GALLERY] capturePhotoWithLabel called for photo ${index + 1}, mode: ${photo.mode}, id: ${photo.id}`);
-                    
-                    // Check if we already have this photo in cache from the initial check
-                    if (showLabels && photo.mode && cachedPhotoUris.has(photo.id)) {
-                        const cachedUri = cachedPhotoUris.get(photo.id);
-                        console.log(`[GALLERY] ✅ Using cached labeled photo ${index + 1} (${photo.mode}) from initial check: ${cachedUri}`);
-                        await updateCacheLastUsed(photo);
-                        return cachedUri;
-                    }
-                    
-                    // If not in initial cache check, check cache now (for photos that weren't checked initially)
-                    if (showLabels && photo.mode) {
-                        try {
-                            console.log(`[GALLERY] Checking cache for photo ${index + 1} (${photo.mode}), photoId: ${photo.id}, settingsHash: ${settingsHash}`);
-                            const cachedUri = await getCachedLabeledPhoto(photo, settingsHash);
-                            if (cachedUri) {
-                                console.log(`[GALLERY] ✅ Using cached labeled photo ${index + 1} (${photo.mode}): ${cachedUri}`);
-                                await updateCacheLastUsed(photo);
-                                return cachedUri;
-                            } else {
-                                console.log(`[GALLERY] ❌ No cache found for photo ${index + 1} (${photo.mode}), will prepare now`);
-                            }
-                        } catch (cacheError) {
-                            console.error(`[GALLERY] Error checking cache for photo ${index + 1}:`, cacheError);
-                            // Continue with preparation if cache check fails
-                        }
-                    }
-
-                    // Handle combined photos specially - need to find before and after photos
-                    if (photo.mode === PHOTO_MODES.COMBINED || photo.mode === 'mix' || photo.mode === 'combined') {
-                        // Find the corresponding before and after photos
-                        const beforePhoto = photos.find(p => 
-                            p.mode === PHOTO_MODES.BEFORE && 
-                            p.name === photo.name && 
-                            p.room === photo.room &&
-                            p.projectId === photo.projectId
-                        );
-                        const afterPhoto = photos.find(p => 
-                            p.mode === PHOTO_MODES.AFTER && 
-                            p.beforePhotoId === beforePhoto?.id &&
-                            p.projectId === photo.projectId
-                        );
-                        
-                        if (beforePhoto && afterPhoto && showLabels) {
-                            // Capture combined view with both labels
-                            return new Promise((resolve, reject) => {
-                                // Get dimensions of both photos
-                                Image.getSize(beforePhoto.uri, (beforeWidth, beforeHeight) => {
-                                    Image.getSize(afterPhoto.uri, (afterWidth, afterHeight) => {
-                                        // Determine layout based on photo orientation
-                                        const phoneOrientation = beforePhoto.orientation || 'portrait';
-                                        const cameraViewMode = beforePhoto.cameraViewMode || 'portrait';
-                                        const isLetterbox = beforePhoto.templateType === 'letterbox' || 
-                                                          (phoneOrientation === 'portrait' && cameraViewMode === 'landscape');
-                                        
-                                        // Use combined photo dimensions if available, otherwise calculate
-                                        Image.getSize(photo.uri, (combinedWidth, combinedHeight) => {
-                                            // Set the combined photo to capture (triggers useEffect)
-                                            setCapturingPhoto({ 
-                                                photo: {
-                                                    ...photo,
-                                                    beforePhoto,
-                                                    afterPhoto,
-                                                    isCombined: true,
-                                                    isLetterbox
-                                                }, 
-                                                index, 
-                                                width: combinedWidth, 
-                                                height: combinedHeight, 
-                                                labelPosition: null, // Not used for combined
-                                                resolve, 
-                                                reject 
-                                            });
-                                        }, (error) => {
-                                            // If getSize fails, use before photo dimensions
-                                            const totalWidth = beforeWidth * 2; // Side by side
-                                            const totalHeight = isLetterbox ? beforeHeight * 2 : beforeHeight; // Stacked or side by side
-                                            setCapturingPhoto({ 
-                                                photo: {
-                                                    ...photo,
-                                                    beforePhoto,
-                                                    afterPhoto,
-                                                    isCombined: true,
-                                                    isLetterbox
-                                                }, 
-                                                index, 
-                                                width: totalWidth, 
-                                                height: totalHeight, 
-                                                labelPosition: null,
-                                                resolve, 
-                                                reject 
-                                            });
-                                        });
-                                    }, (error) => {
-                                        // If getSize fails, just copy original combined photo
-                                        const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
-                                        const tempUri = FileSystem.cacheDirectory + tempFileName;
-                                        FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
-                                            resolve(tempUri);
-                                        }).catch(reject);
-                                    });
-                                }, (error) => {
-                                    // If getSize fails, just copy original combined photo
-                                    const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
-                                    const tempUri = FileSystem.cacheDirectory + tempFileName;
-                                    FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
-                                        resolve(tempUri);
-                                    }).catch(reject);
-                                });
-                            });
-                        } else {
-                            // No labels or couldn't find before/after photos, just copy original
-                            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
-                            const tempUri = FileSystem.cacheDirectory + tempFileName;
-                            await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
-                            return tempUri;
-                        }
-                    }
-                    
-                    if (!showLabels || !photo.mode) {
-                        // No labels needed, just copy the original
-                        const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
-                        const tempUri = FileSystem.cacheDirectory + tempFileName;
-                        await FileSystem.copyAsync({ from: photo.uri, to: tempUri });
-                        return tempUri;
-                    }
-                    
-                    // Need to capture with label - use state-based approach with hidden modal
-                    return new Promise((resolve, reject) => {
-                        // Get image dimensions first
-                        Image.getSize(photo.uri, (width, height) => {
-                            // Determine label position based on photo mode
-                            let labelPosition;
-                            if (photo.mode === PHOTO_MODES.BEFORE) {
-                                labelPosition = beforeLabelPosition || 'top-left';
-                            } else if (photo.mode === PHOTO_MODES.AFTER) {
-                                labelPosition = afterLabelPosition || 'top-right';
-                            } else {
-                                labelPosition = 'top-left'; // Default for combined
-                            }
-                            
-                            // Set the photo to capture (triggers useEffect to render and capture)
-                            setCapturingPhoto({ 
-                                photo, 
-                                index, 
-                                width, 
-                                height, 
-                                labelPosition,
-                                resolve, 
-                                reject 
-                            });
-                        }, (error) => {
-                            // If getSize fails, just copy original
-                            const tempFileName = `temp_${Date.now()}_${index}_${Math.random().toString(36).substring(7)}.jpg`;
-                            const tempUri = FileSystem.cacheDirectory + tempFileName;
-                            FileSystem.copyAsync({ from: photo.uri, to: tempUri }).then(() => {
-                                resolve(tempUri);
-                            }).catch(reject);
-                        });
-                    });
-                };
-                
-                
-                // Process all photos sequentially (important for label capture)
+            // Process all photos sequentially (important for label capture)
                 // Skip this loop if we already have all cached photos (fast path)
                 if (!allCached || urls.length === 0) {
                     console.log(`[GALLERY] Starting to process ${allItemsToShare.length} photos for sharing...`);
@@ -1063,7 +1210,6 @@ export default function GalleryScreen({ navigation, route }) {
                 // Share multiple photos using react-native-share
                 // Use urls parameter to share all photos at once (same approach that worked for 8 photos)
                 console.log('[GALLERY] Starting to share', urls.length, 'photos together');
-                console.log('[GALLERY] Share to same app:', shareToSameApp);
                 
                 // Add a small delay before sharing to ensure UI is ready
                 await new Promise(resolve => InteractionManager.runAfterInteractions(resolve));
@@ -1201,8 +1347,16 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const handleUploadPhotos = async () => {
+    console.log('[UPLOAD] handleUploadPhotos called');
+    console.log('[UPLOAD] Photos count:', photos.length);
+    console.log('[UPLOAD] User mode:', userMode);
+    console.log('[UPLOAD] User plan:', userPlan);
+    console.log('[UPLOAD] User name:', userName);
+    console.log('[UPLOAD] Team info:', teamInfo);
+    
     // Check if there are photos to upload (always check this first)
     if (photos.length === 0) {
+      console.log('[UPLOAD] No photos to upload, showing alert');
       Alert.alert(t('gallery.noPhotosTitle'), t('gallery.noPhotosToUpload'));
       return;
     }
@@ -1213,21 +1367,42 @@ export default function GalleryScreen({ navigation, route }) {
     // Check if at least one upload service is available (Google Drive or Dropbox)
     const hasGoogle = isAuthenticated;
     const hasDropbox = dropboxAuthService.isAuthenticated();
+    console.log('[UPLOAD] Has Google:', hasGoogle);
+    console.log('[UPLOAD] Has Dropbox:', hasDropbox);
     
     if (!hasGoogle && !hasDropbox) {
-      Alert.alert(
-        t('gallery.noUploadServiceTitle'),
-        t('gallery.noUploadServiceMessage'),
-        [
-          { text: t('common.cancel'), style: 'cancel' },
-          { text: t('gallery.goToSettings'), onPress: () => navigation.navigate('Settings') }
-        ]
-      );
+      console.log('[UPLOAD] No upload service available, showing custom modal');
+      setUploadAlertConfig({
+        title: t('gallery.noUploadServiceTitle'),
+        message: t('gallery.noUploadServiceMessage'),
+        onGoToSettings: () => {
+          console.log('[UPLOAD] onGoToSettings callback called');
+          console.log('[UPLOAD] Closing modal first');
+          setShowUploadAlertModal(false);
+          // Close modal first, then navigate after a delay to ensure modal is fully closed
+          setTimeout(() => {
+            console.log('[UPLOAD] Executing navigation to Settings');
+            try {
+              // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+              navigation.goBack();
+              setTimeout(() => {
+                console.log('[UPLOAD] Navigating to Settings from parent screen');
+                navigation.navigate('Settings', { scrollToCloudSync: true });
+                console.log('[UPLOAD] Navigation call completed');
+              }, 100);
+            } catch (error) {
+              console.error('[UPLOAD] Navigation error:', error);
+            }
+          }, 300);
+        }
+      });
+      setShowUploadAlertModal(true);
       return;
     }
 
     // Check if user info is configured (required for uploads)
     if (!userName) {
+      console.log('[UPLOAD] User name not configured, showing alert');
       Alert.alert(
         t('gallery.setupRequiredTitle'),
         t('gallery.setupNameMessage'),
@@ -1241,14 +1416,19 @@ export default function GalleryScreen({ navigation, route }) {
 
     // Handle team member upload
     if (userMode === 'team_member') {
+      console.log('[UPLOAD] Team member mode detected');
       if (teamInfo && teamInfo.sessionId && teamInfo.token) {
+        console.log('[UPLOAD] Team info available, setting destinations and opening options');
         // Set default destinations based on available services
         setUploadDestinations({
           google: hasGoogle,
           dropbox: hasDropbox && !hasGoogle // Default to Dropbox if Google not available
         });
+        console.log('[UPLOAD] Upload destinations set:', { google: hasGoogle, dropbox: hasDropbox && !hasGoogle });
         setOptionsVisible(true);
+        return;
       } else {
+        console.log('[UPLOAD] Team info missing, showing alert');
         Alert.alert(t('common.error'), t('gallery.teamInfoMissing'));
       }
       return;
@@ -1257,15 +1437,20 @@ export default function GalleryScreen({ navigation, route }) {
     // For Pro/Business/Enterprise users (individual mode or authenticated without team)
     const shouldUseDirectDrive = userMode === 'individual' || 
       (isAuthenticated && (userPlan === 'pro' || userPlan === 'business' || userPlan === 'enterprise') && !teamInfo);
+    console.log('[UPLOAD] Should use direct drive:', shouldUseDirectDrive);
     
     if (shouldUseDirectDrive) {
+      console.log('[UPLOAD] Direct drive path');
       // If Google is authenticated, try to ensure Google Drive folder exists
       if (hasGoogle) {
+        console.log('[UPLOAD] Google authenticated, finding/creating folder');
         try {
           const userFolderId = await googleDriveService.findOrCreateProofPixFolder();
+          console.log('[UPLOAD] Google folder ID:', userFolderId);
           if (!userFolderId) {
             // If Google folder creation fails, but Dropbox is available, allow Dropbox only
             if (hasDropbox) {
+              console.log('[UPLOAD] Google folder creation failed, falling back to Dropbox');
               setUploadDestinations({
                 google: false,
                 dropbox: true
@@ -1273,10 +1458,12 @@ export default function GalleryScreen({ navigation, route }) {
               setOptionsVisible(true);
               return;
             }
+            console.log('[UPLOAD] Google folder creation failed and no Dropbox, showing error');
             Alert.alert(t('common.error'), t('gallery.driveFolderError'));
             return;
           }
         } catch (error) {
+          console.log('[UPLOAD] Google Drive access error:', error);
           // If Google Drive access fails, but Dropbox is available, allow Dropbox only
           if (hasDropbox) {
             setUploadDestinations({
@@ -1292,12 +1479,15 @@ export default function GalleryScreen({ navigation, route }) {
       }
 
       // Set default destinations based on available services
+      console.log('[UPLOAD] Setting default destinations and opening options');
       setUploadDestinations({
         google: hasGoogle,
         dropbox: hasDropbox && !hasGoogle // Default to Dropbox if Google not available
       });
+      console.log('[UPLOAD] Upload destinations set:', { google: hasGoogle, dropbox: hasDropbox && !hasGoogle });
 
       // Open options modal
+      console.log('[UPLOAD] Opening options modal');
       setOptionsVisible(true);
       return;
     }
@@ -1351,9 +1541,12 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const startUploadWithOptions = async () => {
+    console.log('[UPLOAD] startUploadWithOptions called');
+    console.log('[UPLOAD] Upload destinations:', uploadDestinations);
     try {
       // Check if at least one destination is selected
       if (!uploadDestinations.google && !uploadDestinations.dropbox) {
+        console.log('[UPLOAD] No destination selected, showing alert');
         Alert.alert(
           t('gallery.noDestinationSelected'),
           t('gallery.selectAtLeastOneDestination')
@@ -1362,32 +1555,80 @@ export default function GalleryScreen({ navigation, route }) {
       }
 
       // Check authentication for selected destinations
+      console.log('[UPLOAD] Checking Google authentication:', { selected: uploadDestinations.google, authenticated: isAuthenticated });
       if (uploadDestinations.google && !isAuthenticated) {
-        Alert.alert(
-          t('gallery.googleNotConnected'),
-          t('gallery.googleNotConnectedMessage')
-        );
+        console.log('[UPLOAD] Google not authenticated, showing custom modal');
+        setUploadAlertConfig({
+          title: t('gallery.googleNotConnected'),
+          message: t('gallery.googleNotConnectedMessage'),
+          onGoToSettings: () => {
+            console.log('[UPLOAD] onGoToSettings callback called (from Google check)');
+            console.log('[UPLOAD] Closing modal first');
+            setShowUploadAlertModal(false);
+            setTimeout(() => {
+              console.log('[UPLOAD] Executing navigation to Settings');
+              try {
+                // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                navigation.goBack();
+                setTimeout(() => {
+                  console.log('[UPLOAD] Navigating to Settings from parent screen');
+                  navigation.navigate('Settings', { scrollToCloudSync: true });
+                  console.log('[UPLOAD] Navigation call completed');
+                }, 100);
+              } catch (error) {
+                console.error('[UPLOAD] Navigation error:', error);
+              }
+            }, 300);
+          }
+        });
+        setShowUploadAlertModal(true);
         return;
       }
 
       // Load Dropbox tokens before checking authentication
       await dropboxAuthService.loadStoredTokens();
-      
-      if (uploadDestinations.dropbox && !dropboxAuthService.isAuthenticated()) {
-        Alert.alert(
-          t('gallery.dropboxNotConnected'),
-          t('gallery.dropboxNotConnectedMessage')
-        );
+      const isDropboxAuth = dropboxAuthService.isAuthenticated();
+      console.log('[UPLOAD] Checking Dropbox authentication:', { selected: uploadDestinations.dropbox, authenticated: isDropboxAuth });
+      if (uploadDestinations.dropbox && !isDropboxAuth) {
+        console.log('[UPLOAD] Dropbox not authenticated, showing custom modal');
+        setUploadAlertConfig({
+          title: t('gallery.dropboxNotConnected'),
+          message: t('gallery.dropboxNotConnectedMessage'),
+          onGoToSettings: () => {
+            console.log('[UPLOAD] onGoToSettings callback called (from Dropbox check)');
+            console.log('[UPLOAD] Closing modal first');
+            setShowUploadAlertModal(false);
+            setTimeout(() => {
+              console.log('[UPLOAD] Executing navigation to Settings');
+              try {
+                // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                navigation.goBack();
+                setTimeout(() => {
+                  console.log('[UPLOAD] Navigating to Settings from parent screen');
+                  navigation.navigate('Settings', { scrollToCloudSync: true });
+                  console.log('[UPLOAD] Navigation call completed');
+                }, 100);
+              } catch (error) {
+                console.error('[UPLOAD] Navigation error:', error);
+              }
+            }, 300);
+          }
+        });
+        setShowUploadAlertModal(true);
         return;
       }
 
+      console.log('[UPLOAD] Authentication checks passed, proceeding with upload');
       if (userMode === 'team_member') {
+        console.log('[UPLOAD] Team member upload path');
         // Team Member Upload Logic (same as Pro/Business/Enterprise)
         // Check if we're uploading selected photos
         let sourcePhotos;
+        let selectedSets = [];
         if (uploadSelectedPhotos) {
           // Use selected photos
           sourcePhotos = uploadSelectedPhotos.individual;
+          selectedSets = uploadSelectedPhotos.sets || [];
           // Reset the selected photos flag after using it
           setUploadSelectedPhotos(null);
         } else {
@@ -1406,7 +1647,89 @@ export default function GalleryScreen({ navigation, route }) {
         if (selectedTypes.combined) {
           const anyFormat = Object.keys(selectedFormats).some((k) => selectedFormats[k]);
 
-          // Group photos by room to find pairs
+          // First, process selected sets (combined photos directly selected)
+          // These don't require both before and after to be in sourcePhotos
+          if (!anyFormat) {
+            // Upload existing ORIGINAL combined images from device storage
+            try {
+              const dir = FileSystem.documentDirectory;
+              const entries = dir ? await FileSystem.readDirectoryAsync(dir) : [];
+
+              let foundCount = 0;
+              for (const photoSet of selectedSets) {
+                if (photoSet.before && photoSet.after) {
+                  const pair = {
+                    before: photoSet.before,
+                    after: photoSet.after,
+                    room: photoSet.before.room
+                  };
+                  const safeName = (pair.before.name || 'Photo').replace(/\s+/g, '_');
+                  const projectId = pair.before.projectId;
+                  const projectIdSuffix = projectId ? `_P${projectId}` : '';
+                  const stackPrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_STACK_`;
+                  const sidePrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_SIDE_`;
+
+                  const pickLatestByPrefix = (prefix) => {
+                    let matches = entries.filter(name => name.startsWith(prefix));
+                    
+                    // Filter by project ID if available
+                    if (projectId) {
+                      matches = matches.filter(name => name.includes(projectIdSuffix));
+                    }
+                    
+                    if (matches.length === 0) return null;
+                    // Filenames end with _<timestamp>[_PprojectId].jpg; pick max timestamp
+                    let best = null;
+                    let bestTs = -1;
+                    for (const name of matches) {
+                      // Match timestamp before project ID suffix if present
+                      const m = name.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+                      const ts = m ? parseInt(m[1], 10) : 0;
+                      if (ts > bestTs) { bestTs = ts; best = name; }
+                    }
+                    return best || matches[matches.length - 1];
+                  };
+
+                  const stackName = pickLatestByPrefix(stackPrefix);
+                  const sideName = pickLatestByPrefix(sidePrefix);
+
+                  const beforeOrientation = pair.before.orientation || 'portrait';
+                  const cameraVM = pair.before.cameraViewMode || 'portrait';
+                  const isLetterbox = (cameraVM === 'landscape' && beforeOrientation === 'portrait');
+                  const isLandscape = beforeOrientation === 'landscape' || cameraVM === 'landscape';
+
+                  const pushItem = (name, tag) => {
+                    if (!dir || !name) return;
+                    combinedItems.push({
+                      uri: `${dir}${name}`,
+                      filename: `${pair.before.name}_original-${tag}.jpg`,
+                      name: pair.before.name,
+                      room: pair.room,
+                      mode: PHOTO_MODES.COMBINED,
+                      format: `original-${tag}`
+                    });
+                    foundCount++;
+                  };
+
+                  if (isLetterbox) {
+                    // Upload both if both exist
+                    if (stackName) pushItem(stackName, 'stack');
+                    if (sideName) pushItem(sideName, 'side');
+                  } else if (isLandscape) {
+                    if (stackName) pushItem(stackName, 'stack');
+                    else if (sideName) pushItem(sideName, 'side');
+                  } else {
+                    if (sideName) pushItem(sideName, 'side');
+                    else if (stackName) pushItem(stackName, 'stack');
+                  }
+                }
+              }
+            } catch (e) {
+              console.error('[UPLOAD] Error processing selected sets:', e);
+            }
+          }
+
+          // Group photos by room to find pairs from sourcePhotos
           const byRoom = {};
           sourcePhotos.forEach(p => {
             if (!byRoom[p.room]) byRoom[p.room] = { before: [], after: [] };
@@ -1414,14 +1737,23 @@ export default function GalleryScreen({ navigation, route }) {
             if (p.mode === PHOTO_MODES.AFTER) byRoom[p.room].after.push(p);
           });
 
-          // Create pairs
+          // Create pairs from sourcePhotos (skip if already added from selectedSets)
           const pairs = [];
           Object.keys(byRoom).forEach(roomId => {
             const beforeList = byRoom[roomId].before;
             const afterList = byRoom[roomId].after;
             afterList.forEach(after => {
               const match = beforeList.find(b => b.id === after.beforePhotoId);
-              if (match) pairs.push({ before: match, after, room: roomId });
+              if (match) {
+                // Check if this pair is already in selectedSets
+                const alreadyInSelectedSets = selectedSets.some(set => 
+                  set.before && set.after && 
+                  set.before.id === match.id && set.after.id === after.id
+                );
+                if (!alreadyInSelectedSets) {
+                  pairs.push({ before: match, after, room: roomId });
+                }
+              }
             });
           });
 
@@ -1521,7 +1853,19 @@ export default function GalleryScreen({ navigation, route }) {
               });
             };
 
-            const totalRenders = pairs.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
+            // Include selectedSets in pairs for rendering
+            const allPairsForRendering = [...pairs];
+            for (const photoSet of selectedSets) {
+              if (photoSet.before && photoSet.after) {
+                allPairsForRendering.push({
+                  before: photoSet.before,
+                  after: photoSet.after,
+                  room: photoSet.before.room
+                });
+              }
+            }
+
+            const totalRenders = allPairsForRendering.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
 
             if (totalRenders === 0) {
               Alert.alert(t('gallery.nothingToUploadTitle'), t('gallery.noPairsForCombined'));
@@ -1534,7 +1878,7 @@ export default function GalleryScreen({ navigation, route }) {
 
             // Render each combination
             let renderCount = 0;
-            for (const pair of pairs) {
+            for (const pair of allPairsForRendering) {
               const allowedKeys = getAllowedTemplatesForPair(pair);
               for (const templateKey of allowedKeys) {
                 const cfg = TEMPLATE_CONFIGS[templateKey];
@@ -1670,9 +2014,11 @@ export default function GalleryScreen({ navigation, route }) {
       const albumName = createAlbumName(userName, new Date(), projectUploadId);
       // Scope uploads to the active project if one is selected, or use selected photos
       let sourcePhotos;
+      let selectedSets = [];
       if (uploadSelectedPhotos) {
         // Use selected photos
         sourcePhotos = uploadSelectedPhotos.individual;
+        selectedSets = uploadSelectedPhotos.sets || [];
         // Reset the selected photos flag after using it
         setUploadSelectedPhotos(null);
       } else {
@@ -1691,7 +2037,89 @@ export default function GalleryScreen({ navigation, route }) {
       if (selectedTypes.combined) {
         const anyFormat = Object.keys(selectedFormats).some((k) => selectedFormats[k]);
 
-        // Group photos by room to find pairs
+        // First, process selected sets (combined photos directly selected)
+        // These don't require both before and after to be in sourcePhotos
+        if (!anyFormat) {
+          // Upload existing ORIGINAL combined images from device storage
+          try {
+            const dir = FileSystem.documentDirectory;
+            const entries = dir ? await FileSystem.readDirectoryAsync(dir) : [];
+
+            let foundCount = 0;
+            for (const photoSet of selectedSets) {
+              if (photoSet.before && photoSet.after) {
+                const pair = {
+                  before: photoSet.before,
+                  after: photoSet.after,
+                  room: photoSet.before.room
+                };
+                const safeName = (pair.before.name || 'Photo').replace(/\s+/g, '_');
+                const projectId = pair.before.projectId;
+                const projectIdSuffix = projectId ? `_P${projectId}` : '';
+                const stackPrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_STACK_`;
+                const sidePrefix = `${pair.before.room}_${safeName}_COMBINED_BASE_SIDE_`;
+
+                const pickLatestByPrefix = (prefix) => {
+                  let matches = entries.filter(name => name.startsWith(prefix));
+                  
+                  // Filter by project ID if available
+                  if (projectId) {
+                    matches = matches.filter(name => name.includes(projectIdSuffix));
+                  }
+                  
+                  if (matches.length === 0) return null;
+                  // Filenames end with _<timestamp>[_PprojectId].jpg; pick max timestamp
+                  let best = null;
+                  let bestTs = -1;
+                  for (const name of matches) {
+                    // Match timestamp before project ID suffix if present
+                    const m = name.match(/_(\d+)(?:_P\d+)?\.(jpg|jpeg|png)$/i);
+                    const ts = m ? parseInt(m[1], 10) : 0;
+                    if (ts > bestTs) { bestTs = ts; best = name; }
+                  }
+                  return best || matches[matches.length - 1];
+                };
+
+                const stackName = pickLatestByPrefix(stackPrefix);
+                const sideName = pickLatestByPrefix(sidePrefix);
+
+                const beforeOrientation = pair.before.orientation || 'portrait';
+                const cameraVM = pair.before.cameraViewMode || 'portrait';
+                const isLetterbox = (cameraVM === 'landscape' && beforeOrientation === 'portrait');
+                const isLandscape = beforeOrientation === 'landscape' || cameraVM === 'landscape';
+
+                const pushItem = (name, tag) => {
+                  if (!dir || !name) return;
+                  combinedItems.push({
+                    uri: `${dir}${name}`,
+                    filename: `${pair.before.name}_original-${tag}.jpg`,
+                    name: pair.before.name,
+                    room: pair.room,
+                    mode: PHOTO_MODES.COMBINED,
+                    format: `original-${tag}`
+                  });
+                  foundCount++;
+                };
+
+                if (isLetterbox) {
+                  // Upload both if both exist
+                  if (stackName) pushItem(stackName, 'stack');
+                  if (sideName) pushItem(sideName, 'side');
+                } else if (isLandscape) {
+                  if (stackName) pushItem(stackName, 'stack');
+                  else if (sideName) pushItem(sideName, 'side');
+                } else {
+                  if (sideName) pushItem(sideName, 'side');
+                  else if (stackName) pushItem(stackName, 'stack');
+                }
+              }
+            }
+          } catch (e) {
+            console.error('[UPLOAD] Error processing selected sets:', e);
+          }
+        }
+
+        // Group photos by room to find pairs from sourcePhotos
         const byRoom = {};
         sourcePhotos.forEach(p => {
           if (!byRoom[p.room]) byRoom[p.room] = { before: [], after: [] };
@@ -1699,14 +2127,23 @@ export default function GalleryScreen({ navigation, route }) {
           if (p.mode === PHOTO_MODES.AFTER) byRoom[p.room].after.push(p);
         });
 
-        // Create pairs
+        // Create pairs from sourcePhotos (skip if already added from selectedSets)
         const pairs = [];
         Object.keys(byRoom).forEach(roomId => {
           const beforeList = byRoom[roomId].before;
           const afterList = byRoom[roomId].after;
           afterList.forEach(after => {
             const match = beforeList.find(b => b.id === after.beforePhotoId);
-            if (match) pairs.push({ before: match, after, room: roomId });
+            if (match) {
+              // Check if this pair is already in selectedSets
+              const alreadyInSelectedSets = selectedSets.some(set => 
+                set.before && set.after && 
+                set.before.id === match.id && set.after.id === after.id
+              );
+              if (!alreadyInSelectedSets) {
+                pairs.push({ before: match, after, room: roomId });
+              }
+            }
           });
         });
 
@@ -1806,7 +2243,19 @@ export default function GalleryScreen({ navigation, route }) {
             });
           };
 
-          const totalRenders = pairs.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
+          // Include selectedSets in pairs for rendering
+          const allPairsForRendering = [...pairs];
+          for (const photoSet of selectedSets) {
+            if (photoSet.before && photoSet.after) {
+              allPairsForRendering.push({
+                before: photoSet.before,
+                after: photoSet.after,
+                room: photoSet.before.room
+              });
+            }
+          }
+
+          const totalRenders = allPairsForRendering.reduce((sum, pair) => sum + getAllowedTemplatesForPair(pair).length, 0);
 
           if (totalRenders === 0) {
             Alert.alert(t('gallery.nothingToUploadTitle'), t('gallery.noPairsForCombined'));
@@ -1819,7 +2268,7 @@ export default function GalleryScreen({ navigation, route }) {
 
           // Render each combination
           let renderCount = 0;
-          for (const pair of pairs) {
+          for (const pair of allPairsForRendering) {
             const allowedKeys = getAllowedTemplatesForPair(pair);
             for (const templateKey of allowedKeys) {
               const cfg = TEMPLATE_CONFIGS[templateKey];
@@ -1939,6 +2388,11 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   const proceedWithUpload = async (items, albumName, configOverride = null) => {
+    console.log('[UPLOAD] proceedWithUpload called');
+    console.log('[UPLOAD] Items count:', items.length);
+    console.log('[UPLOAD] Album name:', albumName);
+    console.log('[UPLOAD] Config override:', configOverride);
+    console.log('[UPLOAD] Upload destinations:', uploadDestinations);
     try {
       // Close upload options and any upgrade overlay before starting background upload
       setOptionsVisible(false);
@@ -1948,11 +2402,14 @@ export default function GalleryScreen({ navigation, route }) {
 
       // Upload to Google Drive if selected
       if (uploadDestinations.google) {
+        console.log('[UPLOAD] Starting Google Drive upload');
         // Use provided config or fallback to location config (for backward compatibility)
         const config = configOverride || getLocationConfig(location);
+        console.log('[UPLOAD] Google config:', { folderId: config?.folderId, useDirectDrive: config?.useDirectDrive, sessionId: config?.sessionId });
 
         // Check if Google Drive is configured
         if (!config || !config.folderId || (config.useDirectDrive && !config.sessionId)) {
+          console.log('[UPLOAD] Google Drive not configured, showing alert');
           Alert.alert(
             t('gallery.setupRequiredTitle'),
             t('gallery.driveConfigMissing')
@@ -1961,6 +2418,7 @@ export default function GalleryScreen({ navigation, route }) {
         }
 
         // Start background upload to Google Drive
+        console.log('[UPLOAD] Starting background upload to Google Drive');
         const googleUploadId = startBackgroundUpload({
           items,
           config,
@@ -1972,25 +2430,51 @@ export default function GalleryScreen({ navigation, route }) {
           useDirectDrive: config?.useDirectDrive || false, // Pass the flag for proxy server upload
           sessionId: config?.sessionId || null, // Pass the proxy session ID
         });
+        console.log('[UPLOAD] Google Drive upload started, ID:', googleUploadId);
         uploadPromises.push({ type: 'google', uploadId: googleUploadId });
       }
 
       // Upload to Dropbox if selected
       if (uploadDestinations.dropbox) {
+        console.log('[UPLOAD] Starting Dropbox upload');
         // Load Dropbox tokens before checking authentication
         await dropboxAuthService.loadStoredTokens();
         
         // Check if Dropbox is authenticated
-        if (!dropboxAuthService.isAuthenticated()) {
-          Alert.alert(
-            t('gallery.dropboxNotConnected'),
-            t('gallery.dropboxNotConnectedMessage')
-          );
+        const dropboxAuth = dropboxAuthService.isAuthenticated();
+        console.log('[UPLOAD] Dropbox authenticated:', dropboxAuth);
+        if (!dropboxAuth) {
+          console.log('[UPLOAD] Dropbox not authenticated in proceedWithUpload, showing custom modal');
+          setUploadAlertConfig({
+            title: t('gallery.dropboxNotConnected'),
+            message: t('gallery.dropboxNotConnectedMessage'),
+            onGoToSettings: () => {
+              console.log('[UPLOAD] onGoToSettings callback called (from proceedWithUpload)');
+              console.log('[UPLOAD] Closing modal first');
+              setShowUploadAlertModal(false);
+              setTimeout(() => {
+                console.log('[UPLOAD] Executing navigation to Settings');
+                try {
+                  // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                  navigation.goBack();
+                  setTimeout(() => {
+                    console.log('[UPLOAD] Navigating to Settings from parent screen');
+                    navigation.navigate('Settings', { scrollToCloudSync: true });
+                    console.log('[UPLOAD] Navigation call completed');
+                  }, 100);
+                } catch (error) {
+                  console.error('[UPLOAD] Navigation error:', error);
+                }
+              }, 300);
+            }
+          });
+          setShowUploadAlertModal(true);
           return;
         }
 
         // Upload to Dropbox directly (without background service for now)
         // We'll do this in parallel with Google Drive upload
+        console.log('[UPLOAD] Starting Dropbox batch upload');
         const dropboxUploadPromise = uploadPhotoBatchToDropbox(items, {
           albumName,
           location,
@@ -2004,10 +2488,12 @@ export default function GalleryScreen({ navigation, route }) {
         });
 
         uploadPromises.push({ type: 'dropbox', promise: dropboxUploadPromise });
+        console.log('[UPLOAD] Dropbox upload promise added');
       }
 
       // Show upload modal immediately (if Google Drive upload is in progress)
       if (uploadDestinations.google) {
+        console.log('[UPLOAD] Showing upload details modal');
         setShowUploadDetails(true);
       }
 
@@ -2040,15 +2526,21 @@ export default function GalleryScreen({ navigation, route }) {
     }
   };
 
-  const handleDeleteAllConfirmed = async () => {
+  // Handle plan modal close - delete confirmation stays open (no need to reopen)
+  const handleSharePlanModalClose = () => {
+    setShowSharePlanModal(false);
+  };
+
+  const handleDeleteAllConfirmed = async (deleteFromStorageParam) => {
     try {
+      const shouldDeleteFromStorage = deleteFromStorageParam !== undefined ? deleteFromStorageParam : deleteFromStorage;
       if (activeProjectId) {
         // Delete only the active project and its photos
-        await deleteProject(activeProjectId, { deleteFromStorage });
+        await deleteProject(activeProjectId, { deleteFromStorage: shouldDeleteFromStorage });
         setActiveProject(null);
       } else {
         // No active project: fall back to deleting everything
-        if (deleteFromStorage) {
+        if (shouldDeleteFromStorage) {
           // Delete known photos and also purge any base/combined images saved by editor/capture
           await deletePhotosFromDevice(photos);
           await purgeAllDevicePhotos();
@@ -2057,6 +2549,7 @@ export default function GalleryScreen({ navigation, route }) {
       }
     } finally {
       setConfirmDeleteVisible(false);
+      setShowDeleteAllConfirm(false);
     }
   };
 
@@ -2122,20 +2615,25 @@ export default function GalleryScreen({ navigation, route }) {
 
   // Handle upload selected photos
   const handleUploadSelected = async () => {
+    console.log('[UPLOAD] handleUploadSelected called');
     const selected = getSelectedPhotos();
     const selectedSets = getSelectedPhotoSets();
+    console.log('[UPLOAD] Selected photos:', selected.length);
+    console.log('[UPLOAD] Selected sets:', selectedSets.length);
     
     if (selected.length === 0 && selectedSets.length === 0) {
+      console.log('[UPLOAD] No photos selected, showing alert');
       Alert.alert(t('gallery.noPhotosTitle'), 'No photos selected');
       return;
     }
 
-    // Use the same upload logic but with filtered photos
-    // For now, we'll use the existing handleUploadPhotos but filter the photos
-    // This is a simplified approach - you may need to adjust based on your upload logic
+    // Store selected photos for upload logic to use
+    setUploadSelectedPhotos({ individual: selected, sets: selectedSets });
     setManageVisible(false);
-    // TODO: Implement upload for selected photos
-    Alert.alert('Info', 'Upload selected photos functionality will be implemented');
+    
+    // Use the same upload flow but with selected photos
+    // The upload logic will check uploadSelectedPhotos and use it instead of all photos
+    await handleUploadPhotos();
   };
 
   // Handle share selected photos
@@ -2158,7 +2656,7 @@ export default function GalleryScreen({ navigation, route }) {
   };
 
   // Handle delete selected photos
-  const handleDeleteSelected = async () => {
+  const handleDeleteSelected = () => {
     const selected = getSelectedPhotos();
     const selectedSets = getSelectedPhotoSets();
     
@@ -2167,37 +2665,58 @@ export default function GalleryScreen({ navigation, route }) {
       return;
     }
 
-    Alert.alert(
-      t('gallery.deleteAllTitle'),
-      `Delete ${selected.length + selectedSets.length} selected photo(s)?`,
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        {
-          text: t('common.delete'),
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              // Delete individual photos
-              for (const photo of selected) {
-                await deletePhoto(photo.id);
-              }
-              // Delete combined photo sets
-              for (const set of selectedSets) {
-                if (set.before) await deletePhoto(set.before.id);
-                if (set.after) await deletePhoto(set.after.id);
-              }
-              // Clear selection
-              setSelectedPhotos(new Set());
-              isSelectionModeRef.current = false;
-              setIsSelectionMode(false);
-              setShowOnlySelected(false); // Clear filter when deleting selected
-            } catch (error) {
-              Alert.alert('Error', 'Failed to delete some photos');
-            }
-          }
+    setShowDeleteSelectedConfirm(true);
+  };
+
+  const handleDeleteSelectedConfirmed = async (deleteFromStorageParam) => {
+    const shouldDeleteFromStorage = deleteFromStorageParam !== undefined ? deleteFromStorageParam : true;
+
+    try {
+      // Get selected photos/sets before starting deletion
+      const selected = getSelectedPhotos();
+      const selectedSets = getSelectedPhotoSets();
+      
+      // Collect all photo IDs to delete
+      const photoIdsToDelete = new Set();
+      selected.forEach(photo => photoIdsToDelete.add(photo.id));
+      selectedSets.forEach(set => {
+        if (set.before) photoIdsToDelete.add(set.before.id);
+        if (set.after) photoIdsToDelete.add(set.after.id);
+      });
+
+      // Close modal immediately to prevent UI freeze
+      setShowDeleteSelectedConfirm(false);
+      setSelectedPhotos(new Set());
+      isSelectionModeRef.current = false;
+      setIsSelectionMode(false);
+      setShowOnlySelected(false); // Clear filter when deleting selected
+
+      // Delete photos sequentially
+      // Note: deletePhoto always deletes from device
+      // TODO: Update deletePhoto to accept options to conditionally skip device deletion
+      // Delete individual photos
+      for (const photo of selected) {
+        try {
+          await deletePhoto(photo.id);
+        } catch (error) {
+          console.error(`[GalleryScreen] Failed to delete photo ${photo.id}:`, error);
+          // Continue with other deletions even if one fails
         }
-      ]
-    );
+      }
+      // Delete combined photo sets
+      for (const set of selectedSets) {
+        try {
+          if (set.before) await deletePhoto(set.before.id);
+          if (set.after) await deletePhoto(set.after.id);
+        } catch (error) {
+          console.error(`[GalleryScreen] Failed to delete photo set:`, error);
+          // Continue with other deletions even if one fails
+        }
+      }
+    } catch (error) {
+      console.error('[GalleryScreen] Error deleting selected photos:', error);
+      Alert.alert(t('common.error'), 'Failed to delete some photos. Please try again.');
+    }
   };
 
   // Handle preview selected photos - filter gallery to show only selected photos
@@ -2282,19 +2801,27 @@ export default function GalleryScreen({ navigation, route }) {
         // Check if this is a double tap (second tap within 300ms)
         if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
           console.log('[GalleryScreen] Double tap detected for combined photo:', combinedId);
-          // Double tap detected - cancel any pending toggle and open preview
-          // Cancel the pending toggle from first tap
+          // Double tap detected - revert the toggle from first tap and open preview
+          // Cancel any pending toggle timeout
           if (toggleTimeoutRef.current[photoKey]) {
             clearTimeout(toggleTimeoutRef.current[photoKey]);
             delete toggleTimeoutRef.current[photoKey];
           }
           
+          // Revert the toggle that happened on first tap
           const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
-          console.log('[GalleryScreen] Original selection state:', wasOriginallySelected);
+          setSelectedPhotos(prev => {
+            const newSet = new Set(prev);
+            if (wasOriginallySelected) {
+              newSet.add(combinedId); // Restore to selected
+            } else {
+              newSet.delete(combinedId); // Restore to unselected
+            }
+            return newSet;
+          });
           
-          // Get the original state for navigation (don't change state, just use original)
+          // Get the original state for navigation
           const restoredSelected = new Set(currentSelectedPhotos);
-          // Make sure the photo is in the correct state for navigation
           if (wasOriginallySelected) {
             restoredSelected.add(combinedId);
           } else {
@@ -2311,7 +2838,7 @@ export default function GalleryScreen({ navigation, route }) {
           const selectedSets = getSelectedPhotoSets();
           console.log('[GalleryScreen] Navigating to PhotoEditor with', selectedSets.length, 'selected sets');
           
-          // Navigate immediately (no state change needed, checkbox stays as is)
+          // Navigate immediately
           navigation.navigate('PhotoEditor', {
             beforePhoto: photoSet.before,
             afterPhoto: photoSet.after,
@@ -2325,36 +2852,34 @@ export default function GalleryScreen({ navigation, route }) {
           return;
         }
         
-        // First tap - store original state, don't toggle yet
+        // First tap - immediately toggle selection (no delay)
         const wasOriginallySelected = currentSelectedPhotos.has(combinedId);
         originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
+        
+        // Toggle immediately for instant visual feedback
+        setSelectedPhotos(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(combinedId)) {
+            newSet.delete(combinedId);
+          } else {
+            newSet.add(combinedId);
+          }
+          return newSet;
+        });
         
         // Record tap for double tap detection
         tapCountRef.current[photoKey] = 1;
         lastTapRef.current[photoKey] = now;
         
-        // Schedule toggle after delay (only if no second tap comes)
+        // Schedule cleanup after delay (only if no second tap comes)
         toggleTimeoutRef.current[photoKey] = setTimeout(() => {
-          // Only toggle if this wasn't a double tap (tapCount is still 1)
-          if (tapCountRef.current[photoKey] === 1) {
-            setSelectedPhotos(prev => {
-              const newSet = new Set(prev);
-              if (newSet.has(combinedId)) {
-                newSet.delete(combinedId);
-              } else {
-                newSet.add(combinedId);
-              }
-              return newSet;
-            });
-          }
-          
           // Clear tap count after delay
           tapCountRef.current[photoKey] = 0;
           lastTapRef.current[photoKey] = 0;
           delete originalSelectionStateRef.current[photoKey];
           delete toggleTimeoutRef.current[photoKey];
           pendingTogglesRef.current.delete(combinedId);
-        }, DOUBLE_TAP_DELAY); // Wait full delay to confirm it's a single tap
+        }, DOUBLE_TAP_DELAY);
         return;
       }
       
@@ -2417,19 +2942,27 @@ export default function GalleryScreen({ navigation, route }) {
         // Check if this is a double tap (second tap within 300ms)
         if (tapCountRef.current[photoKey] && (now - lastTapRef.current[photoKey]) < DOUBLE_TAP_DELAY) {
           console.log('[GalleryScreen] Double tap detected for photo:', photo.id);
-          // Double tap detected - cancel any pending toggle and open preview
-          // Cancel the pending toggle from first tap
+          // Double tap detected - revert the toggle from first tap and open preview
+          // Cancel any pending toggle timeout
           if (toggleTimeoutRef.current[photoKey]) {
             clearTimeout(toggleTimeoutRef.current[photoKey]);
             delete toggleTimeoutRef.current[photoKey];
           }
           
+          // Revert the toggle that happened on first tap
           const wasOriginallySelected = originalSelectionStateRef.current[photoKey];
-          console.log('[GalleryScreen] Original selection state:', wasOriginallySelected);
+          setSelectedPhotos(prev => {
+            const newSet = new Set(prev);
+            if (wasOriginallySelected) {
+              newSet.add(photo.id); // Restore to selected
+            } else {
+              newSet.delete(photo.id); // Restore to unselected
+            }
+            return newSet;
+          });
           
-          // Get the original state for navigation (don't change state, just use original)
+          // Get the original state for navigation
           const restoredSelected = new Set(currentSelectedPhotos);
-          // Make sure the photo is in the correct state for navigation
           if (wasOriginallySelected) {
             restoredSelected.add(photo.id);
           } else {
@@ -2442,7 +2975,7 @@ export default function GalleryScreen({ navigation, route }) {
           delete originalSelectionStateRef.current[photoKey];
           pendingTogglesRef.current.delete(photo.id);
           
-          // Navigate immediately (no state change needed, checkbox stays as is)
+          // Navigate immediately
           if (photoType === 'combined') {
             // Get all selected combined photo sets for swiping
             const selectedSets = getSelectedPhotoSets();
@@ -2474,36 +3007,34 @@ export default function GalleryScreen({ navigation, route }) {
           return;
         }
         
-        // First tap - store original state, don't toggle yet
+        // First tap - immediately toggle selection (no delay)
         const wasOriginallySelected = currentSelectedPhotos.has(photo.id);
         originalSelectionStateRef.current[photoKey] = wasOriginallySelected;
+        
+        // Toggle immediately for instant visual feedback
+        setSelectedPhotos(prev => {
+          const newSet = new Set(prev);
+          if (newSet.has(photo.id)) {
+            newSet.delete(photo.id);
+          } else {
+            newSet.add(photo.id);
+          }
+          return newSet;
+        });
         
         // Record tap for double tap detection
         tapCountRef.current[photoKey] = 1;
         lastTapRef.current[photoKey] = now;
         
-        // Schedule toggle after delay (only if no second tap comes)
+        // Schedule cleanup after delay (only if no second tap comes)
         toggleTimeoutRef.current[photoKey] = setTimeout(() => {
-          // Only toggle if this wasn't a double tap (tapCount is still 1)
-          if (tapCountRef.current[photoKey] === 1) {
-            setSelectedPhotos(prev => {
-              const newSet = new Set(prev);
-              if (newSet.has(photo.id)) {
-                newSet.delete(photo.id);
-              } else {
-                newSet.add(photo.id);
-              }
-              return newSet;
-            });
-          }
-          
           // Clear tap count after delay
           tapCountRef.current[photoKey] = 0;
           lastTapRef.current[photoKey] = 0;
           delete originalSelectionStateRef.current[photoKey];
           delete toggleTimeoutRef.current[photoKey];
           pendingTogglesRef.current.delete(photo.id);
-        }, DOUBLE_TAP_DELAY); // Wait full delay to confirm it's a single tap
+        }, DOUBLE_TAP_DELAY);
         return;
       }
       
@@ -2852,9 +3383,9 @@ export default function GalleryScreen({ navigation, route }) {
         />
       </View>
 
-      <View style={styles.columnHeaders}>
+      <View style={[styles.columnHeaders, { justifyContent: 'space-between' }]}>
         <TouchableOpacity
-          style={[styles.filterButton, photoFilter === 'all' && styles.filterButtonActive]}
+          style={[styles.filterButton, { flex: 1, marginRight: 4 }, photoFilter === 'all' && styles.filterButtonActive]}
           onPress={() => setPhotoFilter('all')}
           activeOpacity={0.7}
         >
@@ -2863,7 +3394,7 @@ export default function GalleryScreen({ navigation, route }) {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterButton, photoFilter === 'before' && styles.filterButtonActive]}
+          style={[styles.filterButton, { flex: 1, marginHorizontal: 4 }, photoFilter === 'before' && styles.filterButtonActive]}
           onPress={() => setPhotoFilter('before')}
           activeOpacity={0.7}
         >
@@ -2872,7 +3403,7 @@ export default function GalleryScreen({ navigation, route }) {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterButton, photoFilter === 'after' && styles.filterButtonActive]}
+          style={[styles.filterButton, { flex: 1, marginHorizontal: 4 }, photoFilter === 'after' && styles.filterButtonActive]}
           onPress={() => setPhotoFilter('after')}
           activeOpacity={0.7}
         >
@@ -2881,7 +3412,7 @@ export default function GalleryScreen({ navigation, route }) {
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.filterButton, photoFilter === 'combined' && styles.filterButtonActive, { marginRight: 0 }]}
+          style={[styles.filterButton, { flex: 1, marginLeft: 4 }, photoFilter === 'combined' && styles.filterButtonActive]}
           onPress={() => setPhotoFilter('combined')}
           activeOpacity={0.7}
         >
@@ -3211,6 +3742,67 @@ export default function GalleryScreen({ navigation, route }) {
         </View>
       </Modal>
 
+      {/* Upload Alert Modal */}
+      {showUploadAlertModal && uploadAlertConfig && (
+        <Modal
+          visible={showUploadAlertModal}
+          transparent={true}
+          animationType="fade"
+          onRequestClose={() => setShowUploadAlertModal(false)}
+        >
+          <TouchableWithoutFeedback onPress={() => setShowUploadAlertModal(false)}>
+            <View style={styles.optionsModalOverlay}>
+              <TouchableWithoutFeedback onPress={(e) => e.stopPropagation()}>
+                <View style={styles.optionsModalContent}>
+                  <Text style={styles.optionsTitle}>{uploadAlertConfig.title}</Text>
+                  <Text style={[styles.optionsSectionLabel, { marginTop: 8, marginBottom: 24, textAlign: 'center' }]}>
+                    {uploadAlertConfig.message}
+                  </Text>
+                  <View style={styles.optionsActionsRow}>
+                    <TouchableOpacity 
+                      style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} 
+                      onPress={() => setShowUploadAlertModal(false)}
+                    >
+                      <Text style={styles.actionBtnText}>{t('common.cancel')}</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} 
+                      onPress={() => {
+                        console.log('[UPLOAD] Go to Settings button pressed in custom modal');
+                        console.log('[UPLOAD] uploadAlertConfig:', uploadAlertConfig);
+                        if (uploadAlertConfig && uploadAlertConfig.onGoToSettings) {
+                          uploadAlertConfig.onGoToSettings();
+                        } else {
+                          console.log('[UPLOAD] onGoToSettings not found, navigating directly');
+                          setShowUploadAlertModal(false);
+                          setTimeout(() => {
+                            try {
+                              // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                              navigation.goBack();
+                              setTimeout(() => {
+                                console.log('[UPLOAD] Direct navigation to Settings from parent screen');
+                                navigation.navigate('Settings', { scrollToCloudSync: true });
+                                console.log('[UPLOAD] Direct navigation call completed');
+                              }, 100);
+                            } catch (error) {
+                              console.error('[UPLOAD] Direct navigation error:', error);
+                            }
+                          }, 300);
+                        }
+                      }}
+                    >
+                      <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>
+                        {t('gallery.goToSettings')}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </TouchableWithoutFeedback>
+            </View>
+          </TouchableWithoutFeedback>
+        </Modal>
+      )}
+
       {/* Upload Progress Modal */}
       <Modal
         visible={uploading}
@@ -3279,10 +3871,31 @@ export default function GalleryScreen({ navigation, route }) {
                   if (isAuthenticated) {
                     setUploadDestinations(prev => ({ ...prev, google: !prev.google }));
                   } else {
-                    Alert.alert(
-                      t('gallery.googleNotConnected'),
-                      t('gallery.googleNotConnectedMessage')
-                    );
+                    console.log('[UPLOAD] Google checkbox clicked but not authenticated, showing custom modal');
+                    setUploadAlertConfig({
+                      title: t('gallery.googleNotConnected'),
+                      message: t('gallery.googleNotConnectedMessage'),
+                      onGoToSettings: () => {
+                        console.log('[UPLOAD] onGoToSettings callback called (from Google checkbox)');
+                        console.log('[UPLOAD] Closing modal first');
+                        setShowUploadAlertModal(false);
+                        setTimeout(() => {
+                          console.log('[UPLOAD] Executing navigation to Settings');
+                          try {
+                            // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                            navigation.goBack();
+                            setTimeout(() => {
+                              console.log('[UPLOAD] Navigating to Settings from parent screen');
+                              navigation.navigate('Settings', { scrollToCloudSync: true });
+                              console.log('[UPLOAD] Navigation call completed');
+                            }, 100);
+                          } catch (error) {
+                            console.error('[UPLOAD] Navigation error:', error);
+                          }
+                        }, 300);
+                      }
+                    });
+                    setShowUploadAlertModal(true);
                   }
                 }}
                 disabled={!isAuthenticated}
@@ -3323,10 +3936,31 @@ export default function GalleryScreen({ navigation, route }) {
                   if (connected) {
                     setUploadDestinations(prev => ({ ...prev, dropbox: !prev.dropbox }));
                   } else {
-                    Alert.alert(
-                      t('gallery.dropboxNotConnected'),
-                      t('gallery.dropboxNotConnectedMessage')
-                    );
+                    console.log('[UPLOAD] Dropbox checkbox clicked but not authenticated, showing custom modal');
+                    setUploadAlertConfig({
+                      title: t('gallery.dropboxNotConnected'),
+                      message: t('gallery.dropboxNotConnectedMessage'),
+                      onGoToSettings: () => {
+                        console.log('[UPLOAD] onGoToSettings callback called (from Dropbox checkbox)');
+                        console.log('[UPLOAD] Closing modal first');
+                        setShowUploadAlertModal(false);
+                        setTimeout(() => {
+                          console.log('[UPLOAD] Executing navigation to Settings');
+                          try {
+                            // Since Gallery is a fullScreenModal, we need to go back first, then navigate
+                            navigation.goBack();
+                            setTimeout(() => {
+                              console.log('[UPLOAD] Navigating to Settings from parent screen');
+                              navigation.navigate('Settings', { scrollToCloudSync: true });
+                              console.log('[UPLOAD] Navigation call completed');
+                            }, 100);
+                          } catch (error) {
+                            console.error('[UPLOAD] Navigation error:', error);
+                          }
+                        }, 300);
+                      }
+                    });
+                    setShowUploadAlertModal(true);
                   }
                 }}
                 disabled={!isDropboxConnected}
@@ -3362,21 +3996,33 @@ export default function GalleryScreen({ navigation, route }) {
             )}
 
             <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>{t('gallery.photoTypes')}</Text>
-            <View style={styles.optionsChipsRow}>
+            <View style={[styles.optionsChipsRow, { justifyContent: 'space-between', alignItems: 'stretch', flexWrap: 'nowrap', gap: 0 }]}>
               <TouchableOpacity
-                style={[styles.chip, selectedTypes.before && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  { flex: 1, marginRight: 4 },
+                  selectedTypes.before && styles.chipActive
+                ]}
                 onPress={() => setSelectedTypes(prev => ({ ...prev, before: !prev.before }))}
               >
                 <Text style={[styles.chipText, selectedTypes.before && styles.chipTextActive]}>{t('camera.before')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.chip, selectedTypes.after && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  { flex: 1, marginHorizontal: 4 },
+                  selectedTypes.after && styles.chipActive
+                ]}
                 onPress={() => setSelectedTypes(prev => ({ ...prev, after: !prev.after }))}
               >
                 <Text style={[styles.chipText, selectedTypes.after && styles.chipTextActive]}>{t('camera.after')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.chip, selectedTypes.combined && styles.chipActive]}
+                style={[
+                  styles.chip,
+                  { flex: 1, marginLeft: 4, marginRight: 0 },
+                  selectedTypes.combined && styles.chipActive
+                ]}
                 onPress={() => setSelectedTypes(prev => ({ ...prev, combined: !prev.combined }))}
               >
                 <Text style={[styles.chipText, selectedTypes.combined && styles.chipTextActive]}>{t('camera.combined')}</Text>
@@ -3442,7 +4088,10 @@ export default function GalleryScreen({ navigation, route }) {
               <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setOptionsVisible(false)}>
                 <Text style={styles.actionBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} onPress={startUploadWithOptions}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} onPress={() => {
+                console.log('[UPLOAD] Start Upload button pressed');
+                startUploadWithOptions();
+              }}>
                 <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>{t('gallery.startUpload')}</Text>
               </TouchableOpacity>
             </View>
@@ -3571,6 +4220,7 @@ export default function GalleryScreen({ navigation, route }) {
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.actionWide, styles.actionPrimaryFlat]}
                       onPress={() => {
+                        console.log('[UPLOAD] Upload All button pressed from manage menu');
                         setManageVisible(false);
                         handleUploadPhotos();
                       }}
@@ -3598,8 +4248,7 @@ export default function GalleryScreen({ navigation, route }) {
                       style={[styles.actionBtn, styles.actionWide, styles.actionDestructive]}
                       onPress={() => {
                         setManageVisible(false);
-                        // Delete immediately without confirmation
-                        handleDeleteAllConfirmed();
+                        setShowDeleteAllConfirm(true);
                       }}
                     >
                       <Text style={[styles.actionBtnText, styles.actionDestructiveText]}>
@@ -3658,39 +4307,164 @@ export default function GalleryScreen({ navigation, route }) {
         visible={shareOptionsVisible}
         transparent={true}
         animationType="fade"
-        onRequestClose={() => setShareOptionsVisible(false)}
+        onRequestClose={() => {
+          console.log('[GALLERY] Share options modal close requested');
+          setShareOptionsVisible(false);
+          setShowAdvancedShareFormats(false);
+        }}
       >
         <View style={styles.optionsModalOverlay}>
           <View style={styles.optionsModalContent}>
             <Text style={styles.optionsTitle}>{t('gallery.whatToShare')}</Text>
 
             <Text style={styles.optionsSectionLabel}>{t('gallery.photoTypes')}</Text>
-            <View style={styles.optionsChipsRow}>
+            <View style={[styles.optionsChipsRow, { justifyContent: 'space-between', alignItems: 'stretch', flexWrap: 'nowrap', gap: 0 }]}>
               <TouchableOpacity
-                style={[styles.chip, selectedShareTypes.before && styles.chipActive]}
+                style={[
+                  {
+                    flex: 1,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginRight: 4,
+                  },
+                  selectedShareTypes.before
+                    ? { backgroundColor: '#4CAF50', borderColor: '#4CAF50' }
+                    : { backgroundColor: '#FFFFFF', borderColor: '#4CAF50' }
+                ]}
                 onPress={() => setSelectedShareTypes(prev => ({ ...prev, before: !prev.before }))}
               >
-                <Text style={[styles.chipText, selectedShareTypes.before && styles.chipTextActive]}>{t('camera.before')}</Text>
+                <Text style={[
+                  { fontSize: 12, fontWeight: '500' },
+                  selectedShareTypes.before
+                    ? { color: '#000000' }
+                    : { color: '#4CAF50' }
+                ]}>{t('camera.before')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.chip, selectedShareTypes.after && styles.chipActive]}
+                style={[
+                  {
+                    flex: 1,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginHorizontal: 4,
+                  },
+                  selectedShareTypes.after
+                    ? { backgroundColor: '#2196F3', borderColor: '#2196F3' }
+                    : { backgroundColor: '#FFFFFF', borderColor: '#2196F3' }
+                ]}
                 onPress={() => setSelectedShareTypes(prev => ({ ...prev, after: !prev.after }))}
               >
-                <Text style={[styles.chipText, selectedShareTypes.after && styles.chipTextActive]}>{t('camera.after')}</Text>
+                <Text style={[
+                  { fontSize: 12, fontWeight: '500' },
+                  selectedShareTypes.after
+                    ? { color: '#000000' }
+                    : { color: '#2196F3' }
+                ]}>{t('camera.after')}</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.chip, selectedShareTypes.combined && styles.chipActive]}
+                style={[
+                  {
+                    flex: 1,
+                    paddingVertical: 6,
+                    borderRadius: 20,
+                    borderWidth: 2,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    marginLeft: 4,
+                  },
+                  selectedShareTypes.combined
+                    ? { backgroundColor: '#FFC107', borderColor: '#FFC107' }
+                    : { backgroundColor: '#FFFFFF', borderColor: '#FFC107' }
+                ]}
                 onPress={() => setSelectedShareTypes(prev => ({ ...prev, combined: !prev.combined }))}
               >
-                <Text style={[styles.chipText, selectedShareTypes.combined && styles.chipTextActive]}>{t('camera.combined')}</Text>
+                <Text style={[
+                  { fontSize: 12, fontWeight: '500' },
+                  selectedShareTypes.combined
+                    ? { color: '#000000' }
+                    : { color: '#FFC107' }
+                ]}>{t('camera.combined')}</Text>
               </TouchableOpacity>
             </View>
+
+            {/* Advanced formats section - only show if combined is selected */}
+            {selectedShareTypes.combined && (
+              <>
+                {/* Advanced toggle */}
+                {!showAdvancedShareFormats && (
+                  <TouchableOpacity
+                    style={[styles.actionBtn, styles.actionPrimary, { marginTop: 12, marginLeft: 0, marginRight: 0, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }]}
+                    onPress={() => setShowAdvancedShareFormats(true)}
+                  >
+                    <Text style={[styles.actionBtnText, { color: '#000000' }]}>{t('gallery.showAdvancedFormats')}</Text>
+                    <Text style={{ color: '#000000', fontSize: 16, marginLeft: 8 }}>▼</Text>
+                  </TouchableOpacity>
+                )}
+
+                {showAdvancedShareFormats && (
+                  <>
+                    <Text style={[styles.optionsSectionLabel, { marginTop: 16 }]}>{t('gallery.stackedFormats')}</Text>
+                    <View style={styles.optionsChipsRow}>
+                      {Object.entries(TEMPLATE_CONFIGS)
+                        .filter(([k, cfg]) => cfg.layout === 'stack')
+                        .map(([key, cfg]) => (
+                          <TouchableOpacity
+                            key={key}
+                            style={[styles.chip, selectedFormats[key] && styles.chipActive]}
+                            onPress={() => handleFormatToggle(key)}
+                          >
+                            <Text style={[styles.chipText, selectedFormats[key] && styles.chipTextActive]}>{cfg.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <Text style={[styles.optionsSectionLabel, { marginTop: 12 }]}>{t('gallery.sideBySideFormats')}</Text>
+                    <View style={styles.optionsChipsRow}>
+                      {Object.entries(TEMPLATE_CONFIGS)
+                        .filter(([k, cfg]) => cfg.layout === 'sidebyside')
+                        .map(([key, cfg]) => (
+                          <TouchableOpacity
+                            key={key}
+                            style={[styles.chip, selectedFormats[key] && styles.chipActive]}
+                            onPress={() => handleFormatToggle(key)}
+                          >
+                            <Text style={[styles.chipText, selectedFormats[key] && styles.chipTextActive]}>{cfg.name}</Text>
+                          </TouchableOpacity>
+                        ))}
+                    </View>
+
+                    <TouchableOpacity
+                      style={[styles.actionBtn, styles.actionPrimary, { marginTop: 12, marginLeft: 0, marginRight: 0, width: '100%', flexDirection: 'row', justifyContent: 'center', alignItems: 'center' }]}
+                      onPress={() => setShowAdvancedShareFormats(false)}
+                    >
+                      <Text style={[styles.actionBtnText, { color: '#000000' }]}>{t('gallery.hideAdvancedFormats')}</Text>
+                      <Text style={{ color: '#000000', fontSize: 16, marginLeft: 8 }}>▲</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </>
+            )}
 
             {/* Share as Archive Checkbox */}
             <View style={styles.checkboxRow}>
               <TouchableOpacity
                 style={styles.checkboxContainer}
-                onPress={() => setShareAsArchive(!shareAsArchive)}
+                onPress={() => {
+                  // For starter users, archive should always be checked
+                  // If trying to uncheck, show plan modal
+                  if (shareAsArchive && !canUse(FEATURES.ADVANCED_TEMPLATES)) {
+                    console.log('[GALLERY] Starter user trying to uncheck archive, showing plan modal');
+                    setShowSharePlanModal(true);
+                    return;
+                  }
+                  setShareAsArchive(!shareAsArchive);
+                }}
               >
                 <View style={[
                   styles.checkbox,
@@ -3708,41 +4482,189 @@ export default function GalleryScreen({ navigation, route }) {
               </TouchableOpacity>
             </View>
 
-            {/* Share to Same App Checkbox - only show if not sharing as archive */}
-            {!shareAsArchive && (
-              <View style={styles.checkboxRow}>
-                <TouchableOpacity
-                  style={styles.checkboxContainer}
-                  onPress={() => setShareToSameApp(!shareToSameApp)}
-                >
-                  <View style={[
-                    styles.checkbox,
-                    shareToSameApp && styles.checkboxChecked
-                  ]}>
-                    {shareToSameApp && (
-                      <Text style={styles.checkmark}>✓</Text>
-                    )}
-                  </View>
-                  <View style={styles.checkboxLabelContainer}>
-                    <Text style={styles.checkboxLabelText}>
-                      {t('gallery.shareToSameApp')}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-              </View>
-            )}
-
             <View style={styles.optionsActionsRow}>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => setShareOptionsVisible(false)}>
+              <TouchableOpacity style={[styles.actionBtn, styles.actionCancel, styles.actionFlex]} onPress={() => {
+                console.log('[GALLERY] Share options modal canceled');
+                setShareOptionsVisible(false);
+                // Reset advanced formats state when closing
+                setShowAdvancedShareFormats(false);
+                setShowSharePlanModal(false);
+              }}>
                 <Text style={styles.actionBtnText}>{t('common.cancel')}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.actionBtn, styles.actionPrimary, styles.actionFlex]} onPress={() => {
                   setShareOptionsVisible(false);
                   startSharingWithOptions();
               }}>
-                <Text style={[styles.actionBtnText, styles.actionPrimaryText]}>{t('gallery.prepareToShare')}</Text>
+                <Text style={[styles.actionBtnText, { color: '#000000' }]}>{t('gallery.startToShare')}</Text>
               </TouchableOpacity>
             </View>
+          </View>
+
+          {/* Plan Selection Modal Overlay - Rendered as sibling of share modal content (only when share modal is visible) */}
+          {showSharePlanModal && shareOptionsVisible && (
+            <View style={styles.planModalOverlayAbsolute}>
+              <View style={styles.planModalContent}>
+                <View style={styles.planModalHeader}>
+                  <Text style={styles.planModalTitle}>{t('planModal.title')}</Text>
+                  <TouchableOpacity
+                    onPress={handleSharePlanModalClose}
+                    style={styles.planModalCloseButton}
+                  >
+                    <Text style={styles.planModalCloseText}>×</Text>
+                  </TouchableOpacity>
+                </View>
+
+                <ScrollView 
+                  style={styles.planModalScrollView}
+                  contentContainerStyle={styles.planModalScrollViewContent}
+                  showsVerticalScrollIndicator={true}
+                >
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
+                      onPress={async () => {
+                        console.log('[GALLERY] Plan selected: starter');
+                        await updateUserPlan('starter');
+                        handleSharePlanModalClose();
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
+                  </View>
+
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
+                      onPress={async () => {
+                        console.log('[GALLERY] Plan selected: pro');
+                        await updateUserPlan('pro');
+                        handleSharePlanModalClose();
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
+                  </View>
+
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
+                      onPress={async () => {
+                        console.log('[GALLERY] Plan selected: business');
+                        await updateUserPlan('business');
+                        handleSharePlanModalClose();
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
+                  </View>
+
+                  <View style={styles.planContainer}>
+                    <TouchableOpacity
+                      style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
+                      onPress={async () => {
+                        console.log('[GALLERY] Plan selected: enterprise');
+                        await updateUserPlan('enterprise');
+                        handleSharePlanModalClose();
+                      }}
+                    >
+                      <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
+                    </TouchableOpacity>
+                    <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
+                  </View>
+                </ScrollView>
+              </View>
+            </View>
+          )}
+        </View>
+      </Modal>
+
+      {/* Standalone Plan Selection Modal - Shown independently (e.g., from delete confirmation) */}
+      <Modal
+        visible={showSharePlanModal && !shareOptionsVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={handleSharePlanModalClose}
+        statusBarTranslucent={true}
+        hardwareAccelerated={true}
+        presentationStyle="overFullScreen"
+      >
+        <View style={styles.planModalOverlay} pointerEvents="box-none">
+          <View style={styles.planModalContent} pointerEvents="auto">
+            <View style={styles.planModalHeader}>
+              <Text style={styles.planModalTitle}>{t('planModal.title')}</Text>
+              <TouchableOpacity
+                onPress={handleSharePlanModalClose}
+                style={styles.planModalCloseButton}
+              >
+                <Text style={styles.planModalCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView 
+              style={styles.planModalScrollView}
+              contentContainerStyle={styles.planModalScrollViewContent}
+              showsVerticalScrollIndicator={true}
+            >
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    console.log('[GALLERY] Plan selected: starter');
+                    await updateUserPlan('starter');
+                    handleSharePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    console.log('[GALLERY] Plan selected: pro');
+                    await updateUserPlan('pro');
+                    handleSharePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    console.log('[GALLERY] Plan selected: business');
+                    await updateUserPlan('business');
+                    handleSharePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    console.log('[GALLERY] Plan selected: enterprise');
+                    await updateUserPlan('enterprise');
+                    handleSharePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
+              </View>
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -3754,6 +4676,13 @@ export default function GalleryScreen({ navigation, route }) {
         onClose={() => setShowCompletionModal(false)}
         onClearCompleted={clearCompletedUploads}
         onDeleteProject={handleDeleteAllConfirmed}
+        userPlan={userPlan}
+        onShowPlanModal={() => {
+          setTimeout(() => {
+            setShowSharePlanModal(true);
+          }, 300);
+        }}
+        planModalVisible={showSharePlanModal}
       />
 
       {/* Upload Details Modal */}
@@ -3765,7 +4694,48 @@ export default function GalleryScreen({ navigation, route }) {
         onMinimize={() => setShowUploadDetails(false)}
       />
 
-      {/* Confirm Delete Modal removed per user request */}
+      {/* Delete All Confirmation Modal */}
+      <DeleteConfirmationModal
+        visible={showDeleteAllConfirm}
+        title={activeProjectId ? t('gallery.deleteProjectTitle') : t('gallery.deleteAll')}
+        message={activeProjectId ? t('gallery.deleteProjectMessage') : t('gallery.deleteAllMessage', { default: 'Are you sure you want to delete all photos? This action cannot be undone.' })}
+        onConfirm={handleDeleteAllConfirmed}
+        onCancel={() => setShowDeleteAllConfirm(false)}
+        deleteFromStorageDefault={true}
+        userPlan={userPlan}
+        onShowPlanModal={() => {
+          // Show plan modal on top of delete confirmation (don't close delete confirmation)
+          setShowSharePlanModal(true);
+        }}
+        planModalVisible={showSharePlanModal && !shareOptionsVisible}
+        onPlanModalClose={handleSharePlanModalClose}
+        updateUserPlan={updateUserPlan}
+        t={t}
+      />
+
+      {/* Delete Selected Confirmation Modal */}
+      <DeleteConfirmationModal
+        visible={showDeleteSelectedConfirm}
+        title={t('gallery.deleteSelected')}
+        message={showDeleteSelectedConfirm ? (() => {
+          const selected = getSelectedPhotos();
+          const selectedSets = getSelectedPhotoSets();
+          const count = selected.length + selectedSets.length;
+          return t('gallery.deleteSelectedMessage', { count, default: `Delete ${count} selected photo(s)? This action cannot be undone.` });
+        })() : ''}
+        onConfirm={handleDeleteSelectedConfirmed}
+        onCancel={() => setShowDeleteSelectedConfirm(false)}
+        deleteFromStorageDefault={true}
+        userPlan={userPlan}
+        onShowPlanModal={() => {
+          // Show plan modal on top of delete confirmation (don't close delete confirmation)
+          setShowSharePlanModal(true);
+        }}
+        planModalVisible={showSharePlanModal && !shareOptionsVisible}
+        onPlanModalClose={handleSharePlanModalClose}
+        updateUserPlan={updateUserPlan}
+        t={t}
+      />
 
     </View>
   );
@@ -3903,9 +4873,6 @@ const styles = StyleSheet.create({
     numberOfLines: 1
   },
   filterButton: {
-    flex: 0,
-    minWidth: 70,
-    marginRight: 6,
     paddingVertical: 6,
     paddingHorizontal: 8,
     borderRadius: 6,
@@ -4219,14 +5186,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
-    alignItems: 'center'
+    alignItems: 'center',
+    zIndex: 1000,
+    elevation: 1000
   },
   optionsModalContent: {
     backgroundColor: 'white',
     borderRadius: 16,
     padding: 20,
     width: '86%',
-    maxWidth: 380
+    maxWidth: 380,
+    zIndex: 1001,
+    elevation: 1001
   },
   modalOverlay: {
     flex: 1,
@@ -4558,5 +5529,107 @@ const styles = StyleSheet.create({
     color: COLORS.TEXT,
     fontSize: 18,
     fontWeight: 'bold'
+  },
+  // Plan Selection Modal styles
+  planModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    justifyContent: 'flex-end',
+    zIndex: 10001,
+    elevation: 10001,
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  planModalOverlayAbsolute: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
+    justifyContent: 'flex-end',
+    alignItems: 'stretch',
+    zIndex: 10000,
+    elevation: 10000,
+    paddingBottom: 0
+  },
+  planModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    width: '100%',
+    zIndex: 10002,
+    elevation: 10002,
+    overflow: 'hidden',
+    maxHeight: '75%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+  },
+  planModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER
+  },
+  planModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.TEXT
+  },
+  planModalCloseButton: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  planModalCloseText: {
+    fontSize: 24,
+    color: COLORS.GRAY
+  },
+  planModalScrollView: {
+    maxHeight: Dimensions.get('window').height * 0.6
+  },
+  planModalScrollViewContent: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 80,
+    flexGrow: 1
+  },
+  planContainer: {
+    marginBottom: 20
+  },
+  planButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    alignItems: 'center'
+  },
+  planButtonSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  planButtonText: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.PRIMARY
+  },
+  planButtonTextSelected: {
+    color: '#000000'
+  },
+  planSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 10
   }
 });

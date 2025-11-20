@@ -26,6 +26,9 @@ import { createAlbumName } from '../services/uploadService';
 import { useBackgroundUpload } from '../hooks/useBackgroundUpload';
 import UploadIndicatorLine from '../components/UploadIndicatorLine';
 import RoomEditor from '../components/RoomEditor';
+import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
+import EnterpriseContactModal from '../components/EnterpriseContactModal';
+import DeleteConfirmationModal from '../components/DeleteConfirmationModal';
 
 const { width } = Dimensions.get('window');
 const PHOTO_SIZE = (width - 60) / 2; // 2 columns with padding
@@ -49,7 +52,8 @@ export default function HomeScreen({ navigation }) {
   const [selectedProjects, setSelectedProjects] = useState(new Set());
   const [isMultiSelectMode, setIsMultiSelectMode] = useState(false);
   const { projects, getPhotosByProject, deleteProject, setActiveProject, activeProjectId, createProject, photos } = usePhotos();
-  const { userName, location, getRooms, userPlan, cleaningServiceEnabled, sectionLanguage } = useSettings();
+  const { userName, location, getRooms, userPlan, cleaningServiceEnabled, sectionLanguage, updateUserPlan } = useSettings();
+  const { exceedsLimit } = useFeaturePermissions();
   const { uploadStatus, cancelUpload, cancelAllUploads } = useBackgroundUpload();
   const [newProjectVisible, setNewProjectVisible] = useState(false);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
@@ -60,6 +64,11 @@ export default function HomeScreen({ navigation }) {
   const [newProjectName, setNewProjectName] = useState('');
   const [pendingCameraAfterCreate, setPendingCameraAfterCreate] = useState(false);
   const [combinedBaseUris, setCombinedBaseUris] = useState({}); // Cache for combined base image URIs
+  const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
+  const [showDeleteProjectsConfirm, setShowDeleteProjectsConfirm] = useState(false);
+  const deletedProjectIdsRef = useRef([]);
+  const selectedProjectsForDeleteRef = useRef(new Set());
 
   // Get rooms from settings (custom or default)
   const { customRooms, saveCustomRooms, resetCustomRooms } = useSettings();
@@ -699,6 +708,14 @@ export default function HomeScreen({ navigation }) {
       );
       return;
     }
+    
+    // Check if starter tier user already has a project
+    // Starter users can only have 1 project
+    if (exceedsLimit('maxProjects', projects.length)) {
+      setShowPlanModal(true);
+      return;
+    }
+    
     const base = createAlbumName(userName) || `Project`;
     const normalize = (s) => (s || '').toLowerCase().replace(/\s+/g, ' ').trim().replace(/[^a-z0-9_\- ]/gi, '_');
     const existing = projects.map(p => p.name);
@@ -717,6 +734,13 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleCreateProject = async () => {
+    // Double-check: if limit exceeded, show plan modal
+    if (exceedsLimit('maxProjects', projects.length)) {
+      setNewProjectVisible(false);
+      setShowPlanModal(true);
+      return;
+    }
+    
     try {
       const safeName = (newProjectName || 'Project').replace(/[^\p{L}\p{N}_\- ]/gu, '_');
       const proj = await createProject(safeName);
@@ -758,42 +782,101 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
-  const handleDeleteSelectedProjects = async () => {
-    if (selectedProjects.size === 0) return;
+  const handleDeleteSelectedProjects = () => {
+    if (selectedProjects.size === 0) {
+      return;
+    }
     
-    const projectNames = Array.from(selectedProjects).map(id => 
-      projects.find(p => p.id === id)?.name
-    ).filter(Boolean);
+    // Store selected projects in ref before opening modal
+    selectedProjectsForDeleteRef.current = new Set(selectedProjects);
     
-    Alert.alert(
-      t('projects.deleteProjects'),
-      t('projects.deleteProjectsConfirm', { count: selectedProjects.size, names: projectNames.join(', ') }),
-      [
-        { text: t('common.cancel'), style: 'cancel' },
-        { text: t('common.delete'), style: 'destructive', onPress: async () => {
-          const wasActiveProjectSelected = selectedProjects.has(activeProjectId);
-          for (const projectId of selectedProjects) {
-            await deleteProject(projectId, { deleteFromStorage: true });
-          }
-          setSelectedProjects(new Set());
-          setIsMultiSelectMode(false);
-          if (wasActiveProjectSelected) {
-            // After deleting the active project, select the first remaining project
-            const remainingProjects = projects.filter(p => !selectedProjects.has(p.id));
-            if (remainingProjects.length > 0) {
-              setActiveProject(remainingProjects[0].id);
-            } else {
-              setActiveProject(null);
-            }
-          }
-        }}
-      ]
-    );
+    // Close manage projects modal first to avoid modal overlap issues
+    setOpenProjectVisible(false);
+    
+    // Open delete confirmation modal after a short delay to ensure manage modal is closed
+    setTimeout(() => {
+      setShowDeleteProjectsConfirm(true);
+    }, 300);
   };
+
+  const handleDeleteSelectedProjectsConfirmed = async (deleteFromStorageParam) => {
+    console.log('[HomeScreen] ✅ Delete confirmation clicked');
+    console.log('[HomeScreen] deleteFromStorageParam:', deleteFromStorageParam);
+    
+    try {
+      const shouldDeleteFromStorage = deleteFromStorageParam !== undefined ? deleteFromStorageParam : true;
+      console.log('[HomeScreen] Should delete from storage:', shouldDeleteFromStorage);
+      
+      // Use stored selected projects from ref (set when modal opened)
+      const projectsToDelete = Array.from(selectedProjectsForDeleteRef.current);
+      const wasActiveProjectSelected = projectsToDelete.includes(activeProjectId);
+      
+      // Store project IDs to delete before starting deletion
+      const projectIdsToDelete = projectsToDelete;
+      
+      // Store deleted IDs in ref for useEffect to handle
+      deletedProjectIdsRef.current = projectIdsToDelete;
+      
+      // Close modal immediately to prevent UI freeze
+      setShowDeleteProjectsConfirm(false);
+      setSelectedProjects(new Set());
+      setIsMultiSelectMode(false);
+      selectedProjectsForDeleteRef.current = new Set(); // Clear the ref
+      
+      // Delete projects sequentially
+      for (let i = 0; i < projectIdsToDelete.length; i++) {
+        const projectId = projectIdsToDelete[i];
+        try {
+          await deleteProject(projectId, { deleteFromStorage: shouldDeleteFromStorage });
+        } catch (error) {
+          console.error(`[HomeScreen] ❌ Failed to delete project ${projectId}:`, error);
+          // Continue with other deletions even if one fails
+        }
+      }
+      
+      // Handle active project selection if active project was deleted
+      if (wasActiveProjectSelected && deletedProjectIdsRef.current.length > 0) {
+        // The useEffect below will handle setting the new active project
+        // after projects state updates
+      }
+    } catch (error) {
+      console.error('[HomeScreen] ❌ Error deleting selected projects:', error);
+      Alert.alert(t('common.error'), 'Failed to delete some projects. Please try again.');
+      deletedProjectIdsRef.current = [];
+    }
+  };
+
+  // Handle active project selection after projects are deleted
+  useEffect(() => {
+    if (deletedProjectIdsRef.current.length > 0) {
+      const deletedIds = [...deletedProjectIdsRef.current];
+      // Clear the ref first to prevent re-running
+      deletedProjectIdsRef.current = [];
+      
+      // Check if current active project was deleted
+      if (activeProjectId && deletedIds.includes(activeProjectId)) {
+        // Find first remaining project
+        const remainingProjects = projects.filter(p => !deletedIds.includes(p.id));
+        if (remainingProjects.length > 0) {
+          setActiveProject(remainingProjects[0].id);
+        } else {
+          setActiveProject(null);
+        }
+      } else if (!activeProjectId && projects.length > 0) {
+        // If no active project but projects exist, set the first one
+        setActiveProject(projects[0].id);
+      }
+    }
+  }, [projects, activeProjectId, setActiveProject]);
 
   const exitMultiSelectMode = () => {
     setIsMultiSelectMode(false);
     setSelectedProjects(new Set());
+  };
+
+  // Handle plan modal close - delete confirmation stays open (no need to reopen)
+  const handlePlanModalClose = () => {
+    setShowPlanModal(false);
   };
 
   const handleDisabledDeleteClick = () => {
@@ -1104,7 +1187,7 @@ export default function HomeScreen({ navigation }) {
       <View style={styles.header}>
         <View style={styles.headerLeft}>
             <Text style={styles.appName}>ProofPix</Text>
-            <Text style={styles.tierName}>({userPlan.charAt(0).toUpperCase() + userPlan.slice(1)})</Text>
+            <Text style={styles.tierName}>({userPlan === 'Team Member' || userPlan === 'team' ? 'team' : userPlan.charAt(0).toUpperCase() + userPlan.slice(1)})</Text>
         </View>
         <View style={styles.headerRight}>
             <TouchableOpacity style={styles.iconButton} onPress={() => setOpenProjectVisible(true)}>
@@ -1318,14 +1401,14 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: '#F2C31B', marginTop: 8 }]}
+                  style={[styles.actionBtn, { backgroundColor: '#D6ECFF', marginTop: 8 }]}
                   onPress={() => {
                     setOpenProjectVisible(false);
                     exitMultiSelectMode();
                     navigation.navigate('Gallery', { openManage: true });
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: '#000' }]}>📤 {t('home.shareProject')}</Text>
+                  <Text style={[styles.actionBtnText, { color: '#0077CC' }]}>📤 {t('home.shareProject')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1373,13 +1456,13 @@ export default function HomeScreen({ navigation }) {
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.actionBtn, { backgroundColor: '#F2C31B', marginTop: 8 }]}
+                  style={[styles.actionBtn, { backgroundColor: '#D6ECFF', marginTop: 8 }]}
                   onPress={() => {
                     setOpenProjectVisible(false);
                     navigation.navigate('Gallery', { openManage: true });
                   }}
                 >
-                  <Text style={[styles.actionBtnText, { color: '#000' }]}>📤 {t('home.shareProject')}</Text>
+                  <Text style={[styles.actionBtnText, { color: '#0077CC' }]}>📤 {t('home.shareProject')}</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
@@ -1502,6 +1585,127 @@ export default function HomeScreen({ navigation }) {
         editRoom={contextMenuRoom}
         mode={roomEditorMode}
       />
+
+      {/* Plan Selection Modal */}
+      <Modal
+        visible={showPlanModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => {
+          handlePlanModalClose();
+        }}
+      >
+        <View style={styles.planModalOverlay}>
+          <View style={styles.planModalContent}>
+            <View style={styles.planModalHeader}>
+              <Text style={styles.planModalTitle}>{t('planModal.title')}</Text>
+              <TouchableOpacity
+                onPress={handlePlanModalClose}
+                style={styles.planModalCloseButton}
+              >
+                <Text style={styles.planModalCloseText}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.planModalScrollView}>
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'starter' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('starter');
+                    handlePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'pro' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('pro');
+                    handlePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'business' && styles.planButtonSelected]}
+                  onPress={async () => {
+                    await updateUserPlan('business');
+                    handlePlanModalClose();
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
+              </View>
+
+              <View style={styles.planContainer}>
+                <TouchableOpacity
+                  style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
+                  onPress={() => {
+                    // If reopening delete confirm, don't do it here since we're going to enterprise modal
+                    if (reopenDeleteConfirmRef.current) {
+                      reopenDeleteConfirmRef.current = false;
+                    }
+                    setShowPlanModal(false);
+                    setShowEnterpriseModal(true);
+                  }}
+                >
+                  <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
+                </TouchableOpacity>
+                <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Enterprise Contact Form Modal */}
+      <EnterpriseContactModal
+        visible={showEnterpriseModal}
+        onClose={() => setShowEnterpriseModal(false)}
+      />
+
+      {/* Delete Selected Projects Confirmation Modal */}
+      <DeleteConfirmationModal
+        visible={showDeleteProjectsConfirm}
+        title={t('projects.deleteProjects')}
+        message={showDeleteProjectsConfirm ? (() => {
+          // Use ref to get selected projects (stored when modal opened)
+          const selectedIds = Array.from(selectedProjectsForDeleteRef.current);
+          const projectNames = selectedIds.map(id => 
+            projects.find(p => p.id === id)?.name
+          ).filter(Boolean);
+          return t('projects.deleteProjectsConfirm', { count: selectedIds.length, names: projectNames.join(', ') });
+        })() : ''}
+        onConfirm={handleDeleteSelectedProjectsConfirmed}
+        onCancel={() => {
+          setShowDeleteProjectsConfirm(false);
+          selectedProjectsForDeleteRef.current = new Set(); // Clear ref on cancel
+          // Reopen manage projects modal if it was open before
+          setTimeout(() => {
+            setOpenProjectVisible(true);
+          }, 100);
+        }}
+        deleteFromStorageDefault={true}
+        userPlan={userPlan}
+        onShowPlanModal={() => {
+          // Show plan modal on top of delete confirmation (don't close delete confirmation)
+          setShowPlanModal(true);
+        }}
+        planModalVisible={showPlanModal}
+        onPlanModalClose={handlePlanModalClose}
+        updateUserPlan={updateUserPlan}
+        t={t}
+      />
     </SafeAreaView>
   );
 }
@@ -1516,7 +1720,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    paddingTop: 10
+    paddingTop: 10,
+    width: width
   },
   headerLeft: {
     flexDirection: 'row',
@@ -1930,5 +2135,79 @@ const styles = StyleSheet.create({
   },
   contextMenuTextDanger: {
     color: '#FF4444',
+  },
+  // Plan Modal Styles
+  planModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+    zIndex: 10001,
+    elevation: 10001
+  },
+  planModalContent: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: 20,
+    zIndex: 10002,
+    elevation: 10002
+  },
+  planModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER
+  },
+  planModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.TEXT
+  },
+  planModalCloseButton: {
+    width: 30,
+    height: 30,
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  planModalCloseText: {
+    fontSize: 24,
+    color: COLORS.GRAY
+  },
+  planModalScrollView: {
+    paddingHorizontal: 20,
+    paddingTop: 20
+  },
+  planContainer: {
+    marginBottom: 20
+  },
+  planButton: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 20,
+    borderWidth: 2,
+    borderColor: COLORS.PRIMARY,
+    alignItems: 'center'
+  },
+  planButtonSelected: {
+    backgroundColor: COLORS.PRIMARY,
+    borderColor: COLORS.PRIMARY
+  },
+  planButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.PRIMARY
+  },
+  planButtonTextSelected: {
+    color: '#000000'
+  },
+  planSubtext: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 8,
+    paddingHorizontal: 10
   },
 });

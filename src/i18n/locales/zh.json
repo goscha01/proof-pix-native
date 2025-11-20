@@ -27,7 +27,13 @@
     "tryAgain": "重试",
     "somethingWentWrong": "出错了。",
     "requiredField": "此字段为必填项。",
-    "invalidValue": "无效值。"
+    "invalidValue": "无效值。",
+    "selectAll": "全选",
+    "deselectAll": "取消全选",
+    "selected": "已选择",
+    "select": "选择",
+    "all": "全部",
+    "continue": "继续"
   },
   "firstLoad": {
     "title": "欢迎使用 ProofPix",
@@ -39,6 +45,7 @@
     "joinTeam": "加入团队",
     "useIndividual": "个人使用",
     "individualSubtext": "管理您自己的项目，提供免费和付费计划。",
+    "chooseAppLanguage": "选择应用语言",
     "back": "返回",
     "choosePlan": "选择计划",
     "starter": "入门版",
@@ -49,6 +56,24 @@
     "businessDesc": "适合小型团队。包含团队管理功能。",
     "enterprise": "企业版",
     "enterpriseDesc": "适合成长型组织。无限成员数，支持多地点。"
+  },
+  "enterprise": {
+    "title": "企业版计划申请",
+    "subtitle": "我们将在24小时内通过电子邮件或电话与您联系。",
+    "namePlaceholder": "您的姓名",
+    "emailPlaceholder": "电子邮件地址",
+    "phonePlaceholder": "电话号码（可选）",
+    "descriptionPlaceholder": "请告诉我们您的需求...",
+    "submit": "发送申请",
+    "submitting": "发送中...",
+    "error": "错误",
+    "nameRequired": "请输入您的姓名",
+    "emailRequired": "请输入您的电子邮件地址",
+    "invalidEmail": "请输入有效的电子邮件地址",
+    "emailAppError": "无法打开邮件应用。请直接发送邮件至 info@geos-ai.com",
+    "submitError": "发送申请失败。请重试。",
+    "successTitle": "申请已发送",
+    "successMessage": "感谢您的关注！我们将在24小时内与您联系。"
   },
   "home": {
     "title": "主页",
@@ -101,7 +126,9 @@
     "noPhotosYet": "暂无照片",
     "selectProjectToView": "选择项目以查看照片",
     "takePhotosToStart": "拍摄一些前后对比照片开始使用",
-    "share": "分享"
+    "share": "分享",
+    "whatToShare": "选择共享格式",
+    "startToShare": "开始分享"
   },
   "camera": {
     "before": "之前",
@@ -162,6 +189,8 @@
     "signInRequired": "需要登录",
     "connectGoogleFirst": "请先连接到Google",
     "setUpTeam": "设置团队",
+    "multiprofile": "多个配置文件",
+    "contactDeveloper": "请联系 {{email}} 以启用多个配置文件。",
     "expoGoWarning": "⚠️ 警告：团队功能在Expo Go中不起作用。",
     "expoGoWarningCommand": "运行：npx expo run:android 或 npx expo run:ios",
     "upgradePlan": "升级计划",
@@ -273,6 +302,17 @@
     "cornerStyle": "角样式",
     "rounded": "圆角",
     "straight": "直角"
+  },
+  "labelLanguageSetup": {
+    "title": "选择标签语言",
+    "subtitle": "为您的照片标签选择语言（之前、之后、组合）",
+    "previewDescription": "所选语言的标签预览"
+  },
+  "sectionLanguageSetup": {
+    "title": "选择分区语言",
+    "subtitle": "为您的项目分区选择语言（厨房、浴室等）",
+    "previewDescription": "所选语言的分区预览",
+    "industryTemplate": "行业模板"
   },
   "googleSignUp": {
     "title": "连接您的账户",

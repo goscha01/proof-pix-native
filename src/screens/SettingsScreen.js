@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useRef } from 'react';
+﻿import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useSettings } from '../context/SettingsContext';
 import { useAdmin } from '../context/AdminContext';
 import { COLORS, getLabelPositions } from '../constants/rooms';
+import { FONTS } from '../constants/fonts';
 import RoomEditor from '../components/RoomEditor';
 import PhotoLabel from '../components/PhotoLabel';
 import PhotoWatermark from '../components/PhotoWatermark';
@@ -30,12 +31,21 @@ import googleDriveService from '../services/googleDriveService';
 import dropboxAuthService from '../services/dropboxAuthService';
 import dropboxService from '../services/dropboxService';
 import InviteManager from '../components/InviteManager';
+import {
+  getOrCreateReferralCode,
+  getReferralInfo,
+} from '../services/referralService';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import proxyService from '../services/proxyService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Modal from 'react-native-modal';
 import ColorPicker from 'react-native-wheel-color-picker';
 import { useTranslation } from 'react-i18next';
+import { useFeaturePermissions } from '../hooks/useFeaturePermissions';
+import { FEATURES } from '../constants/featurePermissions';
+import EnterpriseContactModal from '../components/EnterpriseContactModal';
+import { isTrialActive, getTrialDaysRemaining, getTrialPlan } from '../services/trialService';
+import * as TrialTestUtils from '../utils/trialTestUtils';
 
 const getFontOptions = (t) => [
   {
@@ -222,7 +232,7 @@ function hsvToHex({ h = 0, s = 0, v = 0 }) {
     .toUpperCase()}`;
 }
 
-export default function SettingsScreen({ navigation }) {
+export default function SettingsScreen({ navigation, route }) {
   const {
     showLabels,
     toggleLabels,
@@ -233,6 +243,7 @@ export default function SettingsScreen({ navigation }) {
     watermarkColor,
     watermarkOpacity,
     toggleWatermark,
+    updateShowWatermark,
     updateWatermarkText,
     updateWatermarkLink,
     updateWatermarkColor,
@@ -280,6 +291,7 @@ export default function SettingsScreen({ navigation }) {
     toggleCleaningServiceEnabled,
   } = useSettings();
 
+  const { canUse, exceedsLimit, getLimit } = useFeaturePermissions();
   const { t, i18n } = useTranslation();
 
   // Memoize translated options
@@ -288,6 +300,9 @@ export default function SettingsScreen({ navigation }) {
   const LABEL_CORNER_OPTIONS = useMemo(() => getLabelCornerOptions(t), [t]);
 
   const [showPlanSelection, setShowPlanSelection] = useState(false);
+  const [trialActive, setTrialActive] = useState(false);
+  const [trialDaysRemaining, setTrialDaysRemaining] = useState(0);
+  const [trialPlan, setTrialPlan] = useState(null);
   const [colorModalVisible, setColorModalVisible] = useState(false);
   const [colorModalType, setColorModalType] = useState(null);
   const [draftColor, setDraftColor] = useState(labelBackgroundColor);
@@ -440,11 +455,31 @@ export default function SettingsScreen({ navigation }) {
     return normalizeHex(baseColor) || '#FFFFFF';
   }, [customWatermarkEnabled, watermarkColor, labelBackgroundColor]);
 
+  // Load trial information
+  useEffect(() => {
+    const loadTrialInfo = async () => {
+      const active = await isTrialActive();
+      const daysRemaining = await getTrialDaysRemaining();
+      const plan = await getTrialPlan();
+      setTrialActive(active);
+      setTrialDaysRemaining(daysRemaining);
+      setTrialPlan(plan);
+    };
+    loadTrialInfo();
+  }, []);
+
   useEffect(() => {
     if (typeof watermarkOpacity === 'number') {
       setWatermarkOpacityPreview(watermarkOpacity);
     }
   }, [watermarkOpacity]);
+
+  // Reset watermark opacity preview when custom watermark is turned on
+  useEffect(() => {
+    if (customWatermarkEnabled && typeof watermarkOpacity === 'number') {
+      setWatermarkOpacityPreview(watermarkOpacity);
+    }
+  }, [customWatermarkEnabled]);
 
   // Load Dropbox tokens on mount and when screen is focused
   useFocusEffect(
@@ -479,6 +514,7 @@ export default function SettingsScreen({ navigation }) {
     userMode,
     teamInfo,
     saveFolderId,
+    inviteTokens,
     addInviteToken,
     removeInviteToken,
     adminSignIn,
@@ -537,12 +573,20 @@ export default function SettingsScreen({ navigation }) {
   }, [isTeamMember]);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [referralInfo, setReferralInfo] = useState({
+    code: '',
+    invitesSent: [],
+    rewardsEarned: 0,
+    totalMonthsEarned: 0,
+  });
   const [isSigningInDropbox, setIsSigningInDropbox] = useState(false);
   const [isDropboxAuthenticated, setIsDropboxAuthenticated] = useState(false);
   const [dropboxUserInfo, setDropboxUserInfo] = useState(null);
   const [adminInfo, setAdminInfo] = useState(null);
   const [loadingAdminInfo, setLoadingAdminInfo] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
+  const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
   const [editingTeamName, setEditingTeamName] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
@@ -555,6 +599,14 @@ export default function SettingsScreen({ navigation }) {
   const labelLanguageLayouts = useRef({});
   const sectionLanguageScrollViewRef = useRef(null);
   const sectionLanguageLayouts = useRef({});
+  const watermarkTextInputRef = useRef(null);
+  const watermarkLinkInputRef = useRef(null);
+  const mainScrollViewRef = useRef(null);
+  const cloudSyncSectionRef = useRef(null);
+  const watermarkSectionRef = useRef(null);
+  const accountDataSectionRef = useRef(null);
+  const watermarkSectionY = useRef(null);
+  const watermarkSectionAbsoluteY = useRef(null);
 
   const isTeamMember = userMode === 'team_member';
   const [canSwitchBack, setCanSwitchBack] = useState(false);
@@ -689,6 +741,39 @@ export default function SettingsScreen({ navigation }) {
       console.log('[SETUP] Running team setup with proxy server...');
       setIsSigningIn(true); // Show a loading indicator
 
+      // Step 0: Check if we have a serverAuthCode - if not, user needs to sign in again
+      const googleAuthService = await import('../services/googleAuthService');
+      const serverAuthCode = await googleAuthService.default.getServerAuthCode();
+      if (!serverAuthCode) {
+        console.log('[SETUP] No serverAuthCode available - prompting user to reconnect');
+        setIsSigningIn(false);
+        Alert.alert(
+          'Reconnect Required',
+          'To set up team features, you need to reconnect with Google Drive to refresh your authorization.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Reconnect Now',
+              onPress: async () => {
+                try {
+                  await signOut();
+                  setTimeout(() => {
+                    Alert.alert(
+                      'Ready to Reconnect',
+                      'Please tap "Connect with Google Drive" below to sign in again and complete team setup.'
+                    );
+                  }, 500);
+                } catch (signOutError) {
+                  console.error('[SETUP] Error signing out for reconnect:', signOutError);
+                  Alert.alert('Error', 'Failed to disconnect. Please try manually disconnecting from Settings.');
+                }
+              }
+            }
+          ]
+        );
+        return;
+      }
+
       // Step 1: Find or create the Google Drive folder
       // Note: makeAuthenticatedRequest will handle checking if user is signed in
       const folderId = await googleDriveService.findOrCreateProofPixFolder();
@@ -715,11 +800,44 @@ export default function SettingsScreen({ navigation }) {
 
     } catch (error) {
       console.error('[SETUP] Setup failed:', error.message);
-      Alert.alert(
-        t('settings.setupFailed'),
-        error.message || t('settings.setupFailedMessage'),
-        [{ text: t('common.ok'), style: 'cancel' }]
-      );
+
+      // Check if it's an auth code expiration error
+      const isAuthExpired = error.message?.includes('authorization code has expired') ||
+                           error.message?.includes('already been used');
+
+      if (isAuthExpired) {
+        Alert.alert(
+          'Setup Failed',
+          'Your Google authorization has expired. Please disconnect and sign in again to continue.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            {
+              text: 'Sign In Again',
+              onPress: async () => {
+                try {
+                  await signOut();
+                  // Wait a moment for sign out to complete
+                  setTimeout(() => {
+                    Alert.alert(
+                      'Ready to Sign In',
+                      'Please tap "Connect with Google Drive" below to sign in again.'
+                    );
+                  }, 500);
+                } catch (signOutError) {
+                  console.error('[SETUP] Error signing out:', signOutError);
+                  Alert.alert('Error', 'Failed to disconnect. Please try manually disconnecting from Settings.');
+                }
+              }
+            }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Setup Failed',
+          error.message || 'An error occurred while setting up team features. Please try again.',
+          [{ text: 'OK', style: 'cancel' }]
+        );
+      }
     } finally {
       setIsSigningIn(false);
     }
@@ -1116,6 +1234,103 @@ export default function SettingsScreen({ navigation }) {
     }
   }, [sectionLanguageModalVisible, sectionLanguage]);
 
+  // Handle navigation to specific sections - using useEffect to watch route params
+  useEffect(() => {
+    const params = route?.params;
+    console.log('[SETTINGS] Route params changed:', params);
+    
+    const scrollToSection = (sectionRef, paramKey) => {
+      if (params?.[paramKey] === true) {
+        console.log(`[SETTINGS] Attempting to scroll to ${paramKey} section`);
+        console.log(`[SETTINGS] sectionRef.current:`, !!sectionRef.current);
+        console.log(`[SETTINGS] mainScrollViewRef.current:`, !!mainScrollViewRef.current);
+        
+        // For watermark, use stored absolute Y position if available
+        if (paramKey === 'scrollToWatermark' && watermarkSectionAbsoluteY.current !== null) {
+          console.log(`[SETTINGS] Using stored absolute Y position for watermark:`, watermarkSectionAbsoluteY.current);
+          setTimeout(() => {
+            mainScrollViewRef.current?.scrollTo({ y: Math.max(0, watermarkSectionAbsoluteY.current - 20), animated: true });
+            setTimeout(() => {
+              navigation.setParams({ [paramKey]: undefined });
+            }, 500);
+          }, 400);
+          return;
+        }
+        
+        // Retry function with increasing delays
+        const attemptScroll = (attempt = 0) => {
+          const maxAttempts = 5;
+          const delay = 400 + (attempt * 200); // 400ms, 600ms, 800ms, 1000ms, 1200ms
+          
+          setTimeout(() => {
+            if (!sectionRef.current || !mainScrollViewRef.current) {
+              console.log(`[SETTINGS] Refs not ready for ${paramKey}, attempt ${attempt + 1}/${maxAttempts}`);
+              if (attempt < maxAttempts - 1) {
+                attemptScroll(attempt + 1);
+              } else {
+                console.log(`[SETTINGS] Failed to scroll to ${paramKey} after ${maxAttempts} attempts`);
+                // For watermark, try using stored absolute Y as fallback
+                if (paramKey === 'scrollToWatermark' && watermarkSectionAbsoluteY.current !== null) {
+                  console.log(`[SETTINGS] Fallback: Using stored absolute Y position for watermark:`, watermarkSectionAbsoluteY.current);
+                  mainScrollViewRef.current?.scrollTo({ y: Math.max(0, watermarkSectionAbsoluteY.current - 20), animated: true });
+                  navigation.setParams({ [paramKey]: undefined });
+                }
+              }
+              return;
+            }
+            
+            sectionRef.current.measureLayout(
+              mainScrollViewRef.current,
+              (x, y) => {
+                console.log(`[SETTINGS] ${paramKey} section position:`, { x, y, attempt: attempt + 1 });
+                if (y >= 0) {
+                  setTimeout(() => {
+                    console.log(`[SETTINGS] Scrolling to y:`, y - 20);
+                    mainScrollViewRef.current?.scrollTo({ y: Math.max(0, y - 20), animated: true });
+                    setTimeout(() => {
+                      navigation.setParams({ [paramKey]: undefined });
+                      console.log(`[SETTINGS] ${paramKey} param cleared`);
+                    }, 500);
+                  }, 150);
+                } else {
+                  console.log(`[SETTINGS] Invalid y position for ${paramKey}, retrying...`);
+                  if (attempt < maxAttempts - 1) {
+                    attemptScroll(attempt + 1);
+                  }
+                }
+              },
+              (error) => {
+                console.log(`[SETTINGS] measureLayout error for ${paramKey} (attempt ${attempt + 1}):`, error);
+                if (attempt < maxAttempts - 1) {
+                  attemptScroll(attempt + 1);
+                } else if (paramKey === 'scrollToWatermark' && watermarkSectionAbsoluteY.current !== null) {
+                  // Fallback for watermark
+                  console.log(`[SETTINGS] Fallback: Using stored absolute Y position for watermark:`, watermarkSectionAbsoluteY.current);
+                  mainScrollViewRef.current?.scrollTo({ y: Math.max(0, watermarkSectionAbsoluteY.current - 20), animated: true });
+                  navigation.setParams({ [paramKey]: undefined });
+                }
+              }
+            );
+          }, delay);
+        };
+        
+        attemptScroll();
+      }
+    };
+
+    // Check for each scroll target
+    scrollToSection(cloudSyncSectionRef, 'scrollToCloudSync');
+    scrollToSection(watermarkSectionRef, 'scrollToWatermark');
+    scrollToSection(accountDataSectionRef, 'scrollToAccountData');
+
+    // Check if plan modal should be shown
+    if (params?.showPlanModal === true) {
+      setShowPlanModal(true);
+      // Clear the param
+      navigation.setParams({ showPlanModal: undefined });
+    }
+  }, [route?.params, navigation]);
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -1129,7 +1344,43 @@ export default function SettingsScreen({ navigation }) {
         <View style={{ width: 60 }} />
       </View>
 
-      <ScrollView style={styles.content}>
+      <ScrollView 
+        ref={mainScrollViewRef}
+        style={styles.content}
+      >
+        {/* Current Plan - Moved to top */}
+        {userPlan && (
+          <TouchableOpacity
+            style={styles.currentPlanBox}
+            onPress={() => setShowPlanModal(true)}
+          >
+            <View style={styles.currentPlanInfo}>
+              <Text style={styles.currentPlanLabel}>{t('settings.currentPlan')}</Text>
+              <View style={styles.currentPlanValueContainer}>
+                <Text style={styles.currentPlanValue}>
+                  {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
+                  {trialActive && trialPlan && (
+                    <Text style={styles.trialBadge}>
+                      {' '}({t('settings.trial', { defaultValue: 'Trial' })})
+                    </Text>
+                  )}
+                </Text>
+                <TouchableOpacity onPress={() => setShowPlanModal(true)}>
+                  <Text style={styles.changePlanText}>{t('settings.change')}</Text>
+                </TouchableOpacity>
+              </View>
+              {trialActive && trialDaysRemaining > 0 && (
+                <Text style={styles.trialDaysText}>
+                  {t('settings.trialDaysRemaining', { 
+                    days: trialDaysRemaining,
+                    defaultValue: `${trialDaysRemaining} days remaining` 
+                  })}
+                </Text>
+              )}
+            </View>
+          </TouchableOpacity>
+        )}
+
         {/* Language Selection */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t('settings.language')}</Text>
@@ -1183,20 +1434,20 @@ export default function SettingsScreen({ navigation }) {
                 {t('settings.labelCustomizationDescription')}
               </Text>
 
-              <View style={styles.settingRow}>
-                <View style={styles.settingInfo}>
-                  <Text style={styles.settingLabel}>{t('settings.showLabels')}</Text>
-                  <Text style={styles.settingDescription}>
-                    {t('settings.showLabelsDescription')}
-                  </Text>
+                <View style={styles.settingRow}>
+                  <View style={styles.settingInfo}>
+                    <Text style={styles.settingLabel}>{t('settings.showLabels')}</Text>
+                    <Text style={styles.settingDescription}>
+                      {t('settings.showLabelsDescription')}
+                    </Text>
+                  </View>
+                  <Switch
+                    value={showLabels}
+                    onValueChange={toggleLabels}
+                    trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                    thumbColor="white"
+                  />
                 </View>
-                <Switch
-                  value={showLabels}
-                  onValueChange={toggleLabels}
-                  trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
-                  thumbColor="white"
-                />
-              </View>
 
               {/* Dummy Photo Preview */}
               <View style={styles.labelPreviewSection}>
@@ -1243,7 +1494,37 @@ export default function SettingsScreen({ navigation }) {
                 </View>
               </View>
 
-              <View style={styles.settingRow}>
+              <View 
+                ref={watermarkSectionRef}
+                style={styles.settingRow}
+                onLayout={(event) => {
+                  const { y } = event.nativeEvent.layout;
+                  watermarkSectionY.current = y;
+                  // Also measure absolute position
+                  if (watermarkSectionRef.current && mainScrollViewRef.current) {
+                    watermarkSectionRef.current.measureLayout(
+                      mainScrollViewRef.current,
+                      (x, absoluteY) => {
+                        watermarkSectionAbsoluteY.current = absoluteY;
+                        console.log('[SETTINGS] Watermark section absolute position:', absoluteY);
+                        // If scroll param is set, scroll immediately
+                        const params = route?.params;
+                        if (params?.scrollToWatermark === true) {
+                          setTimeout(() => {
+                            console.log('[SETTINGS] Auto-scrolling to watermark from onLayout, y:', absoluteY);
+                            mainScrollViewRef.current?.scrollTo({ y: Math.max(0, absoluteY - 20), animated: true });
+                            setTimeout(() => {
+                              navigation.setParams({ scrollToWatermark: undefined });
+                            }, 500);
+                          }, 300);
+                        }
+                      },
+                      () => {}
+                    );
+                  }
+                  console.log('[SETTINGS] Watermark section layout:', y);
+                }}
+              >
                 <View style={styles.settingInfo}>
                   <Text style={styles.settingLabel}>{t('settings.customizeWatermark')}</Text>
                   <Text style={styles.settingDescription}>
@@ -1254,35 +1535,116 @@ export default function SettingsScreen({ navigation }) {
                 </View>
                 <Switch
                   value={customWatermarkEnabled}
-                  onValueChange={toggleWatermark}
+                  onValueChange={(value) => {
+                    // Allow starter users to turn on/off watermark switch
+                    toggleWatermark(value);
+                  }}
                   trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
                   thumbColor="white"
                 />
               </View>
               {customWatermarkEnabled && (
                 <View style={styles.watermarkCustomization}>
+                  {/* Add Watermark Checkbox */}
+                  <View style={styles.settingRow}>
+                    <View style={styles.settingInfo}>
+                      <Text style={styles.settingLabel}>{t('settings.addWatermark', { defaultValue: 'Add watermark' })}</Text>
+                      <Text style={styles.settingDescription}>
+                        {t('settings.addWatermarkDescription', { defaultValue: 'Show watermark on photos' })}
+                      </Text>
+                    </View>
+                    <Switch
+                      value={showWatermark}
+                      onValueChange={(value) => {
+                        // Check if user has access to customize watermark
+                        if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                          // Starter users cannot turn off watermark - show tier popup
+                          if (value === false) {
+                            setShowPlanModal(true);
+                            return;
+                          }
+                        }
+                        updateShowWatermark(value);
+                      }}
+                      trackColor={{ false: COLORS.BORDER, true: COLORS.PRIMARY }}
+                      thumbColor="white"
+                    />
+                  </View>
+
                   <View style={styles.watermarkField}>
                     <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkText')}</Text>
-                    <TextInput
-                      style={styles.watermarkInput}
-                      value={watermarkText}
-                      onChangeText={updateWatermarkText}
-                      placeholder={t('settings.watermarkTextPlaceholder')}
-                      placeholderTextColor={COLORS.GRAY}
-                    />
+                    <Pressable
+                      onPress={() => {
+                        if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                          setShowPlanModal(true);
+                        } else {
+                          // Focus the input if user has access
+                          if (watermarkTextInputRef.current) {
+                            watermarkTextInputRef.current.focus();
+                          }
+                        }
+                      }}
+                    >
+                      <TextInput
+                        ref={watermarkTextInputRef}
+                        style={styles.watermarkInput}
+                        value={watermarkText}
+                        onChangeText={updateWatermarkText}
+                        onFocus={() => {
+                          // Check if user has access to customize watermark
+                          if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                            setShowPlanModal(true);
+                            // Blur the input to prevent typing
+                            if (watermarkTextInputRef.current) {
+                              watermarkTextInputRef.current.blur();
+                            }
+                          }
+                        }}
+                        placeholder={t('settings.watermarkTextPlaceholder')}
+                        placeholderTextColor={COLORS.GRAY}
+                        editable={canUse(FEATURES.CUSTOM_WATERMARKS)}
+                        pointerEvents={canUse(FEATURES.CUSTOM_WATERMARKS) ? 'auto' : 'none'}
+                      />
+                    </Pressable>
                   </View>
                   <View style={styles.watermarkField}>
                     <Text style={styles.watermarkFieldLabel}>{t('settings.watermarkLink')}</Text>
-                    <TextInput
-                      style={styles.watermarkInput}
-                      value={watermarkLink}
-                      onChangeText={updateWatermarkLink}
-                      placeholder={t('settings.watermarkLinkPlaceholder')}
-                      placeholderTextColor={COLORS.GRAY}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      keyboardType="url"
-                    />
+                    <Pressable
+                      onPress={() => {
+                        if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                          setShowPlanModal(true);
+                        } else {
+                          // Focus the input if user has access
+                          if (watermarkLinkInputRef.current) {
+                            watermarkLinkInputRef.current.focus();
+                          }
+                        }
+                      }}
+                    >
+                      <TextInput
+                        ref={watermarkLinkInputRef}
+                        style={styles.watermarkInput}
+                        value={watermarkLink}
+                        onChangeText={updateWatermarkLink}
+                        onFocus={() => {
+                          // Check if user has access to customize watermark
+                          if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                            setShowPlanModal(true);
+                            // Blur the input to prevent typing
+                            if (watermarkLinkInputRef.current) {
+                              watermarkLinkInputRef.current.blur();
+                            }
+                          }
+                        }}
+                        placeholder={t('settings.watermarkLinkPlaceholder')}
+                        placeholderTextColor={COLORS.GRAY}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        keyboardType="url"
+                        editable={canUse(FEATURES.CUSTOM_WATERMARKS)}
+                        pointerEvents={canUse(FEATURES.CUSTOM_WATERMARKS) ? 'auto' : 'none'}
+                      />
+                    </Pressable>
                   </View>
                   <View style={styles.watermarkColorRow}>
                     <View style={styles.watermarkColorInfo}>
@@ -1291,7 +1653,14 @@ export default function SettingsScreen({ navigation }) {
                     </View>
                     <TouchableOpacity
                       style={styles.watermarkColorButton}
-                      onPress={() => openColorModal('watermark')}
+                      onPress={() => {
+                        // Check if user has access to customize watermark
+                        if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                          setShowPlanModal(true);
+                          return;
+                        }
+                        openColorModal('watermark');
+                      }}
                     >
                       <View
                         style={[
@@ -1308,8 +1677,28 @@ export default function SettingsScreen({ navigation }) {
                     <View style={styles.watermarkOpacityControls}>
                       <WatermarkOpacitySlider
                         value={watermarkOpacityPreview}
-                        onChange={setWatermarkOpacityPreview}
-                        onChangeEnd={updateWatermarkOpacity}
+                        onChange={(value) => {
+                          // Update preview during dragging (don't check permissions here to avoid jumping)
+                          setWatermarkOpacityPreview(value);
+                        }}
+                        onChangeEnd={(value) => {
+                          // Check if user has access to customize watermark when dragging ends
+                          if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                            setShowPlanModal(true);
+                            // Reset to original value
+                            setWatermarkOpacityPreview(watermarkOpacity);
+                            return;
+                          }
+                          updateWatermarkOpacity(value);
+                        }}
+                        onStartShouldSetResponder={() => {
+                          // Check permissions at the start of interaction
+                          if (!canUse(FEATURES.CUSTOM_WATERMARKS)) {
+                            setShowPlanModal(true);
+                            return false; // Don't allow interaction
+                          }
+                          return true; // Allow interaction
+                        }}
                         fillColor={watermarkSwatchColor}
                       />
                       <Text style={styles.watermarkOpacityValue}>
@@ -1323,13 +1712,15 @@ export default function SettingsScreen({ navigation }) {
                 </View>
               )}
 
-              {/* Customize Button */}
+              {/* Customize Button - Always active */}
               <TouchableOpacity
                 style={[
                   styles.customizeButton,
                   !showLabels && styles.customizeButtonDisabled
                 ]}
-                onPress={() => navigation.navigate('LabelCustomization')}
+                onPress={() => {
+                  navigation.navigate('LabelCustomization');
+                }}
                 disabled={!showLabels}
               >
                 <Text style={[
@@ -1438,24 +1829,12 @@ export default function SettingsScreen({ navigation }) {
         )}
 
         {/* Admin Setup Section */}
-        <View style={styles.section}>
+        <View 
+          ref={cloudSyncSectionRef}
+          style={styles.section}
+          onLayout={() => {}}
+        >
           <Text style={styles.sectionTitle}>{t('settings.cloudTeamSync')}</Text>
-
-          {/* Show current plan above buttons */}
-          {userPlan && (
-            <TouchableOpacity
-              style={styles.currentPlanBox}
-              onPress={() => setShowPlanModal(true)}
-            >
-              <Text style={styles.currentPlanLabel}>{t('settings.currentPlan')}</Text>
-              <View style={styles.currentPlanValueContainer}>
-                <Text style={styles.currentPlanValue}>
-                  {userPlan.charAt(0).toUpperCase() + userPlan.slice(1)}
-                </Text>
-                <Text style={styles.changePlanText}>{t('settings.change')}</Text>
-              </View>
-            </TouchableOpacity>
-          )}
           
           {userMode === 'team_member' ? (
             <>
@@ -1616,10 +1995,9 @@ export default function SettingsScreen({ navigation }) {
                   <View style={styles.planContainer}>
                     <TouchableOpacity
                       style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
-                      onPress={async () => {
-                        await updateUserPlan('enterprise');
+                      onPress={() => {
                         setShowPlanSelection(false);
-                        navigation.navigate('GoogleSignUp', { plan: 'enterprise' });
+                        setShowEnterpriseModal(true);
                       }}
                     >
                       <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('settings.plans.enterprise')}</Text>
@@ -1637,196 +2015,265 @@ export default function SettingsScreen({ navigation }) {
                     }
                   </Text>
                   
-                  {/* Determine which buttons are enabled based on plan */}
-                  {(() => {
-                    const isStarter = !userPlan || userPlan === 'starter';
-                    const isPro = userPlan === 'pro';
-                    const isBusiness = userPlan === 'business';
-                    const isEnterprise = userPlan === 'enterprise';
+                  {/* Buttons - Always visible, but functionality depends on tier */}
+                  <>
+                    {/* Connect to Google Account Button - Always visible */}
+                    <TouchableOpacity
+                      style={[
+                        styles.featureButton,
+                        styles.googleSignInButton,
+                        (!canUse(FEATURES.GOOGLE_DRIVE_SYNC) || !isGoogleSignInAvailable || isSigningIn) && styles.googleButtonDisabled
+                      ]}
+                      onPress={async () => {
+                        // Starter tier - show plan popup
+                        if (!canUse(FEATURES.GOOGLE_DRIVE_SYNC)) {
+                          setShowPlanModal(true);
+                          return;
+                        }
+                        
+                        setIsSigningIn(true);
+                        try {
+                          // For Pro, use individual sign-in; for Business/Enterprise, use admin sign-in
+                          if (userPlan === 'pro') {
+                            await individualSignIn();
+                          } else {
+                            await adminSignIn();
+                          }
+                        } catch (error) {
+                          console.error("Error during sign in:", error);
+                        } finally {
+                          setIsSigningIn(false);
+                        }
+                      }}
+                      disabled={!isGoogleSignInAvailable || isSigningIn}
+                    >
+                      {isSigningIn && canUse(FEATURES.GOOGLE_DRIVE_SYNC) ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={[
+                          styles.googleSignInButtonText,
+                          (!canUse(FEATURES.GOOGLE_DRIVE_SYNC) || !isGoogleSignInAvailable) && styles.googleButtonTextDisabled
+                        ]}>
+                          {t('settings.connectToGoogleAccount')}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
                     
-                    const canConnectGoogle = isPro || isBusiness || isEnterprise;
-                    const canSetupTeam = isBusiness || isEnterprise;
+                    {/* Connect to Dropbox Button - Always visible */}
+                    <TouchableOpacity
+                      style={[
+                        styles.featureButton,
+                        styles.dropboxButton,
+                        (!canUse(FEATURES.DROPBOX_SYNC) || isSigningInDropbox) && styles.dropboxButtonDisabled
+                      ]}
+                      onPress={async () => {
+                        // Starter tier - show plan popup
+                        if (!canUse(FEATURES.DROPBOX_SYNC)) {
+                          setShowPlanModal(true);
+                          return;
+                        }
+                        
+                        if (!dropboxAuthService.isConfigured()) {
+                          Alert.alert(
+                            t('settings.featureUnavailable'),
+                            t('settings.dropboxNotConfigured')
+                          );
+                          return;
+                        }
+
+                        setIsSigningInDropbox(true);
+                        try {
+                          const result = await dropboxAuthService.signIn();
+                          
+                          // Find or create ProofPix folder
+                          try {
+                            const folderPath = await dropboxService.findOrCreateProofPixFolder();
+                            console.log('[DROPBOX] Folder ready:', folderPath);
+                          } catch (folderError) {
+                            console.error('[DROPBOX] Folder creation error:', folderError);
+                            // Don't fail the sign-in if folder creation fails
+                          }
+
+                          // Update state - reload tokens to ensure state is accurate
+                          await dropboxAuthService.loadStoredTokens();
+                          const isAuth = dropboxAuthService.isAuthenticated();
+                          const userInfo = dropboxAuthService.getUserInfo();
+                          
+                          setIsDropboxAuthenticated(isAuth);
+                          setDropboxUserInfo(userInfo);
+                          
+                          console.log('[DROPBOX] Sign-in successful!');
+                          console.log('[DROPBOX] User info:', userInfo);
+                          console.log('[DROPBOX] Is authenticated:', isAuth);
+                          
+                          // Show success alert
+                          Alert.alert(
+                            t('settings.dropboxConnected'),
+                            t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
+                            [{ text: t('common.ok') }]
+                          );
+                        } catch (error) {
+                          console.error('[DROPBOX] Sign-in error:', error);
+                          Alert.alert(
+                            t('common.error'),
+                            error.message || t('settings.dropboxSignInError')
+                          );
+                        } finally {
+                          setIsSigningInDropbox(false);
+                        }
+                      }}
+                      disabled={isSigningInDropbox}
+                    >
+                      {isSigningInDropbox ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={[
+                          styles.featureButtonText,
+                          styles.dropboxButtonText,
+                          !canUse(FEATURES.DROPBOX_SYNC) && styles.dropboxButtonTextDisabled
+                        ]}>
+                          {t('settings.connectToDropbox')}
+                        </Text>
+                      )}
+                    </TouchableOpacity>
                     
-                    return (
-                      <>
-                        {/* Connect to Google Account Button */}
-                        <TouchableOpacity
-                          style={[
-                            styles.featureButton,
-                            (!canConnectGoogle || !isGoogleSignInAvailable || isSigningIn) && styles.buttonDisabled
-                          ]}
-                          onPress={async () => {
-                            if (!canConnectGoogle) {
-                              Alert.alert(t('settings.featureUnavailable'), t('settings.googleAccountFeature'));
-                              return;
-                            }
-                            setIsSigningIn(true);
-                            try {
-                              // For Pro, use individual sign-in; for Business/Enterprise, use admin sign-in
-                              if (isPro) {
-                                await individualSignIn();
-                              } else {
-                                await adminSignIn();
-                              }
-                            } catch (error) {
-                              console.error("Error during sign in:", error);
-                            } finally {
-                              setIsSigningIn(false);
-                            }
-                          }}
-                          disabled={!canConnectGoogle || !isGoogleSignInAvailable || isSigningIn}
-                        >
-                          {isSigningIn && canConnectGoogle ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text style={[
-                              styles.featureButtonText,
-                              (!canConnectGoogle || !isGoogleSignInAvailable) && styles.buttonTextDisabled
-                            ]}>
-                              {t('settings.connectToGoogleAccount')}
-                            </Text>
-                          )}
-                        </TouchableOpacity>
-                        
-                        {/* Connect to Dropbox Button */}
-                        <TouchableOpacity
-                          style={[
-                            styles.featureButton,
-                            styles.dropboxButton,
-                            (!canConnectGoogle || isSigningIn) && styles.buttonDisabled
-                          ]}
-                          onPress={async () => {
-                            if (!canConnectGoogle) {
-                              Alert.alert(t('settings.featureUnavailable'), t('settings.dropboxAccountFeature'));
-                              return;
-                            }
-                            
-                            if (!dropboxAuthService.isConfigured()) {
-                              Alert.alert(
-                                t('settings.featureUnavailable'),
-                                t('settings.dropboxNotConfigured')
-                              );
-                              return;
-                            }
+                    {/* Connect Team Button - Always visible */}
+                    {(() => {
+                      const buttonDisabled = isSigningIn;
+                      const isStyleDisabled = (!userPlan || userPlan === 'starter') || userPlan === 'pro' || isSigningIn;
+                      console.log('[TEAM_BUTTON_RENDER] Rendering button - userPlan:', userPlan, 'disabled:', buttonDisabled, 'styledAsDisabled:', isStyleDisabled);
+                      return null;
+                    })()}
+                    <TouchableOpacity
+                      style={[
+                        styles.featureButton,
+                        ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || isSigningIn) && styles.buttonDisabled
+                      ]}
+                      onPress={async () => {
+                        console.log('[TEAM_BUTTON] Button pressed');
+                        console.log('[TEAM_BUTTON] userPlan:', userPlan);
+                        console.log('[TEAM_BUTTON] isAuthenticated:', isAuthenticated);
+                        console.log('[TEAM_BUTTON] userMode:', userMode);
+                        console.log('[TEAM_BUTTON] isSigningIn:', isSigningIn);
 
-                            setIsSigningInDropbox(true);
-                            try {
-                              const result = await dropboxAuthService.signIn();
-                              
-                              // Find or create ProofPix folder
-                              try {
-                                const folderPath = await dropboxService.findOrCreateProofPixFolder();
-                                console.log('[DROPBOX] Folder ready:', folderPath);
-                              } catch (folderError) {
-                                console.error('[DROPBOX] Folder creation error:', folderError);
-                                // Don't fail the sign-in if folder creation fails
-                              }
+                        const isStarter = !userPlan || userPlan === 'starter';
+                        const isPro = userPlan === 'pro';
+                        const isBusiness = userPlan === 'business';
+                        const isEnterprise = userPlan === 'enterprise';
 
-                              // Update state - reload tokens to ensure state is accurate
-                              await dropboxAuthService.loadStoredTokens();
-                              const isAuth = dropboxAuthService.isAuthenticated();
-                              const userInfo = dropboxAuthService.getUserInfo();
-                              
-                              setIsDropboxAuthenticated(isAuth);
-                              setDropboxUserInfo(userInfo);
-                              
-                              console.log('[DROPBOX] Sign-in successful!');
-                              console.log('[DROPBOX] User info:', userInfo);
-                              console.log('[DROPBOX] Is authenticated:', isAuth);
-                              
-                              // Show success alert
-                              Alert.alert(
-                                t('settings.dropboxConnected'),
-                                t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
-                                [{ text: t('common.ok') }]
-                              );
-                            } catch (error) {
-                              console.error('[DROPBOX] Sign-in error:', error);
-                              Alert.alert(
-                                t('common.error'),
-                                error.message || t('settings.dropboxSignInError')
-                              );
-                            } finally {
-                              setIsSigningInDropbox(false);
-                            }
-                          }}
-                          disabled={!canConnectGoogle || isSigningInDropbox}
-                        >
-                          {isSigningInDropbox ? (
-                            <ActivityIndicator size="small" color="#fff" />
-                          ) : (
-                            <Text style={[
-                              styles.featureButtonText,
-                              styles.dropboxButtonText,
-                              !canConnectGoogle && styles.buttonTextDisabled
-                            ]}>
-                              {t('settings.connectToDropbox')}
-                            </Text>
-                          )}
-                        </TouchableOpacity>
-                        
-                        {/* Set Up Team Button */}
-                        <TouchableOpacity
-                          style={[
-                            styles.featureButton,
-                            (!canSetupTeam || isSigningIn) && styles.buttonDisabled
-                          ]}
-                          onPress={async () => {
-                            if (!canSetupTeam) {
-                              Alert.alert(t('settings.featureUnavailable'), t('settings.teamSetupFeature'));
-                              return;
-                            }
-                            if (!isAuthenticated) {
-                              Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
-                              return;
-                            }
-                            await handleSetupTeam();
-                          }}
-                          disabled={!canSetupTeam || isSigningIn}
-                        >
-                          <Text style={[
-                            styles.featureButtonText,
-                            !canSetupTeam && styles.buttonTextDisabled
-                          ]}>
-                            {t('settings.setUpTeam')}
-                          </Text>
-                        </TouchableOpacity>
-                        
-                        {!isGoogleSignInAvailable && (canConnectGoogle || canSetupTeam) && (
-                          <View style={styles.expoGoWarning}>
-                            <Text style={styles.expoGoWarningText}>
-                              {t('settings.expoGoWarning')}
-                            </Text>
-                            <Text style={styles.expoGoWarningSubtext}>
-                              {t('settings.expoGoWarningCommand')}
-                            </Text>
-                          </View>
-                        )}
+                        console.log('[TEAM_BUTTON] isStarter:', isStarter);
+                        console.log('[TEAM_BUTTON] isPro:', isPro);
+                        console.log('[TEAM_BUTTON] isBusiness:', isBusiness);
+                        console.log('[TEAM_BUTTON] isEnterprise:', isEnterprise);
 
-                        {/* Show plan selection option for Starter users */}
-                        {isStarter && (
-                          <>
-                            <TouchableOpacity
-                              style={styles.signInButton}
-                              onPress={() => setShowPlanSelection(true)}
-                            >
-                              <Text style={styles.signInButtonText}>
-                                {t('settings.upgradePlan')}
-                              </Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={styles.googleSignInButton}
-                              onPress={() => navigation.navigate('JoinTeam')}
-                            >
-                              <Text style={styles.googleSignInButtonText}>
-                                {t('settings.joinTeam')}
-                              </Text>
-                            </TouchableOpacity>
-                          </>
-                        )}
-                      </>
-                    );
-                  })()}
+                        // Starter - show plan popup
+                        if (isStarter) {
+                          console.log('[TEAM_BUTTON] Showing plan modal for starter');
+                          setShowPlanModal(true);
+                          return;
+                        }
+
+                        // Pro - show popup saying not available
+                        if (isPro) {
+                          console.log('[TEAM_BUTTON] Showing unavailable alert for pro');
+                          Alert.alert(
+                            t('settings.featureUnavailable'),
+                            t('settings.teamSetupFeature')
+                          );
+                          return;
+                        }
+
+                        // Business - check team member limit
+                        if (isBusiness) {
+                          console.log('[TEAM_BUTTON] Business plan detected');
+                          const maxTeamMembers = getLimit('maxTeamMembers', userPlan);
+                          const currentTeamMembers = inviteTokens?.length || 0;
+                          console.log('[TEAM_BUTTON] maxTeamMembers:', maxTeamMembers, 'currentTeamMembers:', currentTeamMembers);
+
+                          if (exceedsLimit('maxTeamMembers', userPlan, currentTeamMembers)) {
+                            console.log('[TEAM_BUTTON] Team limit exceeded');
+                            Alert.alert(
+                              t('settings.teamLimitReached'),
+                              t('settings.teamLimitMessage', { limit: maxTeamMembers })
+                            );
+                            return;
+                          }
+
+                          if (!isAuthenticated) {
+                            console.log('[TEAM_BUTTON] Not authenticated, showing alert');
+                            Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
+                            return;
+                          }
+                          console.log('[TEAM_BUTTON] Calling handleSetupTeam for business');
+                          await handleSetupTeam();
+                          return;
+                        }
+
+                        // Enterprise - allow unlimited team members
+                        if (isEnterprise) {
+                          console.log('[TEAM_BUTTON] Enterprise plan detected');
+                          if (!isAuthenticated) {
+                            console.log('[TEAM_BUTTON] Not authenticated, showing alert');
+                            Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
+                            return;
+                          }
+                          console.log('[TEAM_BUTTON] Calling handleSetupTeam for enterprise');
+                          await handleSetupTeam();
+                          return;
+                        }
+
+                        console.log('[TEAM_BUTTON] No matching plan condition - this should not happen!');
+                      }}
+                      disabled={isSigningIn}
+                    >
+                      <Text style={[
+                        styles.featureButtonText,
+                        ((!userPlan || userPlan === 'starter') || userPlan === 'pro') && styles.buttonTextDisabled
+                      ]}>
+                        {t('settings.setUpTeam')}
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {/* Multiple Profiles Button - Always visible */}
+                    <TouchableOpacity
+                      style={[
+                        styles.featureButton,
+                        styles.multipleProfilesButton,
+                        ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || userPlan === 'business' || isSigningIn) && styles.multipleProfilesButtonDisabled
+                      ]}
+                      onPress={() => {
+                        // Show popup with developer email
+                        if (userPlan === 'enterprise') {
+                          Alert.alert(
+                            t('settings.multipleProfiles'),
+                            t('settings.contactDeveloper', { email: 'developer@proofpix.com' })
+                          );
+                        } else {
+                          setShowPlanModal(true);
+                        }
+                      }}
+                      disabled={isSigningIn}
+                    >
+                      <Text style={[
+                        styles.featureButtonText,
+                        styles.multipleProfilesButtonText,
+                        ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || userPlan === 'business') && styles.multipleProfilesButtonTextDisabled
+                      ]}>
+                        {t('settings.multiprofile')}
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    {!isGoogleSignInAvailable && (canUse(FEATURES.GOOGLE_DRIVE_SYNC) || canUse(FEATURES.TEAM_INVITES)) && (
+                      <View style={styles.expoGoWarning}>
+                        <Text style={styles.expoGoWarningText}>
+                          {t('settings.expoGoWarning')}
+                        </Text>
+                        <Text style={styles.expoGoWarningSubtext}>
+                          {t('settings.expoGoWarningCommand')}
+                        </Text>
+                      </View>
+                    )}
+                  </>
                 </>
               )}
             </>
@@ -1966,158 +2413,254 @@ export default function SettingsScreen({ navigation }) {
               )}
 
               {/* Show all buttons when authenticated, with enable/disable based on plan */}
-              {(() => {
-                const isPro = userPlan === 'pro';
-                const isBusiness = userPlan === 'business';
-                const isEnterprise = userPlan === 'enterprise';
+              <>
+                {/* Keep Connect to Google button visible even after authentication */}
+                <TouchableOpacity
+                  style={[
+                    styles.featureButton,
+                    styles.googleSignInButton,
+                    (!canUse(FEATURES.MULTIPLE_CLOUD_ACCOUNTS) || !isGoogleSignInAvailable || isSigningIn) && styles.googleButtonDisabled
+                  ]}
+                  onPress={async () => {
+                    // Only Enterprise can connect multiple accounts
+                    if (!canUse(FEATURES.MULTIPLE_CLOUD_ACCOUNTS)) {
+                      if (userPlan === 'enterprise') {
+                        // Show developer contact popup
+                        Alert.alert(
+                          t('settings.multipleProfiles'),
+                          t('settings.contactDeveloper', { email: 'developer@proofpix.com' })
+                        );
+                      } else {
+                        setShowPlanModal(true);
+                      }
+                      return;
+                    }
+                    
+                    setIsSigningIn(true);
+                    try {
+                      if (userMode === 'admin') {
+                        await adminSignIn();
+                      } else {
+                        await individualSignIn();
+                      }
+                    } catch (error) {
+                      console.error('Error reconnecting Google account:', error);
+                    } finally {
+                      setIsSigningIn(false);
+                    }
+                  }}
+                  disabled={!isGoogleSignInAvailable || isSigningIn}
+                >
+                  {isSigningIn && canUse(FEATURES.MULTIPLE_CLOUD_ACCOUNTS) ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={[
+                      styles.googleSignInButtonText,
+                      (!canUse(FEATURES.MULTIPLE_CLOUD_ACCOUNTS) || !isGoogleSignInAvailable) && styles.googleButtonTextDisabled
+                    ]}>
+                      {t('settings.connectToGoogleAccount')}
+                    </Text>
+                  )}
+                </TouchableOpacity>
                 
-                const canConnectGoogle = isPro || isBusiness || isEnterprise;
-                const canSetupTeam = isBusiness || isEnterprise;
-                const isAdmin = userMode === 'admin';
-                const connectButtonDisabled = !isEnterprise || !isGoogleSignInAvailable || isSigningIn;
+                {/* Connect to Dropbox Button - always shown when authenticated but not connected */}
+                {!isDropboxAuthenticated && (
+                  <TouchableOpacity
+                    style={[
+                      styles.featureButton,
+                      styles.dropboxButton,
+                      (!canUse(FEATURES.DROPBOX_SYNC) || isSigningInDropbox) && styles.dropboxButtonDisabled
+                    ]}
+                    onPress={async () => {
+                      // Check feature access
+                      if (!canUse(FEATURES.DROPBOX_SYNC)) {
+                        setShowPlanModal(true);
+                        return;
+                      }
+                      
+                      if (!dropboxAuthService.isConfigured()) {
+                        Alert.alert(
+                          t('settings.featureUnavailable'),
+                          t('settings.dropboxNotConfigured')
+                        );
+                        return;
+                      }
+
+                      setIsSigningInDropbox(true);
+                      try {
+                        const result = await dropboxAuthService.signIn();
+                        
+                        // Find or create ProofPix folder
+                        try {
+                          const folderPath = await dropboxService.findOrCreateProofPixFolder();
+                          console.log('[DROPBOX] Folder ready:', folderPath);
+                        } catch (folderError) {
+                          console.error('[DROPBOX] Folder creation error:', folderError);
+                          // Don't fail the sign-in if folder creation fails
+                        }
+
+                        // Update state - reload tokens to ensure state is accurate
+                        await dropboxAuthService.loadStoredTokens();
+                        const isAuth = dropboxAuthService.isAuthenticated();
+                        const userInfo = dropboxAuthService.getUserInfo();
+                        
+                        setIsDropboxAuthenticated(isAuth);
+                        setDropboxUserInfo(userInfo);
+                        
+                        console.log('[DROPBOX] Sign-in successful!');
+                        console.log('[DROPBOX] User info:', userInfo);
+                        console.log('[DROPBOX] Is authenticated:', isAuth);
+                        
+                        // Show success alert
+                        Alert.alert(
+                          t('settings.dropboxConnected'),
+                          t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
+                          [{ text: t('common.ok') }]
+                        );
+                      } catch (error) {
+                        console.error('[DROPBOX] Sign-in error:', error);
+                        Alert.alert(
+                          t('common.error'),
+                          error.message || t('settings.dropboxSignInError')
+                        );
+                      } finally {
+                        setIsSigningInDropbox(false);
+                      }
+                    }}
+                    disabled={isSigningInDropbox}
+                  >
+                    {isSigningInDropbox ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={[
+                        styles.featureButtonText,
+                        styles.dropboxButtonText,
+                        !canUse(FEATURES.DROPBOX_SYNC) && styles.dropboxButtonTextDisabled
+                      ]}>
+                        {t('settings.connectToDropbox')}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                )}
                 
-                return (
-                  <>
-                    {/* Keep Connect button visible even after authentication */}
-                    <TouchableOpacity
-                      style={[
-                        styles.featureButton,
-                        connectButtonDisabled && styles.buttonDisabled
-                      ]}
-                      onPress={async () => {
-                        if (connectButtonDisabled) {
+                {/* Connect Team Button - Always visible when authenticated */}
+                <TouchableOpacity
+                  style={[
+                    styles.featureButton,
+                    ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || isSigningIn) && styles.buttonDisabled
+                  ]}
+                  onPress={async () => {
+                    console.log('[TEAM_BUTTON_2] Button 2 pressed');
+                    console.log('[TEAM_BUTTON_2] userPlan:', userPlan);
+                    console.log('[TEAM_BUTTON_2] isAuthenticated:', isAuthenticated);
+
+                    const isPro = userPlan === 'pro';
+                    const isBusiness = userPlan === 'business';
+                    const isEnterprise = userPlan === 'enterprise';
+
+                    console.log('[TEAM_BUTTON_2] isPro:', isPro, 'isBusiness:', isBusiness, 'isEnterprise:', isEnterprise);
+
+                    // Pro - show popup saying not available
+                    if (isPro) {
+                      console.log('[TEAM_BUTTON_2] Showing unavailable for Pro');
+                      Alert.alert(
+                        t('settings.featureUnavailable'),
+                        t('settings.teamSetupFeature')
+                      );
+                      return;
+                    }
+
+                    // Business - check team member limit
+                    if (isBusiness) {
+                      try {
+                        console.log('[TEAM_BUTTON_2] Business plan - checking limits');
+                        console.log('[TEAM_BUTTON_2] getLimit function:', typeof getLimit);
+                        console.log('[TEAM_BUTTON_2] exceedsLimit function:', typeof exceedsLimit);
+
+                        const maxTeamMembers = getLimit('maxTeamMembers', userPlan);
+                        const currentTeamMembers = inviteTokens?.length || 0;
+                        console.log('[TEAM_BUTTON_2] maxTeamMembers:', maxTeamMembers, 'currentTeamMembers:', currentTeamMembers);
+
+                        if (exceedsLimit('maxTeamMembers', userPlan, currentTeamMembers)) {
+                          console.log('[TEAM_BUTTON_2] Team limit exceeded');
+                          Alert.alert(
+                            t('settings.teamLimitReached'),
+                            t('settings.teamLimitMessage', { limit: maxTeamMembers })
+                          );
                           return;
                         }
-                        setIsSigningIn(true);
-                        try {
-                          if (isAdmin) {
-                            await adminSignIn();
-                          } else {
-                            await individualSignIn();
-                          }
-                        } catch (error) {
-                          console.error('Error reconnecting Google account:', error);
-                        } finally {
-                          setIsSigningIn(false);
+
+                        if (!isAuthenticated) {
+                          console.log('[TEAM_BUTTON_2] Not authenticated');
+                          Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
+                          return;
                         }
-                      }}
-                      disabled={connectButtonDisabled}
-                    >
-                      {isSigningIn && !connectButtonDisabled ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={[
-                          styles.featureButtonText,
-                          connectButtonDisabled && styles.buttonTextDisabled
-                        ]}>
-                          {t('settings.connectToGoogleAccount')}
-                        </Text>
-                      )}
-                    </TouchableOpacity>
-                    
-                    {/* Connect to Dropbox Button - always shown when authenticated */}
-                    {!isDropboxAuthenticated && (
-                      <TouchableOpacity
-                        style={[
-                          styles.featureButton,
-                          styles.dropboxButton,
-                          (!canConnectGoogle || isSigningInDropbox) && styles.buttonDisabled
-                        ]}
-                        onPress={async () => {
-                          if (!canConnectGoogle) {
-                            Alert.alert(t('settings.featureUnavailable'), t('settings.dropboxAccountFeature'));
-                            return;
-                          }
-                          
-                          if (!dropboxAuthService.isConfigured()) {
-                            Alert.alert(
-                              t('settings.featureUnavailable'),
-                              t('settings.dropboxNotConfigured')
-                            );
-                            return;
-                          }
 
-                          setIsSigningInDropbox(true);
-                          try {
-                            const result = await dropboxAuthService.signIn();
-                            
-                            // Find or create ProofPix folder
-                            try {
-                              const folderPath = await dropboxService.findOrCreateProofPixFolder();
-                              console.log('[DROPBOX] Folder ready:', folderPath);
-                            } catch (folderError) {
-                              console.error('[DROPBOX] Folder creation error:', folderError);
-                              // Don't fail the sign-in if folder creation fails
-                            }
+                        console.log('[TEAM_BUTTON_2] Calling handleSetupTeam for Business');
+                        await handleSetupTeam();
+                        return;
+                      } catch (error) {
+                        console.error('[TEAM_BUTTON_2] Error in Business handler:', error);
+                        console.error('[TEAM_BUTTON_2] Error stack:', error.stack);
+                        Alert.alert('Error', error.message || 'Failed to setup team');
+                        return;
+                      }
+                    }
 
-                            // Update state - reload tokens to ensure state is accurate
-                            await dropboxAuthService.loadStoredTokens();
-                            const isAuth = dropboxAuthService.isAuthenticated();
-                            const userInfo = dropboxAuthService.getUserInfo();
-                            
-                            setIsDropboxAuthenticated(isAuth);
-                            setDropboxUserInfo(userInfo);
-                            
-                            console.log('[DROPBOX] Sign-in successful!');
-                            console.log('[DROPBOX] User info:', userInfo);
-                            console.log('[DROPBOX] Is authenticated:', isAuth);
-                            
-                            // Show success alert
-                            Alert.alert(
-                              t('settings.dropboxConnected'),
-                              t('settings.dropboxConnectedMessage', { email: userInfo?.email || '' }),
-                              [{ text: t('common.ok') }]
-                            );
-                          } catch (error) {
-                            console.error('[DROPBOX] Sign-in error:', error);
-                            Alert.alert(
-                              t('common.error'),
-                              error.message || t('settings.dropboxSignInError')
-                            );
-                          } finally {
-                            setIsSigningInDropbox(false);
-                          }
-                        }}
-                        disabled={!canConnectGoogle || isSigningInDropbox}
-                      >
-                        {isSigningInDropbox ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={[
-                            styles.featureButtonText,
-                            styles.dropboxButtonText,
-                            !canConnectGoogle && styles.buttonTextDisabled
-                          ]}>
-                            {t('settings.connectToDropbox')}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
-                    
-                    {/* Set Up Team Button - shown for authenticated Business/Enterprise admins who haven't set up yet */}
-                    {isAdmin && !isSetupComplete() && canSetupTeam && (
-                      <TouchableOpacity
-                        style={[
-                          styles.featureButton,
-                          isSigningIn && styles.buttonDisabled
-                        ]}
-                        onPress={handleSetupTeam}
-                        disabled={isSigningIn}
-                      >
-                        {isSigningIn ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <Text style={styles.featureButtonText}>
-                            {t('settings.setUpTeam')}
-                          </Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
-                    
-                    {/* Add Location button removed */}
-                  </>
-                );
-              })()}
+                    // Enterprise - allow unlimited team members
+                    if (isEnterprise) {
+                      console.log('[TEAM_BUTTON_2] Enterprise plan detected');
+                      if (!isAuthenticated) {
+                        console.log('[TEAM_BUTTON_2] Not authenticated');
+                        Alert.alert(t('settings.signInRequired'), t('settings.connectGoogleFirst'));
+                        return;
+                      }
+                      console.log('[TEAM_BUTTON_2] Calling handleSetupTeam for Enterprise');
+                      await handleSetupTeam();
+                      return;
+                    }
+
+                    console.log('[TEAM_BUTTON_2] No plan matched - doing nothing');
+                  }}
+                  disabled={isSigningIn}
+                >
+                  <Text style={[
+                    styles.featureButtonText,
+                    ((!userPlan || userPlan === 'starter') || userPlan === 'pro') && styles.buttonTextDisabled
+                  ]}>
+                    {t('settings.setUpTeam')}
+                  </Text>
+                </TouchableOpacity>
+                
+                {/* Multiple Profiles Button - Always visible */}
+                <TouchableOpacity
+                  style={[
+                    styles.featureButton,
+                    styles.multipleProfilesButton,
+                    ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || userPlan === 'business' || isSigningIn) && styles.multipleProfilesButtonDisabled
+                  ]}
+                  onPress={() => {
+                    // Show popup with developer email for Enterprise, plan modal for others
+                    if (userPlan === 'enterprise') {
+                      Alert.alert(
+                        t('settings.multipleProfiles'),
+                        t('settings.contactDeveloper', { email: 'developer@proofpix.com' })
+                      );
+                    } else {
+                      setShowPlanModal(true);
+                    }
+                  }}
+                  disabled={isSigningIn}
+                >
+                  <Text style={[
+                    styles.featureButtonText,
+                    styles.multipleProfilesButtonText,
+                    ((!userPlan || userPlan === 'starter') || userPlan === 'pro' || userPlan === 'business') && styles.multipleProfilesButtonTextDisabled
+                  ]}>
+                    {t('settings.multiprofile')}
+                  </Text>
+                </TouchableOpacity>
+              </>
 
               {userMode === 'admin' && isSetupComplete() && (
                 <>
@@ -2185,8 +2728,36 @@ export default function SettingsScreen({ navigation }) {
           )}
         </View>
 
-        {/* Account & Data */}
+        {/* Referral Program */}
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Invite Friends</Text>
+          <View style={styles.referralStatsContainer}>
+            <View style={styles.referralStatItem}>
+              <Text style={styles.referralStatLabel}>Friends Joined</Text>
+              <Text style={styles.referralStatValue}>
+                {referralInfo.invitesSent?.filter(inv => inv.status === 'completed').length || 0} of 3
+              </Text>
+            </View>
+            <View style={[styles.referralStatItem, styles.referralStatItemRight]}>
+              <Text style={[styles.referralStatLabel, styles.referralStatLabelRight]}>Months Earned</Text>
+              <Text style={[styles.referralStatValue, styles.referralStatValueRight]}>
+                {referralInfo.totalMonthsEarned || 0} months
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.featureButton, styles.referralButton]}
+            onPress={() => navigation.navigate('Referral')}
+          >
+            <Text style={[styles.featureButtonText, styles.referralButtonText]}>Invite Friends</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Account & Data */}
+        <View 
+          ref={accountDataSectionRef}
+          style={styles.section}
+        >
           <Text style={styles.sectionTitle}>{t('settings.accountData')}</Text>
 
           <View style={styles.inputGroup}>
@@ -2201,6 +2772,20 @@ export default function SettingsScreen({ navigation }) {
               editable={!isTeamMember}
             />
           </View>
+
+          <View style={styles.divider} />
+
+          {/* Contact Us Section */}
+          <Text style={styles.sectionTitle}>{t('settings.contactUs')}</Text>
+          <Text style={styles.sectionDescription}>
+            {t('settings.contactUsDescription')}
+          </Text>
+          <TouchableOpacity
+            style={styles.contactButton}
+            onPress={() => setShowContactModal(true)}
+          >
+            <Text style={styles.contactButtonText}>{t('settings.contactUs')}</Text>
+          </TouchableOpacity>
 
           <View style={styles.divider} />
 
@@ -2436,7 +3021,7 @@ export default function SettingsScreen({ navigation }) {
                   onPress={() => setShowPlanModal(false)}
                   style={styles.modalCloseButton}
                 >
-                  <Text style={styles.modalCloseText}>Γ£ò</Text>
+                  <Text style={styles.modalCloseText}>×</Text>
                 </TouchableOpacity>
               </View>
 
@@ -2449,9 +3034,12 @@ export default function SettingsScreen({ navigation }) {
                       setShowPlanModal(false);
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('planModal.starter')}</Text>
+                    <View style={styles.planButtonRow}>
+                      <Text style={[styles.planButtonText, userPlan === 'starter' && styles.planButtonTextSelected]}>{t('firstLoad.starter')}</Text>
+                      <Text style={styles.planPrice}>Free</Text>
+                    </View>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>{t('planModal.starterDescription')}</Text>
+                  <Text style={styles.planSubtext}>{t('firstLoad.starterDesc')}</Text>
                 </View>
 
                 <View style={styles.planContainer}>
@@ -2460,14 +3048,14 @@ export default function SettingsScreen({ navigation }) {
                     onPress={async () => {
                       await updateUserPlan('pro');
                       setShowPlanModal(false);
-                      if (!isAuthenticated) {
-                        navigation.navigate('GoogleSignUp', { plan: 'pro' });
-                      }
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('planModal.pro')}</Text>
+                    <View style={styles.planButtonRow}>
+                      <Text style={[styles.planButtonText, userPlan === 'pro' && styles.planButtonTextSelected]}>{t('firstLoad.pro')}</Text>
+                      <Text style={styles.planPrice}>$8.99/month</Text>
+                    </View>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>{t('planModal.proDescription')}</Text>
+                  <Text style={styles.planSubtext}>{t('firstLoad.proDesc')}</Text>
                 </View>
 
                 <View style={styles.planContainer}>
@@ -2476,30 +3064,34 @@ export default function SettingsScreen({ navigation }) {
                     onPress={async () => {
                       await updateUserPlan('business');
                       setShowPlanModal(false);
-                      if (!isAuthenticated) {
-                        navigation.navigate('GoogleSignUp', { plan: 'business' });
-                      }
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('planModal.business')}</Text>
+                    <View style={styles.planButtonRow}>
+                      <Text style={[styles.planButtonText, userPlan === 'business' && styles.planButtonTextSelected]}>{t('firstLoad.business')}</Text>
+                      <Text style={styles.planPrice}>$24.99/month</Text>
+                    </View>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>{t('planModal.businessDescription')}</Text>
+                  <Text style={styles.planSubtext}>
+                    For small teams up to 5 members. $5.99 per additional team member
+                  </Text>
                 </View>
 
                 <View style={styles.planContainer}>
                   <TouchableOpacity
                     style={[styles.planButton, userPlan === 'enterprise' && styles.planButtonSelected]}
-                    onPress={async () => {
-                      await updateUserPlan('enterprise');
+                    onPress={() => {
                       setShowPlanModal(false);
-                      if (!isAuthenticated) {
-                        navigation.navigate('GoogleSignUp', { plan: 'enterprise' });
-                      }
+                      setShowEnterpriseModal(true);
                     }}
                   >
-                    <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('planModal.enterprise')}</Text>
+                    <View style={styles.planButtonRow}>
+                      <Text style={[styles.planButtonText, userPlan === 'enterprise' && styles.planButtonTextSelected]}>{t('firstLoad.enterprise')}</Text>
+                      <Text style={styles.planPrice}>Starts at $69.99/month</Text>
+                    </View>
                   </TouchableOpacity>
-                  <Text style={styles.planSubtext}>{t('planModal.enterpriseDescription')}</Text>
+                  <Text style={styles.planSubtext}>
+                    For growing organisations with 15 team members and more
+                  </Text>
                 </View>
               </ScrollView>
             </View>
@@ -2513,8 +3105,8 @@ export default function SettingsScreen({ navigation }) {
           animationType="fade"
           onRequestClose={() => setLanguageModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+          <View style={styles.languageModalOverlay}>
+            <View style={styles.languageModalContent}>
               <Text style={styles.modalTitle}>{t('settings.language')}</Text>
 
               <ScrollView 
@@ -2563,14 +3155,14 @@ export default function SettingsScreen({ navigation }) {
         </RNModal>
 
         {/* Label Language Modal */}
-        <RNModal
+          <RNModal
           visible={labelLanguageModalVisible}
           transparent={true}
           animationType="fade"
           onRequestClose={() => setLabelLanguageModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+          <View style={styles.languageModalOverlay}>
+            <View style={styles.languageModalContent}>
               <Text style={styles.modalTitle}>{t('settings.labelLanguage')}</Text>
               <ScrollView 
                 ref={labelLanguageScrollViewRef}
@@ -2617,14 +3209,14 @@ export default function SettingsScreen({ navigation }) {
         </RNModal>
 
         {/* Section Language Modal */}
-        <RNModal
+          <RNModal
           visible={sectionLanguageModalVisible}
           transparent={true}
           animationType="fade"
           onRequestClose={() => setSectionLanguageModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
+          <View style={styles.languageModalOverlay}>
+            <View style={styles.languageModalContent}>
               <Text style={styles.modalTitle}>{t('settings.sectionLanguage')}</Text>
               <ScrollView
                 ref={sectionLanguageScrollViewRef}
@@ -2671,47 +3263,205 @@ export default function SettingsScreen({ navigation }) {
             </View>
           </View>
         </RNModal>
+
+        {/* Enterprise Contact Form Modal */}
+        <EnterpriseContactModal
+          visible={showEnterpriseModal}
+          onClose={() => setShowEnterpriseModal(false)}
+        />
+
+        {/* Contact Us Modal */}
+        <EnterpriseContactModal
+          visible={showContactModal}
+          onClose={() => setShowContactModal(false)}
+          title={t('settings.contactUsTitle')}
+          subtitle={t('settings.contactUsSubtitle')}
+        />
+
+        {/* Trial Testing Section - Only in Development */}
+        {__DEV__ && (
+          <View style={styles.testSection}>
+            <Text style={styles.testSectionTitle}>🧪 Trial Test Tools</Text>
+            <View style={styles.testButtons}>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay0();
+                  Alert.alert('Test Set', 'Trial set to Day 0. Restart app or go to foreground to see welcome message.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 0 (Welcome)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay7_10();
+                  Alert.alert('Test Set', 'Trial set to Day 7-10. Restart app to see engagement message.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 7-10</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay15();
+                  Alert.alert('Test Set', 'Trial set to Day 15. Restart app to see check-in message.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 15</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay22_24();
+                  Alert.alert('Test Set', 'Trial set to Day 22-24. Restart app to see early reminder.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 22-24</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay27_28();
+                  Alert.alert('Test Set', 'Trial set to Day 27-28. Restart app to see last chance message.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 27-28</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.testButton}
+                onPress={async () => {
+                  await TrialTestUtils.testDay30();
+                  Alert.alert('Test Set', 'Trial set to expired. Restart app to see expiration message.');
+                }}
+              >
+                <Text style={styles.testButtonText}>Day 30 (Expired)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.testButton, { backgroundColor: '#FF0000' }]}
+                onPress={async () => {
+                  await TrialTestUtils.testDay30();
+                  Alert.alert('Test Set', 'Trial set to expired. Restart app to see Day 30 expiration message with discount and referral.');
+                }}
+              >
+                <Text style={[styles.testButtonText, { color: '#FFFFFF' }]}>Test Day 30</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
       </SafeAreaView>
     );
   }
 
-function WatermarkOpacitySlider({ value = 0, onChange, onChangeEnd, fillColor = '#FFD700' }) {
+function WatermarkOpacitySlider({ value = 0, onChange, onChangeEnd, onStartShouldSetResponder, fillColor = '#FFD700' }) {
   const [trackWidth, setTrackWidth] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
+  const [draggingValue, setDraggingValue] = useState(value);
+  const trackRef = useRef(null);
 
   const clamp = (val) => Math.max(0, Math.min(1, val));
+
+  // Use dragging value during drag, otherwise use prop value
+  const displayValue = isDragging ? draggingValue : value;
+
+  // Sync draggingValue when value prop changes (but not during drag)
+  useEffect(() => {
+    if (!isDragging) {
+      setDraggingValue(value);
+    }
+  }, [value, isDragging]);
+
+  const isDraggingRef = useRef(false);
+  
+  // Sync ref with state
+  useEffect(() => {
+    isDraggingRef.current = isDragging;
+  }, [isDragging]);
 
   const handleGesture = (event, commit = false) => {
     if (!trackWidth || !event || !event.nativeEvent) {
       if (commit && onChangeEnd) {
-        onChangeEnd(clamp(value));
+        onChangeEnd(clamp(displayValue));
+        setIsDragging(false);
+        isDraggingRef.current = false;
       }
       return;
     }
+    
+    // Use locationX which is relative to the responder view (the track itself)
     const { locationX } = event.nativeEvent;
     const ratio = clamp(locationX / trackWidth);
-    if (onChange) {
+    
+    // Update local state immediately for smooth dragging - this prevents jumps
+    setDraggingValue(ratio);
+    
+    // Only call onChange if not committing (during drag)
+    if (onChange && !commit && isDraggingRef.current) {
       onChange(ratio);
     }
+    
+    // Call onChangeEnd when commit is true (drag ended)
     if (commit && onChangeEnd) {
       onChangeEnd(ratio);
+      setIsDragging(false);
+      isDraggingRef.current = false;
     }
   };
 
+  const handleStartShouldSetResponder = () => {
+    if (onStartShouldSetResponder) {
+      const allow = onStartShouldSetResponder();
+      if (allow) {
+        setIsDragging(true);
+        isDraggingRef.current = true;
+        setDraggingValue(value);
+      }
+      return allow;
+    }
+    setIsDragging(true);
+    isDraggingRef.current = true;
+    setDraggingValue(value);
+    return true;
+  };
+
   const thumbSize = 20;
-  const fillWidth = trackWidth ? clamp(value) * trackWidth : 0;
-  const thumbLeft = trackWidth ? clamp(value) * trackWidth - thumbSize / 2 : 0;
+  const fillWidth = trackWidth ? clamp(displayValue) * trackWidth : 0;
+  const thumbLeft = trackWidth ? clamp(displayValue) * trackWidth - thumbSize / 2 : 0;
 
   return (
     <View style={sliderStyles.container}>
       <View
+        ref={trackRef}
         style={sliderStyles.track}
-        onLayout={(event) => setTrackWidth(event.nativeEvent.layout.width)}
-        onStartShouldSetResponder={() => true}
-        onResponderGrant={(event) => handleGesture(event, false)}
-        onResponderMove={(event) => handleGesture(event, false)}
-        onResponderRelease={(event) => handleGesture(event, true)}
+        onLayout={(event) => {
+          const { width } = event.nativeEvent.layout;
+          // Only update trackWidth if not dragging to avoid jumps
+          if (!isDragging) {
+            setTrackWidth(width);
+          }
+        }}
+        onStartShouldSetResponder={handleStartShouldSetResponder}
+        onMoveShouldSetResponder={() => isDragging}
+        onResponderGrant={(event) => {
+          handleGesture(event, false);
+        }}
+        onResponderMove={(event) => {
+          if (isDragging) {
+            handleGesture(event, false);
+          }
+        }}
+        onResponderRelease={(event) => {
+          if (isDragging) {
+            handleGesture(event, true);
+          }
+        }}
         onResponderTerminationRequest={() => false}
-        onResponderTerminate={(event) => handleGesture(event, true)}
+        onResponderTerminate={(event) => {
+          if (isDragging) {
+            handleGesture(event, true);
+            setIsDragging(false);
+          }
+        }}
       >
         <View
           style={[
@@ -3005,6 +3755,25 @@ const sliderStyles = StyleSheet.create({
       color: COLORS.TEXT,
       fontWeight: '600',
     },
+    contactButton: {
+      backgroundColor: COLORS.PRIMARY,
+      borderRadius: 12,
+      paddingVertical: 16,
+      paddingHorizontal: 20,
+      alignItems: 'center',
+      marginTop: 12,
+      marginBottom: 8,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.1,
+      shadowRadius: 4,
+      elevation: 3,
+    },
+    contactButtonText: {
+      color: '#000000',
+      fontSize: 16,
+      fontWeight: '600'
+    },
     resetButton: {
       backgroundColor: '#FFE6E6',
       borderRadius: 12,
@@ -3019,7 +3788,7 @@ const sliderStyles = StyleSheet.create({
       fontWeight: '600'
     },
     googleSignInButton: {
-      backgroundColor: '#4285F4',
+      backgroundColor: '#000000', // Black background
       borderRadius: 12,
       paddingVertical: 16,
       paddingHorizontal: 20,
@@ -3027,40 +3796,91 @@ const sliderStyles = StyleSheet.create({
       marginBottom: 8
     },
     googleSignInButtonText: {
-      color: 'white',
+      color: '#FFFFFF', // White text
       fontSize: 16,
       fontWeight: '600'
     },
     buttonDisabled: {
-      backgroundColor: '#cccccc',
-      opacity: 0.6
+      // Inactive buttons: white background with yellow border (default for Set Up Team)
+      backgroundColor: '#FFFFFF',
+      borderWidth: 2,
+      borderColor: COLORS.PRIMARY, // Yellow border
+      opacity: 1
     },
     buttonTextDisabled: {
-      color: '#666666'
+      // Inactive button text: yellow (default for Set Up Team)
+      color: COLORS.PRIMARY
+    },
+    googleButtonDisabled: {
+      // Inactive Google button: white background with black border
+      backgroundColor: '#FFFFFF',
+      borderWidth: 2,
+      borderColor: '#000000', // Black border
+      opacity: 1
+    },
+    googleButtonTextDisabled: {
+      // Inactive Google button text: black
+      color: '#000000'
+    },
+    dropboxButtonDisabled: {
+      // Inactive Dropbox button: white background with blue border
+      backgroundColor: '#FFFFFF',
+      borderWidth: 2,
+      borderColor: '#0061FF', // Blue border (Dropbox blue)
+      opacity: 1
+    },
+    dropboxButtonTextDisabled: {
+      // Inactive Dropbox button text: blue
+      color: '#0061FF'
+    },
+    multipleProfilesButtonDisabled: {
+      // Inactive Multiple Profiles button: white background with green border
+      backgroundColor: '#FFFFFF',
+      borderWidth: 2,
+      borderColor: '#28a745', // Green border
+      opacity: 1
+    },
+    multipleProfilesButtonTextDisabled: {
+      // Inactive Multiple Profiles button text: green
+      color: '#28a745'
     },
     currentPlanBox: {
       backgroundColor: '#f0f0f0',
       borderRadius: 8,
-      padding: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 20,
       marginBottom: 16,
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'center'
+    },
+    currentPlanInfo: {
+      width: '100%',
     },
     currentPlanLabel: {
       fontSize: 14,
       color: COLORS.GRAY,
-      fontWeight: '600'
+      fontWeight: '600',
+      marginBottom: 4,
     },
     currentPlanValueContainer: {
       flexDirection: 'row',
       alignItems: 'center',
-      gap: 8
+      justifyContent: 'space-between',
+      marginBottom: 4,
     },
     currentPlanValue: {
       fontSize: 16,
       color: COLORS.TEXT,
       fontWeight: 'bold'
+    },
+    trialBadge: {
+      fontSize: 14,
+      color: '#4CAF50',
+      fontWeight: '600',
+    },
+    trialDaysText: {
+      fontSize: 12,
+      color: '#4CAF50',
+      fontWeight: '500',
+      marginTop: 4,
     },
     changePlanText: {
       fontSize: 14,
@@ -3077,7 +3897,8 @@ const sliderStyles = StyleSheet.create({
       borderTopLeftRadius: 20,
       borderTopRightRadius: 20,
       maxHeight: '80%',
-      paddingBottom: 20
+      paddingBottom: 20,
+      width: '100%',
     },
     modalHeader: {
       flexDirection: 'row',
@@ -3119,24 +3940,30 @@ const sliderStyles = StyleSheet.create({
       marginBottom: 20
     },
     planButton: {
-      backgroundColor: '#fff',
+      backgroundColor: '#FFFFFF', // White background for inactive buttons
       borderRadius: 12,
       padding: 20,
       borderWidth: 2,
-      borderColor: '#ddd',
+      borderColor: COLORS.PRIMARY, // Yellow border for inactive buttons
       alignItems: 'center'
     },
     planButtonSelected: {
-      borderColor: COLORS.PRIMARY,
-      backgroundColor: '#f0f7ff'
+      backgroundColor: COLORS.PRIMARY, // Yellow background for active buttons
+      borderColor: COLORS.PRIMARY
+    },
+    planButtonRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      width: '100%',
     },
     planButtonText: {
       fontSize: 18,
       fontWeight: 'bold',
-      color: '#333'
+      color: COLORS.PRIMARY // Yellow text for inactive buttons
     },
     planButtonTextSelected: {
-      color: COLORS.PRIMARY
+      color: '#000000' // Black text for active buttons
     },
     planSubtext: {
       fontSize: 14,
@@ -3144,6 +3971,11 @@ const sliderStyles = StyleSheet.create({
       textAlign: 'center',
       marginTop: 8,
       paddingHorizontal: 10
+    },
+    planPrice: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: COLORS.TEXT,
     },
     expoGoWarning: {
       backgroundColor: '#fff3cd',
@@ -3431,21 +4263,28 @@ const sliderStyles = StyleSheet.create({
       marginTop: 8,
     },
     featureButton: {
-      backgroundColor: COLORS.PRIMARY,
+      backgroundColor: COLORS.PRIMARY, // Yellow background for active buttons
       borderRadius: 12,
       paddingVertical: 16,
       paddingHorizontal: 20,
       alignItems: 'center',
       marginTop: 12,
-      marginBottom: 8
+      marginBottom: 8,
+      borderWidth: 0
     },
     dropboxButton: {
       backgroundColor: '#0061FF',
     },
+    multipleProfilesButton: {
+      backgroundColor: '#28a745', // Green background
+    },
     featureButtonText: {
-      color: COLORS.TEXT,
+      color: '#000000', // Black text for active buttons
       fontSize: 16,
       fontWeight: '600'
+    },
+    multipleProfilesButtonText: {
+      color: '#FFFFFF', // White text for green button
     },
     dropboxButtonText: {
       color: '#FFFFFF',
@@ -4157,13 +4996,13 @@ const sliderStyles = StyleSheet.create({
       color: COLORS.TEXT_MUTED,
     },
     // Language modal styles
-    modalOverlay: {
+    languageModalOverlay: {
       flex: 1,
       backgroundColor: 'rgba(0, 0, 0, 0.5)',
       justifyContent: 'center',
       alignItems: 'center',
     },
-    modalContent: {
+    languageModalContent: {
       backgroundColor: 'white',
       borderRadius: 16,
       padding: 24,
@@ -4268,5 +5107,79 @@ const sliderStyles = StyleSheet.create({
     roomTabTextActive: {
       color: COLORS.TEXT,
       fontWeight: '600',
+    },
+    testSection: {
+      marginTop: 20,
+      marginBottom: 20,
+      padding: 16,
+      backgroundColor: '#FFF3CD',
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: '#FFC107',
+    },
+    testSectionTitle: {
+      fontSize: 16,
+      fontWeight: 'bold',
+      color: COLORS.TEXT,
+      marginBottom: 12,
+      fontFamily: FONTS.QUICKSAND_BOLD,
+    },
+    testButtons: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    testButton: {
+      backgroundColor: COLORS.PRIMARY,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 6,
+      marginBottom: 8,
+    },
+    clearButton: {
+      backgroundColor: '#DC3545',
+    },
+    testButtonText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#000000',
+      fontFamily: FONTS.QUICKSAND_BOLD,
+    },
+    referralStatsContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+      paddingVertical: 12,
+    },
+    referralStatItem: {
+      flex: 1,
+      alignItems: 'flex-start',
+    },
+    referralStatLabel: {
+      fontSize: 12,
+      color: COLORS.GRAY,
+      marginBottom: 4,
+      textAlign: 'left',
+    },
+    referralStatValue: {
+      fontSize: 14,
+      color: COLORS.TEXT,
+      fontWeight: '600',
+      textAlign: 'left',
+    },
+    referralStatItemRight: {
+      alignItems: 'flex-end',
+    },
+    referralStatLabelRight: {
+      textAlign: 'right',
+    },
+    referralStatValueRight: {
+      textAlign: 'right',
+    },
+    referralButton: {
+      backgroundColor: '#28a745',
+    },
+    referralButtonText: {
+      color: '#FFFFFF',
     },
   });

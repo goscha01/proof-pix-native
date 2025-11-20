@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import googleAuthService from '../services/googleAuthService';
 import proxyService from '../services/proxyService';
 import { useSettings } from './SettingsContext';
+import { hasFeature, FEATURES } from '../constants/featurePermissions';
 
 const STORAGE_KEYS = {
   ADMIN_FOLDER_ID: '@admin_folder_id',
@@ -178,7 +179,8 @@ export function AdminProvider({ children }) {
 
     const now = Date.now();
     const prevAccounts = connectedAccountsRef.current || [];
-    const allowMultipleAccounts = currentUserPlan === 'enterprise';
+    // Use feature permissions system instead of hardcoded check
+    const allowMultipleAccounts = hasFeature(FEATURES.MULTIPLE_CLOUD_ACCOUNTS, currentUserPlan);
     const existing = prevAccounts.find((account) => account.id === user.id);
     const rawPlanLimit = overrides.planLimit ?? existing?.planLimit ?? 5;
     const normalizedPlanLimit = Number.isFinite(rawPlanLimit)
@@ -241,7 +243,7 @@ export function AdminProvider({ children }) {
 
   const updateActiveAccount = async (updates = {}) => {
     const prevAccounts = connectedAccountsRef.current || [];
-    const allowMultipleAccounts = currentUserPlan === 'enterprise';
+    const allowMultipleAccounts = hasFeature(FEATURES.MULTIPLE_CLOUD_ACCOUNTS, currentUserPlan);
     if (!prevAccounts.length) {
       return null;
     }
@@ -272,7 +274,7 @@ export function AdminProvider({ children }) {
 
   const removeConnectedAccount = async (accountId) => {
     const prevAccounts = connectedAccountsRef.current || [];
-    const allowMultipleAccounts = currentUserPlan === 'enterprise';
+    const allowMultipleAccounts = hasFeature(FEATURES.MULTIPLE_CLOUD_ACCOUNTS, currentUserPlan);
     let removedAccount = null;
 
     const filteredAccounts = prevAccounts.filter((account) => {
@@ -597,6 +599,14 @@ export function AdminProvider({ children }) {
    */
   const switchToIndividualMode = async () => {
     try {
+      console.log('[ADMIN] switchToIndividualMode called - starting switch');
+      console.log('[ADMIN] Current state:', {
+        userMode,
+        proxySessionId,
+        inviteTokens: inviteTokens?.length || 0,
+        folderId
+      });
+
       // Get stored individual plan, mode, and name
       const [storedPlan, storedMode, storedName] = await AsyncStorage.multiGet([
         STORAGE_KEYS.STORED_INDIVIDUAL_PLAN,
@@ -609,6 +619,7 @@ export function AdminProvider({ children }) {
       const individualName = storedName[1] || '';
 
       console.log('[ADMIN] Switching back to individual mode:', { plan: individualPlan, mode: individualMode, userName: individualName });
+      console.log('[ADMIN] Stored values from AsyncStorage:', { storedPlan: storedPlan[1], storedMode: storedMode[1], storedName: storedName[1] });
 
       // Clear team member info
       await AsyncStorage.removeItem(STORAGE_KEYS.TEAM_MEMBER_INFO);
