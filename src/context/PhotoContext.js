@@ -310,18 +310,11 @@ export const PhotoProvider = ({ children }) => {
   };
 
   const deleteProject = async (projectId, options = {}) => {
-    console.log(`[PhotoContext] 🗑️ deleteProject called for project: ${projectId}`);
-    console.log(`[PhotoContext] Options:`, options);
-    
     const { deleteFromStorage = true } = options;
-    console.log(`[PhotoContext] Delete from storage: ${deleteFromStorage}`);
-    
     const related = photos.filter(p => p.projectId === projectId);
-    console.log(`[PhotoContext] Found ${related.length} photos for project ${projectId}`);
 
     // Delete all photos for this project from device and metadata
     if (deleteFromStorage) {
-      console.log(`[PhotoContext] 📁 Deleting files from storage...`);
       // 1) Delete local files directly (no media calls here to avoid per-asset prompts)
       const filenamesSet = new Set();
       const filePaths = [];
@@ -333,8 +326,6 @@ export const PhotoProvider = ({ children }) => {
         const fname = (uriStr || '').split('/').pop();
         if (fname) filenamesSet.add(fname);
       }
-
-      console.log(`[PhotoContext] Found ${filePaths.length} file paths to delete`);
       
       try {
         for (const path of filePaths) {
@@ -344,7 +335,6 @@ export const PhotoProvider = ({ children }) => {
             console.error(`[PhotoContext] ⚠️ Failed to delete file ${path}:`, e);
           }
         }
-        console.log(`[PhotoContext] ✅ Finished deleting local files`);
       } catch (err) {
         console.error(`[PhotoContext] ❌ Error deleting local files:`, err);
       }
@@ -353,31 +343,17 @@ export const PhotoProvider = ({ children }) => {
 
       // 3) Project-scoped media+local deletion using asset map (prevents cross-project deletes)
       try {
-        console.log(`[PhotoContext] 🗑️ Deleting project assets from media library...`);
         await deleteProjectAssets(projectId);
-        console.log(`[PhotoContext] ✅ Finished deleting project assets`);
       } catch (projErr) {
         console.error(`[PhotoContext] ❌ Error deleting project assets:`, projErr);
       }
-    } else {
-      console.log(`[PhotoContext] ⏭️ Skipping storage deletion (deleteFromStorage=false)`);
     }
     
     // Remove only metadata for this project's photos
-    console.log(`[PhotoContext] 📝 Removing photo metadata...`);
     const remaining = photos.filter(p => p.projectId !== projectId);
-    console.log(`[PhotoContext] Photos before: ${photos.length}, after: ${remaining.length}`);
-    
     await savePhotos(remaining);
-    console.log(`[PhotoContext] ✅ Saved updated photos metadata`);
-    
-    console.log(`[PhotoContext] 🗑️ Deleting project entry...`);
     await deleteProjectEntry(projectId);
-    console.log(`[PhotoContext] ✅ Deleted project entry`);
-    
-    console.log(`[PhotoContext] 🔄 Reloading projects list...`);
     await loadProjectsList();
-    console.log(`[PhotoContext] ✅ Finished deleteProject for ${projectId}`);
   };
 
   const getPhotosByRoom = (room) => {

@@ -2528,19 +2528,8 @@ export default function GalleryScreen({ navigation, route }) {
 
   // Handle plan modal close - delete confirmation stays open (no need to reopen)
   const handleSharePlanModalClose = () => {
-    console.log('[GalleryScreen] 🚪 Closing plan modal');
     setShowSharePlanModal(false);
   };
-
-  // Debug: Log when plan modal visibility changes
-  useEffect(() => {
-    const shouldShow = showSharePlanModal && !shareOptionsVisible;
-    console.log('[GalleryScreen] 🔍 Plan modal visibility check:', {
-      showSharePlanModal,
-      shareOptionsVisible,
-      shouldShow
-    });
-  }, [showSharePlanModal, shareOptionsVisible]);
 
   const handleDeleteAllConfirmed = async (deleteFromStorageParam) => {
     try {
@@ -4689,7 +4678,6 @@ export default function GalleryScreen({ navigation, route }) {
         onDeleteProject={handleDeleteAllConfirmed}
         userPlan={userPlan}
         onShowPlanModal={() => {
-          console.log('[GalleryScreen] 📝 Opening plan modal from upload completion delete confirmation');
           setTimeout(() => {
             setShowSharePlanModal(true);
           }, 300);
@@ -4717,7 +4705,6 @@ export default function GalleryScreen({ navigation, route }) {
         userPlan={userPlan}
         onShowPlanModal={() => {
           // Show plan modal on top of delete confirmation (don't close delete confirmation)
-          console.log('[GalleryScreen] 📝 Showing plan modal on top of delete all confirmation');
           setShowSharePlanModal(true);
         }}
         planModalVisible={showSharePlanModal && !shareOptionsVisible}
@@ -4742,7 +4729,6 @@ export default function GalleryScreen({ navigation, route }) {
         userPlan={userPlan}
         onShowPlanModal={() => {
           // Show plan modal on top of delete confirmation (don't close delete confirmation)
-          console.log('[GalleryScreen] 📝 Showing plan modal on top of delete selected confirmation');
           setShowSharePlanModal(true);
         }}
         planModalVisible={showSharePlanModal && !shareOptionsVisible}

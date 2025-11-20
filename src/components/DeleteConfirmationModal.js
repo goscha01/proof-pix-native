@@ -41,12 +41,10 @@ const DeleteConfirmationModal = ({
           const savedValue = JSON.parse(saved);
           // Use saved value if available
           setDeleteFromStorage(savedValue);
-          console.log('[DeleteConfirmationModal] 📦 Loaded saved checkbox state:', savedValue);
         } else {
           // No saved state - use tier-based default
           const defaultForTier = userPlan !== 'starter';
           setDeleteFromStorage(defaultForTier);
-          console.log('[DeleteConfirmationModal] 📦 Using tier-based default:', defaultForTier, 'for plan:', userPlan);
         }
       } catch (error) {
         console.error('[DeleteConfirmationModal] Error loading saved state:', error);
@@ -67,7 +65,6 @@ const DeleteConfirmationModal = ({
   const handleCheckboxToggle = async () => {
     // Prevent multiple rapid calls
     if (isShowingPlanModalRef.current) {
-      console.log('[DeleteConfirmationModal] ⏭️ Plan modal already being shown, skipping');
       return;
     }
 
@@ -75,7 +72,6 @@ const DeleteConfirmationModal = ({
     
     // If starter tries to check, show plan modal
     if (newValue && userPlan === 'starter') {
-      console.log('[DeleteConfirmationModal] 🚫 Starter user trying to check - showing plan modal');
       isShowingPlanModalRef.current = true;
       if (onShowPlanModal) {
         onShowPlanModal();
@@ -93,38 +89,21 @@ const DeleteConfirmationModal = ({
     // Save to AsyncStorage
     try {
       await AsyncStorage.setItem(DELETE_FROM_STORAGE_KEY, JSON.stringify(newValue));
-      console.log('[DeleteConfirmationModal] 💾 Saved checkbox state:', newValue);
     } catch (error) {
       console.error('[DeleteConfirmationModal] Error saving state:', error);
     }
   };
 
-  // Log when modal visibility changes
-  useEffect(() => {
-    if (visible) {
-      console.log('[DeleteConfirmationModal] 📋 Modal opened');
-      console.log('[DeleteConfirmationModal] Title:', title);
-      console.log('[DeleteConfirmationModal] Message:', message);
-      console.log('[DeleteConfirmationModal] deleteFromStorageDefault:', deleteFromStorageDefault);
-    } else {
-      console.log('[DeleteConfirmationModal] 🚪 Modal closed');
-    }
-  }, [visible, title, message, deleteFromStorageDefault]);
 
   const [showDeleteWarning, setShowDeleteWarning] = useState(false);
   const pendingDeleteRef = useRef(false); // Track if we're waiting to show warning
 
   const handleConfirm = async () => {
-    console.log('[DeleteConfirmationModal] ✅ Confirm button clicked');
-    console.log('[DeleteConfirmationModal] deleteFromStorage:', deleteFromStorage);
-    console.log('[DeleteConfirmationModal] userPlan:', userPlan);
-    
     // For non-starter users, show warning on first use if checkbox is checked
     if (deleteFromStorage && userPlan !== 'starter') {
       try {
         const warningShown = await AsyncStorage.getItem(DELETE_WARNING_SHOWN_KEY);
         if (!warningShown) {
-          console.log('[DeleteConfirmationModal] ⚠️ First time delete with checkbox - showing warning');
           setShowDeleteWarning(true);
           pendingDeleteRef.current = true; // Mark that we're waiting to confirm
           return; // Don't proceed yet, wait for warning confirmation
@@ -135,13 +114,10 @@ const DeleteConfirmationModal = ({
     }
     
     // Proceed with deletion
-    console.log('[DeleteConfirmationModal] Calling onConfirm callback...');
     onConfirm(deleteFromStorage);
-    console.log('[DeleteConfirmationModal] ✅ onConfirm callback called');
   };
 
   const handleWarningConfirm = async () => {
-    console.log('[DeleteConfirmationModal] ✅ Warning confirmed, proceeding with delete');
     try {
       // Mark warning as shown
       await AsyncStorage.setItem(DELETE_WARNING_SHOWN_KEY, 'true');
@@ -160,13 +136,11 @@ const DeleteConfirmationModal = ({
   };
 
   const handleWarningCancel = () => {
-    console.log('[DeleteConfirmationModal] ❌ Warning cancelled');
     setShowDeleteWarning(false);
     pendingDeleteRef.current = false;
   };
 
   const handleCancel = async () => {
-    console.log('[DeleteConfirmationModal] ❌ Cancel button clicked');
     // Reset to saved state or tier-based default on cancel
     try {
       const saved = await AsyncStorage.getItem(DELETE_FROM_STORAGE_KEY);
