@@ -1,0 +1,635 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  Share,
+  Clipboard,
+  Alert,
+  SafeAreaView,
+  Modal,
+} from 'react-native';
+import { useTranslation } from 'react-i18next';
+import { COLORS } from '../constants/rooms';
+import { FONTS } from '../constants/fonts';
+import {
+  getOrCreateReferralCode,
+  getReferralInfo,
+  getReferralLink,
+  getShareMessage,
+  addReferralInvite,
+} from '../services/referralService';
+import { Linking } from 'react-native';
+
+export default function ReferralScreen({ navigation }) {
+  const { t } = useTranslation();
+  const [referralCode, setReferralCode] = useState('');
+  const [referralInfo, setReferralInfo] = useState({
+    invitesSent: [],
+    rewardsEarned: 0,
+    totalMonthsEarned: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [showInfoModal, setShowInfoModal] = useState(false);
+
+  useEffect(() => {
+    loadReferralData();
+  }, []);
+
+  const loadReferralData = async () => {
+    try {
+      const code = await getOrCreateReferralCode();
+      const info = await getReferralInfo();
+      setReferralCode(code);
+      setReferralInfo(info);
+    } catch (error) {
+      console.error('[ReferralScreen] Error loading referral data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleShare = async (method) => {
+    try {
+      const link = getReferralLink(referralCode);
+      const message = getShareMessage(referralCode);
+
+      await addReferralInvite(method);
+
+      if (method === 'whatsapp' || method === 'sms') {
+        // Use Share API for WhatsApp/SMS
+        const result = await Share.share({
+          message: message,
+        });
+        if (result.action === Share.sharedAction) {
+          Alert.alert('Shared!', 'Your referral link has been shared.');
+        }
+      } else if (method === 'email') {
+        // For email, use mailto link
+        const emailSubject = encodeURIComponent('Try ProofPix - Cleaning Job Management');
+        const emailBody = encodeURIComponent(message);
+        const mailtoLink = `mailto:?subject=${emailSubject}&body=${emailBody}`;
+        const canOpen = await Linking.canOpenURL(mailtoLink);
+        if (canOpen) {
+          await Linking.openURL(mailtoLink);
+        } else {
+          // Fallback to Share API
+          await Share.share({
+            message: message,
+            title: 'Share ProofPix',
+          });
+        }
+      } else {
+        // Generic share
+        await Share.share({
+          message: message,
+          title: 'Share ProofPix',
+        });
+      }
+    } catch (error) {
+      console.error('[ReferralScreen] Error sharing:', error);
+      Alert.alert('Error', 'Failed to share referral link. Please try again.');
+    }
+  };
+
+  const handleCopyLink = async () => {
+    try {
+      const link = getReferralLink(referralCode);
+      await Clipboard.setString(link);
+      Alert.alert('Copied!', 'Referral link copied to clipboard.');
+    } catch (error) {
+      console.error('[ReferralScreen] Error copying link:', error);
+      Alert.alert('Error', 'Failed to copy link.');
+    }
+  };
+
+  const getCompletedCount = () => {
+    return referralInfo.invitesSent.filter(inv => inv.status === 'completed').length;
+  };
+
+  const getMonthsEarned = () => {
+    const completed = getCompletedCount();
+    if (completed >= 3) return 3;
+    if (completed >= 2) return 2;
+    if (completed >= 1) return 1;
+    return 0;
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Text style={styles.backButtonText}>←</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Invite Friends</Text>
+          <View style={{ width: 60 }} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Loading...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const completedCount = getCompletedCount();
+  const monthsEarned = getMonthsEarned();
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Text style={styles.backButtonText}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.title}>Invite Friends</Text>
+        <View style={{ width: 60 }} />
+      </View>
+
+      <ScrollView style={styles.content} contentContainerStyle={styles.contentContainer}>
+        {/* Rewards Info */}
+        <View style={styles.rewardsSection}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={[styles.sectionTitle, styles.earnFreeMonthsTitle]}>Earn Free Months!</Text>
+            <TouchableOpacity
+              style={styles.infoButton}
+              onPress={() => setShowInfoModal(true)}
+            >
+              <Text style={styles.infoIcon}>ℹ️</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.rewardItem}>
+            <Text style={styles.rewardText}>1 friend → +1 month free</Text>
+          </View>
+          <View style={styles.rewardItem}>
+            <Text style={styles.rewardText}>2 friends → +2 months free</Text>
+          </View>
+          <View style={styles.rewardItem}>
+            <Text style={styles.rewardText}>3+ friends → +3 months free</Text>
+          </View>
+        </View>
+
+        {/* Referral Code */}
+        <View style={styles.codeSection}>
+          <Text style={styles.codeLabel}>Your Referral Code</Text>
+          <View style={styles.codeContainer}>
+            <Text style={styles.codeText}>{referralCode}</Text>
+            <TouchableOpacity
+              style={styles.copyButton}
+              onPress={handleCopyLink}
+            >
+              <Text style={styles.copyButtonText}>Copy Link</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Share Code Button */}
+        <View style={styles.shareSection}>
+          <TouchableOpacity
+            style={styles.shareCodeButton}
+            onPress={() => handleShare('general')}
+          >
+            <Text style={styles.shareCodeButtonText}>Share Code</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Progress Tracker */}
+        <View style={styles.progressSection}>
+          <Text style={styles.sectionTitle}>Your Progress</Text>
+          <View style={styles.progressBarContainer}>
+            <View style={styles.progressBar}>
+              <View
+                style={[
+                  styles.progressFill,
+                  { width: `${Math.min((completedCount / 3) * 100, 100)}%` },
+                ]}
+              />
+            </View>
+            <Text style={styles.progressText}>
+              {completedCount} of 3 friends invited
+            </Text>
+          </View>
+          <View style={styles.statsContainer}>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{completedCount}</Text>
+              <Text style={styles.statLabel}>Friends Joined</Text>
+            </View>
+            <View style={styles.statItem}>
+              <Text style={styles.statValue}>{monthsEarned}</Text>
+              <Text style={styles.statLabel}>Months Earned</Text>
+            </View>
+          </View>
+        </View>
+
+      </ScrollView>
+
+      {/* Info Modal */}
+      <Modal
+        visible={showInfoModal}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setShowInfoModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>How It Works</Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowInfoModal(false)}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.modalText}>
+              Share the app with friends and get rewarded! When your friend installs and sets up the app, you'll earn 1–3 months of free access. The more friends you invite, the more free months you get.
+            </Text>
+            
+            <View style={styles.modalNote}>
+              <Text style={styles.modalNoteText}>
+                ⚠️ Important: Your friend must complete the app setup (name, plan selection, and account connection) for the referral to count and for you to earn rewards.
+              </Text>
+            </View>
+            
+            <Text style={styles.modalSubtitle}>Benefits</Text>
+            <View style={styles.modalBenefitItem}>
+              <Text style={styles.modalBenefitIcon}>✓</Text>
+              <Text style={styles.modalBenefitText}>Easy to Share: Send a unique referral link via WhatsApp, email, SMS, or social media.</Text>
+            </View>
+            <View style={styles.modalBenefitItem}>
+              <Text style={styles.modalBenefitIcon}>✓</Text>
+              <Text style={styles.modalBenefitText}>Automatic Tracking: Your invite is tracked automatically, so rewards are applied instantly.</Text>
+            </View>
+            <View style={styles.modalBenefitItem}>
+              <Text style={styles.modalBenefitIcon}>✓</Text>
+              <Text style={styles.modalBenefitText}>No Extra Cost: Rewards are free and only require your friends to set up the app.</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.modalButton}
+              onPress={() => setShowInfoModal(false)}
+            >
+              <Text style={styles.modalButtonText}>Got it</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.BORDER,
+    backgroundColor: '#FFFFFF',
+  },
+  backButton: {
+    width: 60,
+    alignItems: 'flex-start',
+  },
+  backButtonText: {
+    fontSize: 24,
+    color: COLORS.PRIMARY,
+    fontWeight: 'bold',
+  },
+  title: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.TEXT,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  headerTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: COLORS.PRIMARY,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+    textAlign: 'center',
+  },
+  content: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+  },
+  contentContainer: {
+    padding: 20,
+    paddingBottom: 40,
+    backgroundColor: '#FFFFFF',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    color: COLORS.TEXT,
+    fontSize: 16,
+  },
+  headlineSection: {
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+  },
+  headline: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.TEXT,
+    marginBottom: 12,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+  },
+  description: {
+    fontSize: 16,
+    color: COLORS.TEXT,
+    lineHeight: 24,
+  },
+  benefitsSection: {
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.TEXT,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+    flex: 1,
+  },
+  earnFreeMonthsTitle: {
+    color: '#4CAF50',
+  },
+  sectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  infoButton: {
+    padding: 4,
+    marginLeft: 8,
+  },
+  infoIcon: {
+    fontSize: 20,
+    color: COLORS.PRIMARY,
+  },
+  benefitItem: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    alignItems: 'flex-start',
+  },
+  benefitIcon: {
+    fontSize: 18,
+    color: COLORS.PRIMARY,
+    marginRight: 12,
+    marginTop: 2,
+  },
+  benefitText: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.TEXT,
+    lineHeight: 20,
+  },
+  rewardsSection: {
+    marginBottom: 24,
+    backgroundColor: '#F5F5F5',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+  },
+  rewardItem: {
+    marginBottom: 8,
+  },
+  rewardText: {
+    fontSize: 16,
+    color: COLORS.TEXT,
+    fontWeight: '500',
+    backgroundColor: 'transparent',
+  },
+  codeSection: {
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+  },
+  codeLabel: {
+    fontSize: 16,
+    color: COLORS.TEXT,
+    marginBottom: 8,
+    fontWeight: '500',
+  },
+  codeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F5F5F5',
+    padding: 16,
+    borderRadius: 12,
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+  },
+  codeText: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: COLORS.PRIMARY,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+    letterSpacing: 2,
+  },
+  copyButton: {
+    backgroundColor: COLORS.PRIMARY,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  copyButtonText: {
+    color: '#000',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  shareSection: {
+    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+  },
+  shareCodeButton: {
+    backgroundColor: COLORS.PRIMARY,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  shareCodeButtonText: {
+    color: '#000',
+    fontSize: 18,
+    fontWeight: 'bold',
+    fontFamily: FONTS.QUICKSAND_BOLD,
+  },
+  progressSection: {
+    marginTop: 8,
+    marginBottom: 24,
+    backgroundColor: '#F5F5F5',
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.BORDER,
+  },
+  progressBarContainer: {
+    marginBottom: 16,
+  },
+  progressBar: {
+    height: 8,
+    backgroundColor: '#E0E0E0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 8,
+  },
+  progressFill: {
+    height: '100%',
+    backgroundColor: COLORS.PRIMARY,
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 14,
+    color: COLORS.TEXT,
+    textAlign: 'center',
+  },
+  statsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  statItem: {
+    alignItems: 'center',
+  },
+  statValue: {
+    fontSize: 32,
+    fontWeight: 'bold',
+    color: COLORS.PRIMARY,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+  },
+  statLabel: {
+    fontSize: 14,
+    color: COLORS.TEXT,
+    marginTop: 4,
+  },
+  ctaButton: {
+    backgroundColor: COLORS.PRIMARY,
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  ctaButtonText: {
+    color: '#000',
+    fontSize: 18,
+    fontWeight: 'bold',
+    fontFamily: FONTS.QUICKSAND_BOLD,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 24,
+    width: '85%',
+    maxWidth: 400,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: COLORS.TEXT,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+  },
+  modalCloseButton: {
+    padding: 4,
+  },
+  modalCloseText: {
+    fontSize: 24,
+    color: COLORS.TEXT,
+    fontWeight: 'bold',
+  },
+  modalText: {
+    fontSize: 16,
+    color: COLORS.TEXT,
+    lineHeight: 24,
+    marginBottom: 16,
+  },
+  modalNote: {
+    backgroundColor: '#FFF3CD',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 20,
+    borderLeftWidth: 4,
+    borderLeftColor: COLORS.PRIMARY,
+  },
+  modalNoteText: {
+    fontSize: 14,
+    color: COLORS.TEXT,
+    lineHeight: 20,
+  },
+  modalSubtitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: COLORS.TEXT,
+    marginBottom: 12,
+    marginTop: 8,
+    fontFamily: FONTS.QUICKSAND_BOLD,
+  },
+  modalBenefitItem: {
+    flexDirection: 'row',
+    marginBottom: 12,
+    alignItems: 'flex-start',
+  },
+  modalBenefitIcon: {
+    fontSize: 18,
+    color: COLORS.PRIMARY,
+    marginRight: 12,
+    marginTop: 2,
+  },
+  modalBenefitText: {
+    flex: 1,
+    fontSize: 14,
+    color: COLORS.TEXT,
+    lineHeight: 20,
+  },
+  modalButton: {
+    backgroundColor: COLORS.PRIMARY,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  modalButtonText: {
+    color: '#000',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: FONTS.QUICKSAND_BOLD,
+  },
+});
+

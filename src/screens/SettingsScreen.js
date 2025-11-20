@@ -31,6 +31,10 @@ import googleDriveService from '../services/googleDriveService';
 import dropboxAuthService from '../services/dropboxAuthService';
 import dropboxService from '../services/dropboxService';
 import InviteManager from '../components/InviteManager';
+import {
+  getOrCreateReferralCode,
+  getReferralInfo,
+} from '../services/referralService';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import proxyService from '../services/proxyService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -568,6 +572,12 @@ export default function SettingsScreen({ navigation, route }) {
   }, [isTeamMember]);
   const [showRoomEditor, setShowRoomEditor] = useState(false);
   const [isSigningIn, setIsSigningIn] = useState(false);
+  const [referralInfo, setReferralInfo] = useState({
+    code: '',
+    invitesSent: [],
+    rewardsEarned: 0,
+    totalMonthsEarned: 0,
+  });
   const [isSigningInDropbox, setIsSigningInDropbox] = useState(false);
   const [isDropboxAuthenticated, setIsDropboxAuthenticated] = useState(false);
   const [dropboxUserInfo, setDropboxUserInfo] = useState(null);
@@ -2581,6 +2591,31 @@ export default function SettingsScreen({ navigation, route }) {
               )}
             </>
           )}
+        </View>
+
+        {/* Referral Program */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Invite Friends</Text>
+          <View style={styles.referralStatsContainer}>
+            <View style={styles.referralStatItem}>
+              <Text style={styles.referralStatLabel}>Friends Joined</Text>
+              <Text style={styles.referralStatValue}>
+                {referralInfo.invitesSent?.filter(inv => inv.status === 'completed').length || 0} of 3
+              </Text>
+            </View>
+            <View style={[styles.referralStatItem, styles.referralStatItemRight]}>
+              <Text style={[styles.referralStatLabel, styles.referralStatLabelRight]}>Months Earned</Text>
+              <Text style={[styles.referralStatValue, styles.referralStatValueRight]}>
+                {referralInfo.totalMonthsEarned || 0} months
+              </Text>
+            </View>
+          </View>
+          <TouchableOpacity
+            style={[styles.featureButton, styles.referralButton]}
+            onPress={() => navigation.navigate('Referral')}
+          >
+            <Text style={[styles.featureButtonText, styles.referralButtonText]}>Invite Friends</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Account & Data */}
@@ -4933,5 +4968,42 @@ const sliderStyles = StyleSheet.create({
       fontWeight: '600',
       color: '#000000',
       fontFamily: FONTS.QUICKSAND_BOLD,
+    },
+    referralStatsContainer: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 16,
+      paddingVertical: 12,
+    },
+    referralStatItem: {
+      flex: 1,
+      alignItems: 'flex-start',
+    },
+    referralStatLabel: {
+      fontSize: 12,
+      color: COLORS.GRAY,
+      marginBottom: 4,
+      textAlign: 'left',
+    },
+    referralStatValue: {
+      fontSize: 14,
+      color: COLORS.TEXT,
+      fontWeight: '600',
+      textAlign: 'left',
+    },
+    referralStatItemRight: {
+      alignItems: 'flex-end',
+    },
+    referralStatLabelRight: {
+      textAlign: 'right',
+    },
+    referralStatValueRight: {
+      textAlign: 'right',
+    },
+    referralButton: {
+      backgroundColor: '#28a745',
+    },
+    referralButtonText: {
+      color: '#FFFFFF',
     },
   });

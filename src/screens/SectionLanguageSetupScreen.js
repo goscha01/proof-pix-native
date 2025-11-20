@@ -146,7 +146,22 @@ export default function SectionLanguageSetupScreen({ navigation, route }) {
     setSectionLanguageModalVisible(false);
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
+    // Process referral reward if user signed up via referral
+    try {
+      const { getAcceptedReferral, processReferralReward } = await import('../services/referralService');
+      const acceptedReferral = await getAcceptedReferral();
+      if (acceptedReferral && acceptedReferral.code) {
+        const monthsEarned = await processReferralReward(acceptedReferral.code);
+        if (monthsEarned > 0) {
+          console.log('[SectionLanguageSetup] Referral reward processed:', monthsEarned, 'months');
+          // In a real implementation, you would extend the user's subscription here
+          // For now, we just track it locally
+        }
+      }
+    } catch (error) {
+      console.error('[SectionLanguageSetup] Error processing referral:', error);
+    }
     navigation.replace('Home');
   };
 

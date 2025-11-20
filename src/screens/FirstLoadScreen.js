@@ -38,7 +38,7 @@ const LANGUAGES = [
   { code: 'vi', name: 'Tiếng Việt', flag: '🇻🇳' },
 ];
 
-export default function FirstLoadScreen({ navigation }) {
+export default function FirstLoadScreen({ navigation, route }) {
   const { t, i18n } = useTranslation();
   const { individualSignIn } = useAdmin();
   const { updateUserInfo, updateUserPlan } = useSettings();
@@ -50,6 +50,23 @@ export default function FirstLoadScreen({ navigation }) {
   const formContainerRef = useRef(null);
   const [inputYPosition, setInputYPosition] = useState(0);
   const [formYPosition, setFormYPosition] = useState(0);
+
+  // Check for referral code from route params or deep link
+  useEffect(() => {
+    const checkReferralCode = async () => {
+      try {
+        const { acceptReferral } = await import('../services/referralService');
+        const referralCode = route?.params?.code;
+        if (referralCode) {
+          await acceptReferral(referralCode);
+          console.log('[FirstLoad] Referral code accepted:', referralCode);
+        }
+      } catch (error) {
+        console.error('[FirstLoad] Error processing referral code:', error);
+      }
+    };
+    checkReferralCode();
+  }, [route?.params?.code]);
 
   const changeLanguage = (languageCode) => {
     i18n.changeLanguage(languageCode);

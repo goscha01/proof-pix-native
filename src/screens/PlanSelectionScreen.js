@@ -192,8 +192,8 @@ export default function PlanSelectionScreen({ navigation }) {
   const handleTrialRefer = () => {
     setShowTrialModal(false);
     setTrialNotification(null);
-    // Navigate to Invite screen
-    navigation.navigate('Invite');
+    // Navigate to Referral screen
+    navigation.navigate('Referral');
   };
 
   // Dev-only: Reset trial for testing

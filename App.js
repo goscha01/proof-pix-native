@@ -30,6 +30,7 @@ import FirstLoadScreen from './src/screens/FirstLoadScreen';
 import PlanSelectionScreen from './src/screens/PlanSelectionScreen';
 import InviteScreen from './src/screens/InviteScreen';
 import JoinTeamScreen from './src/screens/JoinTeamScreen';
+import ReferralScreen from './src/screens/ReferralScreen';
 import GoogleSignUpScreen from './src/screens/GoogleSignUpScreen';
 import LabelLanguageSetupScreen from './src/screens/LabelLanguageSetupScreen';
 import SectionLanguageSetupScreen from './src/screens/SectionLanguageSetupScreen';
@@ -134,6 +135,13 @@ function AppNavigator() {
         }}
       />
       <Stack.Screen
+        name="Referral"
+        component={ReferralScreen}
+        options={{
+          animation: 'slide_from_right'
+        }}
+      />
+      <Stack.Screen
         name="JoinTeam"
         component={JoinTeamScreen}
         options={{
@@ -181,6 +189,13 @@ const linking = {
   config: {
     screens: {
       Invite: 'invite/:token',
+      Referral: 'referral',
+      ReferralWithCode: {
+        path: 'referral/:code',
+        parse: {
+          code: (code) => code,
+        },
+      },
     },
   },
 };
@@ -339,9 +354,9 @@ export default function App() {
   const handleTrialRefer = () => {
     setShowTrialModal(false);
     setTrialNotification(null);
-    // Navigate to Invite screen
+    // Navigate to Referral screen
     if (navigationRef.current) {
-      navigationRef.current.navigate('Invite');
+      navigationRef.current.navigate('Referral');
     }
   };
 
