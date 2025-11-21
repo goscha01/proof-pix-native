@@ -100,33 +100,39 @@ export const getNotificationToShow = async (skipDay0 = false) => {
   const daysRemaining = await getTrialDaysRemaining();
   const trialPlan = await getTrialPlan();
 
+  // Get trial info to determine actual trial duration
+  const trialInfo = await getTrialInfo();
+  const trialDuration = trialInfo?.durationDays || 30;
+
   // Day 0 (Welcome) - Show immediately when trial starts (only if not skipped)
-  if (!skipDay0 && daysRemaining >= 28 && !shown.day0) {
+  // For 30-day trial: show when >= 28 days remaining
+  // For 45-day trial: show when >= 43 days remaining
+  const welcomeThreshold = trialDuration - 2;
+  if (!skipDay0 && daysRemaining >= welcomeThreshold && !shown.day0) {
     await markNotificationShown('day0');
-    
-    // Get trial end date
+
+    // Get trial end date (already have trialInfo from above)
     let endDateText = '';
     let formattedDate = '';
     try {
-      const trialInfo = await getTrialInfo();
       if (trialInfo && trialInfo.endDate) {
         const endDate = new Date(trialInfo.endDate);
-        formattedDate = endDate.toLocaleDateString('en-US', { 
-          month: 'long', 
-          day: 'numeric', 
-          year: 'numeric' 
+        formattedDate = endDate.toLocaleDateString('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric'
         });
         endDateText = ` Your trial ends on ${formattedDate}.`;
       }
     } catch (error) {
       console.error('[TrialNotification] Error getting trial end date:', error);
     }
-    
+
     return {
       key: 'day0',
       type: 'welcome',
       title: 'Welcome to Your Free Trial! 🎉',
-      message: `You're now on a 30-day free trial of ${trialPlan ? trialPlan.charAt(0).toUpperCase() + trialPlan.slice(1) : 'Premium'} features. Get started with bulk photo capture, custom watermarks, and automation tools.`,
+      message: `You're now on a ${trialDuration}-day free trial of ${trialPlan ? trialPlan.charAt(0).toUpperCase() + trialPlan.slice(1) : 'Premium'} features. Get started with bulk photo capture, custom watermarks, and automation tools.`,
       endDate: formattedDate, // Store end date separately for styling
       showUpgrade: false,
       urgent: false,
