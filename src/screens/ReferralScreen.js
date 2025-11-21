@@ -22,6 +22,7 @@ import {
   addReferralInvite,
   initializeReferralCode,
   getReferralStatsFromServer,
+  getUserId,
 } from '../services/referralService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Linking } from 'react-native';
@@ -53,14 +54,8 @@ export default function ReferralScreen({ navigation }) {
       const code = await initializeReferralCode();
       setReferralCode(code);
 
-      // Get user ID for server stats
-      let userId = await AsyncStorage.getItem('@user_id');
-      if (!userId) {
-        // Generate a user ID if not exists
-        const deviceId = await AsyncStorage.getItem('@device_id');
-        userId = deviceId ? `user_${deviceId}` : `user_${Date.now()}`;
-        await AsyncStorage.setItem('@user_id', userId);
-      }
+      // Get user ID for server stats (this will generate and persist if not exists)
+      const userId = await getUserId();
 
       // Fetch stats from server
       const stats = await getReferralStatsFromServer(userId);
@@ -88,41 +83,34 @@ export default function ReferralScreen({ navigation }) {
 
   const handleShare = async (method) => {
     try {
-      const link = getReferralLink(referralCode);
-      const message = getShareMessage(referralCode);
+      const iosAppStoreLink = process.env.EXPO_PUBLIC_IOS_APP_STORE_URL || 'https://apps.apple.com/app/proofpix';
+      const androidPlayStoreLink = process.env.EXPO_PUBLIC_ANDROID_PLAY_STORE_URL || 'https://play.google.com/store/apps/details?id=com.proofpix';
 
       await addReferralInvite(method);
 
-      if (method === 'whatsapp' || method === 'sms') {
-        // Use Share API for WhatsApp/SMS
-        const result = await Share.share({
-          message: message,
-        });
-        if (result.action === Share.sharedAction) {
-          Alert.alert('Shared!', 'Your referral link has been shared.');
-        }
-      } else if (method === 'email') {
-        // For email, use mailto link
-        const emailSubject = encodeURIComponent('Try ProofPix - Cleaning Job Management');
-        const emailBody = encodeURIComponent(message);
-        const mailtoLink = `mailto:?subject=${emailSubject}&body=${emailBody}`;
-        const canOpen = await Linking.canOpenURL(mailtoLink);
-        if (canOpen) {
-          await Linking.openURL(mailtoLink);
-        } else {
-          // Fallback to Share API
-          await Share.share({
-            message: message,
-            title: 'Share ProofPix',
-          });
-        }
-      } else {
-        // Generic share
-        await Share.share({
-          message: message,
-          title: 'Share ProofPix',
-        });
-      }
+      // Share the instructions message first
+      await Share.share({
+        message: `Join ProofPix and get organized!\n\n📱 Download ProofPix:\niOS: ${iosAppStoreLink}\nAndroid: ${androidPlayStoreLink}\n\nAfter installing, use my referral code to get started!`,
+        title: 'ProofPix Referral'
+      });
+
+      // After first share completes, ask user if they want to share the code
+      Alert.alert(
+        'Share Referral Code?',
+        'Now share your referral code as a separate message so they can easily copy it.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Share Code',
+            onPress: async () => {
+              await Share.share({
+                message: referralCode,
+                title: 'ProofPix Referral Code'
+              });
+            }
+          }
+        ]
+      );
     } catch (error) {
       console.error('[ReferralScreen] Error sharing:', error);
       Alert.alert('Error', 'Failed to share referral link. Please try again.');
@@ -131,12 +119,12 @@ export default function ReferralScreen({ navigation }) {
 
   const handleCopyLink = async () => {
     try {
-      const link = getReferralLink(referralCode);
-      await Clipboard.setString(link);
-      Alert.alert('Copied!', 'Referral link copied to clipboard.');
+      // Copy just the referral code, not the full link
+      await Clipboard.setString(referralCode);
+      Alert.alert('Copied!', 'Referral code copied to clipboard.');
     } catch (error) {
-      console.error('[ReferralScreen] Error copying link:', error);
-      Alert.alert('Error', 'Failed to copy link.');
+      console.error('[ReferralScreen] Error copying code:', error);
+      Alert.alert('Error', 'Failed to copy code.');
     }
   };
 

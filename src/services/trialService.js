@@ -58,15 +58,40 @@ export const isTrialActive = async () => {
 };
 
 /**
+ * Check if user has an accepted referral code
+ * @returns {Promise<boolean>} True if user has accepted referral
+ */
+const hasAcceptedReferral = async () => {
+  try {
+    const referralData = await AsyncStorage.getItem('@referral_accepted');
+    return referralData !== null;
+  } catch (error) {
+    return false;
+  }
+};
+
+/**
  * Start a new trial for a specific plan tier
  * @param {string} plan - Plan tier (starter, pro, business, enterprise)
+ * @param {number} durationDays - Optional duration in days (default: 30 or 45 with referral)
  * @returns {Promise<Object>} Trial info object
  */
-export const startTrial = async (plan) => {
+export const startTrial = async (plan, durationDays = null) => {
   try {
     const now = new Date();
     const endDate = new Date(now);
-    endDate.setDate(endDate.getDate() + TRIAL_DURATION_DAYS);
+
+    // Determine trial duration
+    let trialDays = durationDays;
+    let hasReferral = false;
+
+    if (trialDays === null) {
+      // Check if user has a referral code
+      hasReferral = await hasAcceptedReferral();
+      trialDays = hasReferral ? 45 : TRIAL_DURATION_DAYS; // 45 days with referral, 30 without
+    }
+
+    endDate.setDate(endDate.getDate() + trialDays);
 
     const trialInfo = {
       active: true,
@@ -74,10 +99,14 @@ export const startTrial = async (plan) => {
       startDate: now.toISOString(),
       endDate: endDate.toISOString(),
       plan: plan, // Store which plan tier the trial is for
+      durationDays: trialDays,
+      hasReferral: hasReferral,
     };
 
     await AsyncStorage.setItem(TRIAL_STORAGE_KEY, JSON.stringify(trialInfo));
-    
+
+    console.log(`[TrialService] Started ${trialDays}-day trial for plan: ${plan}${hasReferral ? ' (with referral bonus)' : ''}`);
+
     // Reset notification flags for new trial
     try {
       const { resetNotifications } = await import('./trialNotificationService');
@@ -85,7 +114,7 @@ export const startTrial = async (plan) => {
     } catch (error) {
       console.error('[TrialService] Error resetting notifications:', error);
     }
-    
+
     return trialInfo;
   } catch (error) {
     console.error('[TrialService] Error starting trial:', error);
@@ -182,7 +211,41 @@ export const isTrialExpired = async () => {
 
   const now = new Date().getTime();
   const endDate = new Date(trialInfo.endDate).getTime();
-  
+
   return now > endDate;
+};
+
+/**
+ * Extend trial by additional days (reward for referrals)
+ * @param {number} additionalDays - Number of days to add
+ * @returns {Promise<Object|null>} Updated trial info or null
+ */
+export const extendTrial = async (additionalDays) => {
+  try {
+    const trialInfo = await getTrialInfo();
+    if (!trialInfo) {
+      console.log('[TrialService] No trial to extend');
+      return null;
+    }
+
+    const currentEndDate = new Date(trialInfo.endDate);
+    const newEndDate = new Date(currentEndDate);
+    newEndDate.setDate(newEndDate.getDate() + additionalDays);
+
+    const updatedTrialInfo = {
+      ...trialInfo,
+      endDate: newEndDate.toISOString(),
+      durationDays: (trialInfo.durationDays || 30) + additionalDays,
+    };
+
+    await AsyncStorage.setItem(TRIAL_STORAGE_KEY, JSON.stringify(updatedTrialInfo));
+
+    console.log(`[TrialService] Trial extended by ${additionalDays} days. New end date: ${newEndDate.toISOString()}`);
+
+    return updatedTrialInfo;
+  } catch (error) {
+    console.error('[TrialService] Error extending trial:', error);
+    return null;
+  }
 };
 

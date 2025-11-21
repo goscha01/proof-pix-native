@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,10 +6,27 @@ import {
   TouchableOpacity,
   Modal,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS } from '../constants/rooms';
 import { FONTS } from '../constants/fonts';
 
 export default function TrialConfirmationModal({ visible, planName, onUseTrial, onCancel }) {
+  const [trialDays, setTrialDays] = useState(30);
+
+  useEffect(() => {
+    const checkReferral = async () => {
+      try {
+        const referralData = await AsyncStorage.getItem('@referral_accepted');
+        setTrialDays(referralData !== null ? 45 : 30);
+      } catch (error) {
+        setTrialDays(30);
+      }
+    };
+
+    if (visible) {
+      checkReferral();
+    }
+  }, [visible]);
   return (
     <Modal
       visible={visible}
@@ -25,7 +42,7 @@ export default function TrialConfirmationModal({ visible, planName, onUseTrial, 
           
           <View style={styles.content}>
             <Text style={styles.message}>
-              You're eligible for a 30-day free trial of {planName} features. Would you like to start your free trial now?
+              You're eligible for a {trialDays}-day free trial of {planName} features. Would you like to start your free trial now?
             </Text>
           </View>
 

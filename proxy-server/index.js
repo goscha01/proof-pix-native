@@ -1270,8 +1270,20 @@ app.post('/api/referrals/register-code', async (req, res) => {
 
     // Check if code already exists
     const existingUserId = await kv.get(`referralCode:${referralCode}`);
-    if (existingUserId && existingUserId !== userId) {
-      return res.status(400).json({ error: 'Referral code already in use' });
+    if (existingUserId) {
+      if (existingUserId === userId) {
+        // Code already registered to this user - idempotent operation
+        console.log(`[REFERRAL] Code already registered to this user (idempotent)`);
+        return res.json({
+          success: true,
+          userId,
+          referralCode,
+          alreadyRegistered: true
+        });
+      } else {
+        // Code registered to a different user
+        return res.status(400).json({ error: 'Referral code already in use by another user' });
+      }
     }
 
     // Store mapping: referralCode -> userId

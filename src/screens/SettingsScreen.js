@@ -3346,6 +3346,55 @@ export default function SettingsScreen({ navigation, route }) {
               >
                 <Text style={[styles.testButtonText, { color: '#FFFFFF' }]}>Test Day 30</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.testButton, { backgroundColor: '#FF9800' }]}
+                onPress={async () => {
+                  const { clearReferralDataForTesting } = await import('../services/referralService');
+                  const success = await clearReferralDataForTesting();
+                  if (success) {
+                    Alert.alert('Reset Complete', 'Referral data cleared. You can now test referral codes again.');
+                  } else {
+                    Alert.alert('Error', 'Failed to reset referral data.');
+                  }
+                }}
+              >
+                <Text style={[styles.testButtonText, { color: '#FFFFFF' }]}>Reset Referral Data</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.testButton, { backgroundColor: '#4CAF50' }]}
+                onPress={async () => {
+                  const { simulateFriendSignup } = await import('../services/referralService');
+                  const success = await simulateFriendSignup();
+                  if (success) {
+                    Alert.alert('Success', 'Friend signup simulated! Check Settings > Referral to see your reward stats.');
+                  } else {
+                    Alert.alert('Error', 'Failed to simulate friend signup. Check console for details.');
+                  }
+                }}
+              >
+                <Text style={[styles.testButtonText, { color: '#FFFFFF' }]}>Simulate Friend Signup</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.testButton, { backgroundColor: '#2196F3' }]}
+                onPress={async () => {
+                  const { checkAndApplyReferralRewards } = await import('../services/referralService');
+                  const rewardsApplied = await checkAndApplyReferralRewards();
+                  if (rewardsApplied > 0) {
+                    const { getTrialDaysRemaining } = await import('../services/trialService');
+                    const daysRemaining = await getTrialDaysRemaining();
+                    Alert.alert(
+                      'Rewards Applied!',
+                      `Applied ${rewardsApplied} reward(s) (+${rewardsApplied * 30} days).\n\nYour trial now has ${daysRemaining} days remaining.`
+                    );
+                  } else {
+                    Alert.alert('No Rewards', 'No pending rewards to apply.');
+                  }
+                }}
+              >
+                <Text style={[styles.testButtonText, { color: '#FFFFFF' }]}>Apply Referral Rewards</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}

@@ -27,6 +27,7 @@ export default function PlanSelectionScreen({ navigation }) {
   // Enterprise modal state
   const [showEnterpriseModal, setShowEnterpriseModal] = useState(false);
   const [trialAvailable, setTrialAvailable] = useState(false);
+  const [trialDays, setTrialDays] = useState(30);
   // Trial notification modal state
   const [showTrialModal, setShowTrialModal] = useState(false);
   const [trialNotification, setTrialNotification] = useState(null);
@@ -42,7 +43,7 @@ export default function PlanSelectionScreen({ navigation }) {
       try {
         const available = await canStartTrial();
         console.log('[PlanSelection] Trial available:', available);
-        
+
         // Debug: Check why trial might not be available
         if (!available) {
           const { hasUsedTrial, isTrialActive } = await import('../services/trialService');
@@ -50,12 +51,22 @@ export default function PlanSelectionScreen({ navigation }) {
           const active = await isTrialActive();
           console.log('[PlanSelection] Trial debug - used:', used, 'active:', active);
         }
-        
+
         setTrialAvailable(available);
+
+        // Check if user has a referral code to determine trial days
+        try {
+          const AsyncStorage = await import('@react-native-async-storage/async-storage');
+          const referralData = await AsyncStorage.default.getItem('@referral_accepted');
+          setTrialDays(referralData !== null ? 45 : 30);
+        } catch (error) {
+          setTrialDays(30);
+        }
       } catch (error) {
         console.error('[PlanSelection] Error checking trial availability:', error);
         // Default to showing trial UI if check fails (for new users)
         setTrialAvailable(true);
+        setTrialDays(30);
       }
     };
     checkTrialAvailability();
@@ -144,34 +155,15 @@ export default function PlanSelectionScreen({ navigation }) {
     navigation.goBack();
   };
 
-  // Handle free trial button click
-  const handleFreeTrialClick = async () => {
+  // Handle free trial button click - show confirmation modal first
+  const handleFreeTrialClick = () => {
     if (!trialAvailable || hasShownTrialNotification.current) {
       return;
     }
 
-    try {
-      // Start trial for business plan (default)
-      await startTrial('business');
-      await updateUserPlan('business');
-      
-      // Mark that we've shown the notification
-      hasShownTrialNotification.current = true;
-      
-      // Navigate immediately without delay
-      navigation.navigate('GoogleSignUp', { plan: 'business', trialJustStarted: true });
-      
-      // Show welcome notification immediately
-      const notification = await getNotificationToShow(false); // Don't skip Day 0
-      
-      if (notification && notification.key === 'day0') {
-        // Show modal immediately (after navigation)
-        setTrialNotification(notification);
-        setShowTrialModal(true);
-      }
-    } catch (error) {
-      console.error('[PlanSelection] Error starting free trial:', error);
-    }
+    // Show confirmation modal for business plan
+    setSelectedPlanForTrial('business');
+    setShowTrialConfirmation(true);
   };
 
   // Handle trial modal close
@@ -232,7 +224,7 @@ export default function PlanSelectionScreen({ navigation }) {
               onPress={handleFreeTrialClick}
             >
               <Text style={styles.trialBannerText}>
-                🎉 {t('firstLoad.freeTrialAvailable', { defaultValue: '30-Day Free Trial Available!' })}
+                🎉 {trialDays}-Day Free Trial Available!
               </Text>
             </TouchableOpacity>
           )}

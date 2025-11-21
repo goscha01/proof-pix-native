@@ -44,6 +44,9 @@ export default function FirstLoadScreen({ navigation, route }) {
   const { updateUserInfo, updateUserPlan } = useSettings();
   const [userName, setUserName] = useState('');
   const [languageModalVisible, setLanguageModalVisible] = useState(false);
+  const [referralModalVisible, setReferralModalVisible] = useState(false);
+  const [referralCodeInput, setReferralCodeInput] = useState('');
+  const [successModalVisible, setSuccessModalVisible] = useState(false);
   const scrollViewRef = useRef(null);
   const nameInputRef = useRef(null);
   const inputContainerRef = useRef(null);
@@ -54,20 +57,26 @@ export default function FirstLoadScreen({ navigation, route }) {
   // Check for referral code from route params or deep link
   useEffect(() => {
     const checkReferralCode = async () => {
-      try {
-        const { trackReferralInstallation } = await import('../services/referralService');
-        const referralCode = route?.params?.code;
-        if (referralCode) {
-          // Track installation on server (also stores locally)
-          const result = await trackReferralInstallation(referralCode);
-          if (result) {
-            console.log('[FirstLoad] Referral tracked on server:', result.referralId);
-          } else {
-            console.log('[FirstLoad] Referral code accepted locally (server tracking failed)');
+      const { trackReferralInstallation } = await import('../services/referralService');
+      const referralCode = route?.params?.code;
+      if (referralCode) {
+        // Track installation on server (also stores locally)
+        const result = await trackReferralInstallation(referralCode);
+        if (result && result.success) {
+          console.log('[FirstLoad] Referral tracked on server:', result.data.referralId);
+          Alert.alert(
+            '🎉 Referral Code Applied!',
+            'Great! You get 45 days free trial and your friend gets 1 month free!',
+            [{ text: 'OK' }]
+          );
+        } else if (result && result.error) {
+          if (result.error.includes('already used a referral code')) {
+            Alert.alert(
+              'Already Used',
+              'This device has already used a referral code. Each device can only use one referral code.'
+            );
           }
         }
-      } catch (error) {
-        console.error('[FirstLoad] Error processing referral code:', error);
       }
     };
     checkReferralCode();
@@ -100,6 +109,49 @@ export default function FirstLoadScreen({ navigation, route }) {
   const handleSelectIndividual = async () => {
     if (!validateName()) return;
     await updateUserInfo(userName.trim());
+    // Show referral code modal before navigating to plan selection
+    setReferralModalVisible(true);
+  };
+
+  const handleContinueWithoutReferral = () => {
+    setReferralModalVisible(false);
+    navigation.navigate('PlanSelection');
+  };
+
+  const handleReferralSubmitAndContinue = async () => {
+    if (referralCodeInput.trim()) {
+      const { trackReferralInstallation } = await import('../services/referralService');
+      const result = await trackReferralInstallation(referralCodeInput.trim().toUpperCase());
+
+      if (result && result.success) {
+        console.log('[FirstLoad] Referral tracked on server:', result.data.referralId);
+
+        // Show success modal
+        setReferralModalVisible(false);
+        setReferralCodeInput('');
+        setSuccessModalVisible(true);
+        return;
+      } else {
+        // Handle specific error messages
+        let errorMessage = 'Invalid referral code. Please check and try again.';
+
+        if (result && result.error) {
+          if (result.error.includes('already used a referral code')) {
+            errorMessage = 'This device has already used a referral code. Each device can only use one referral code.';
+          } else if (result.error.includes('Invalid referral code')) {
+            errorMessage = 'This referral code does not exist. Please check with your friend and try again.';
+          } else {
+            errorMessage = result.error;
+          }
+        }
+
+        Alert.alert('Unable to Apply Code', errorMessage);
+        return;
+      }
+    }
+
+    setReferralModalVisible(false);
+    setReferralCodeInput('');
     navigation.navigate('PlanSelection');
   };
 
@@ -126,6 +178,7 @@ export default function FirstLoadScreen({ navigation, route }) {
       }
     }, 300);
   };
+
 
   const renderInitialSelection = () => (
     <View 
@@ -253,6 +306,88 @@ export default function FirstLoadScreen({ navigation, route }) {
               onPress={() => setLanguageModalVisible(false)}
             >
               <Text style={styles.closeModalButtonText}>{t('common.close')}</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Referral Code Modal */}
+      <Modal
+        visible={referralModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={handleContinueWithoutReferral}
+      >
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={styles.modalOverlay}
+        >
+          <View style={styles.referralModalContent}>
+            <Text style={styles.modalTitle}>Have a Referral Code?</Text>
+            <Text style={styles.modalSubtitle}>Enter your friend's referral code to get 45 days free trial! Your friend also gets 1 month free.</Text>
+
+            <View style={styles.referralInputContainer}>
+              <TextInput
+                style={styles.referralInput}
+                value={referralCodeInput}
+                onChangeText={setReferralCodeInput}
+                placeholder="Enter code (e.g., ABC123)"
+                placeholderTextColor="#999"
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={10}
+              />
+            </View>
+
+            <TouchableOpacity
+              style={[styles.closeModalButton, styles.referralSubmitButton]}
+              onPress={handleReferralSubmitAndContinue}
+            >
+              <Text style={styles.closeModalButtonText}>
+                {referralCodeInput.trim() ? 'Apply & Continue' : 'Continue'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.skipButton}
+              onPress={handleContinueWithoutReferral}
+            >
+              <Text style={styles.skipButtonText}>Skip</Text>
+            </TouchableOpacity>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* Success Modal */}
+      <Modal
+        visible={successModalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => {
+          setSuccessModalVisible(false);
+          navigation.navigate('PlanSelection');
+        }}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.successModalContent}>
+            <Text style={styles.successIcon}>🎉</Text>
+            <Text style={styles.successTitle}>Congratulations!</Text>
+            <Text style={styles.successMessage}>
+              You get <Text style={styles.highlightText}>45 days free trial</Text>
+            </Text>
+            <Text style={styles.successMessage}>
+              Your friend gets <Text style={styles.highlightText}>additional 30 days</Text> free!
+            </Text>
+            <Text style={styles.successSubtext}>Welcome to your extended free trial</Text>
+
+            <TouchableOpacity
+              style={styles.successButton}
+              onPress={() => {
+                setSuccessModalVisible(false);
+                navigation.navigate('PlanSelection');
+              }}
+            >
+              <Text style={styles.successButtonText}>Got it</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -422,6 +557,14 @@ const styles = StyleSheet.create({
     maxWidth: 400,
     maxHeight: height * 0.7,
   },
+  referralModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: width * 0.85,
+    maxWidth: 400,
+    marginBottom: 30, // Move modal up slightly (30px) to avoid keyboard covering skip button
+  },
   modalTitle: {
     fontSize: 20,
     fontWeight: '700',
@@ -473,5 +616,91 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#333',
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 20,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  referralInputContainer: {
+    marginBottom: 16,
+  },
+  referralInput: {
+    backgroundColor: '#F5F5F5',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    letterSpacing: 2,
+    color: '#333',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  referralSubmitButton: {
+    backgroundColor: COLORS.PRIMARY,
+  },
+  skipButton: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  skipButtonText: {
+    fontSize: 14,
+    color: '#666',
+    textDecorationLine: 'underline',
+  },
+  successModalContent: {
+    backgroundColor: 'white',
+    borderRadius: 20,
+    padding: 32,
+    width: width * 0.85,
+    maxWidth: 400,
+    alignItems: 'center',
+  },
+  successIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  successTitle: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  successMessage: {
+    fontSize: 18,
+    color: '#333',
+    marginBottom: 8,
+    textAlign: 'center',
+    lineHeight: 26,
+  },
+  highlightText: {
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  successSubtext: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 12,
+    marginBottom: 24,
+    textAlign: 'center',
+  },
+  successButton: {
+    backgroundColor: '#F2C31B',
+    paddingVertical: 14,
+    paddingHorizontal: 48,
+    borderRadius: 12,
+    width: '100%',
+    alignItems: 'center',
+  },
+  successButtonText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#000',
   },
 });

@@ -251,20 +251,28 @@ const getDeviceId = async () => {
 
 /**
  * Get user ID (from AsyncStorage or context)
- * @returns {Promise<string|null>}
+ * Generates and persists a consistent userId based on deviceId if not exists
+ * @returns {Promise<string>}
  */
-const getUserId = async () => {
+export const getUserId = async () => {
   try {
     // Try to get userId from AsyncStorage (you might store it during auth)
-    const userId = await AsyncStorage.getItem('@user_id');
+    let userId = await AsyncStorage.getItem('@user_id');
     if (userId) return userId;
 
-    // Fallback: generate a temporary ID based on device
+    // Fallback: generate a consistent ID based on device
     const deviceId = await getDeviceId();
-    return `user_${deviceId}`;
+    userId = `user_${deviceId}`;
+
+    // Store it for next time
+    await AsyncStorage.setItem('@user_id', userId);
+    console.log('[ReferralService] Generated and stored new userId:', userId);
+
+    return userId;
   } catch (error) {
     console.error('[ReferralService] Error getting user ID:', error);
-    return null;
+    // Final fallback
+    return `user_${Date.now()}`;
   }
 };
 
@@ -291,7 +299,12 @@ export const registerReferralCodeOnServer = async (userId, referralCode) => {
       console.log('[ReferralService] Code registered on server:', referralCode);
       return true;
     } else {
-      console.error('[ReferralService] Failed to register code:', data.error);
+      // Only log as error if it's not "already in use" (which is expected for existing users)
+      if (!data.error || !data.error.includes('already in use')) {
+        console.error('[ReferralService] Failed to register code:', data.error);
+      } else {
+        console.log('[ReferralService] Code already registered (expected for existing users)');
+      }
       return false;
     }
   } catch (error) {
@@ -325,14 +338,17 @@ export const trackReferralInstallation = async (referralCode) => {
       console.log('[ReferralService] Installation tracked on server:', data.referralId);
       // Also store locally
       await acceptReferral(referralCode);
-      return data;
+      return { success: true, data };
     } else {
-      console.error('[ReferralService] Failed to track installation:', data.error);
-      return null;
+      // Only log as error if it's not the "already used" case (which is expected)
+      if (!data.error || !data.error.includes('already used a referral code')) {
+        console.error('[ReferralService] Failed to track installation:', data.error);
+      }
+      return { success: false, error: data.error };
     }
   } catch (error) {
     console.error('[ReferralService] Error tracking installation:', error);
-    return null;
+    return { success: false, error: error.message || 'Network error' };
   }
 };
 
@@ -401,11 +417,13 @@ export const initializeReferralCode = async () => {
     // Get or create local referral code
     const code = await getOrCreateReferralCode();
 
-    // Get user ID
+    // Get user ID (this will generate and persist if not exists)
     const userId = await getUserId();
 
+    console.log(`[ReferralService] Initializing referral - userId: ${userId}, code: ${code}`);
+
     if (userId) {
-      // Register on server
+      // Register on server (idempotent - safe to call multiple times)
       await registerReferralCodeOnServer(userId, code);
     }
 
@@ -413,6 +431,106 @@ export const initializeReferralCode = async () => {
   } catch (error) {
     console.error('[ReferralService] Error initializing referral code:', error);
     return await getOrCreateReferralCode();
+  }
+};
+
+/**
+ * Check and apply any pending referral rewards for this user
+ * This extends the user's trial by 30 days for each completed referral
+ * @returns {Promise<number>} Number of rewards applied
+ */
+export const checkAndApplyReferralRewards = async () => {
+  try {
+    const userId = await getUserId();
+    if (!userId) {
+      return 0;
+    }
+
+    // Get stats from server to see how many completed referrals we have
+    const stats = await getReferralStatsFromServer(userId);
+    if (!stats || !stats.monthsEarned || stats.monthsEarned === 0) {
+      return 0;
+    }
+
+    // Check how many rewards we've already applied locally
+    const appliedRewards = await AsyncStorage.getItem('@referral_rewards_applied');
+    const alreadyApplied = appliedRewards ? parseInt(appliedRewards, 10) : 0;
+
+    const pendingRewards = stats.monthsEarned - alreadyApplied;
+
+    if (pendingRewards > 0) {
+      console.log(`[ReferralService] Found ${pendingRewards} pending reward(s). Applying...`);
+
+      // Import trial service dynamically to avoid circular dependencies
+      const { extendTrial } = await import('./trialService');
+
+      // Apply each pending reward (30 days per reward)
+      const daysToAdd = pendingRewards * 30;
+      const result = await extendTrial(daysToAdd);
+
+      if (result) {
+        // Mark these rewards as applied
+        await AsyncStorage.setItem('@referral_rewards_applied', stats.monthsEarned.toString());
+        console.log(`[ReferralService] ✅ Applied ${pendingRewards} reward(s) - added ${daysToAdd} days to trial`);
+        return pendingRewards;
+      }
+    }
+
+    return 0;
+  } catch (error) {
+    console.error('[ReferralService] Error checking/applying rewards:', error);
+    return 0;
+  }
+};
+
+/**
+ * TESTING ONLY: Clear referral acceptance data for this device
+ * This allows you to test accepting referral codes multiple times
+ * NOTE: Does NOT clear your own referral code or userId - those should persist
+ */
+export const clearReferralDataForTesting = async () => {
+  try {
+    // Only clear the accepted referral data, not the user's own code or ID
+    await AsyncStorage.removeItem(REFERRAL_ACCEPTED_KEY);
+    await AsyncStorage.removeItem('@device_id');
+    console.log('[ReferralService] ✅ Cleared referral acceptance data for testing');
+    console.log('[ReferralService] Your own referral code and userId are preserved');
+    return true;
+  } catch (error) {
+    console.error('[ReferralService] Error clearing referral data:', error);
+    return false;
+  }
+};
+
+/**
+ * TESTING ONLY: Simulate a friend completing setup with your referral code
+ * This will trigger a reward on the server for testing
+ * @returns {Promise<boolean>} Success status
+ */
+export const simulateFriendSignup = async () => {
+  try {
+    const myCode = await getOrCreateReferralCode();
+    const myUserId = await getUserId();
+
+    // Create a fake friend user ID
+    const friendUserId = `test_friend_${Date.now()}`;
+
+    console.log(`[ReferralService] Simulating friend signup with your code: ${myCode}`);
+
+    // Complete setup as the friend
+    const result = await completeReferralSetup(myCode, friendUserId);
+
+    if (result && result.success) {
+      console.log(`[ReferralService] ✅ Friend signup simulated! You earned ${result.monthsEarned} month(s)`);
+      console.log(`[ReferralService] Run checkAndApplyReferralRewards() to apply the reward to your trial`);
+      return true;
+    } else {
+      console.error('[ReferralService] Failed to simulate friend signup:', result);
+      return false;
+    }
+  } catch (error) {
+    console.error('[ReferralService] Error simulating friend signup:', error);
+    return false;
   }
 };
 
